@@ -38,6 +38,19 @@ export class Camera {
     if (zoom !== undefined) this.targetZoom = clamp(zoom, MIN_ZOOM, MAX_ZOOM);
   }
 
+  /** Convert screen (client) coordinates to world coordinates. */
+  toWorld(screenX: number, screenY: number): { x: number; y: number } {
+    const rect = this.canvas.getBoundingClientRect();
+    return {
+      x: this.x + (screenX - rect.left - rect.width / 2) / this.zoom,
+      y: this.y + (screenY - rect.top - rect.height / 2) / this.zoom,
+    };
+  }
+
+  getZoom(): number {
+    return this.zoom;
+  }
+
   /** Apply damping and write the transform. Call once per rendered frame. */
   update(): void {
     this.x += (this.targetX - this.x) * DAMPING;
@@ -59,7 +72,11 @@ export class Camera {
   }
 
   private onPointerDown = (e: PointerEvent): void => {
-    this.canvas.setPointerCapture(e.pointerId);
+    try {
+      this.canvas.setPointerCapture(e.pointerId);
+    } catch {
+      // Pointer may already be released (e.g. synthetic events) — pan still works.
+    }
     this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   };
 

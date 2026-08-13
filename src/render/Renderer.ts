@@ -1,26 +1,35 @@
 /**
  * Renderer: observes WorldState snapshots and draws interpolated frames.
- * M0 scope: a soft green meadow plane and one vector rabbit. Painterly valley
- * arrives in M2; the rig pipeline in M3.
+ * M1 scope: meadow plane, vector rabbits, night-tint overlay, debug activity
+ * labels. Painterly valley arrives in M2; the rig pipeline in M3.
  */
-import { Application, Container, Graphics } from 'pixi.js';
+import { Application, Container, Graphics, Text } from 'pixi.js';
+import { getClock } from '../sim/clock';
 import { seedRng, nextRange } from '../sim/rng';
-import { WORLD_HEIGHT, WORLD_WIDTH, type Vec2, type WorldState } from '../sim/state';
+import { WORLD_HEIGHT, WORLD_WIDTH, type Creature, type Vec2, type WorldState } from '../sim/state';
 import { Camera } from './Camera';
 
 interface CreatureView {
   node: Container;
+  label: Text;
   prev: Vec2;
   curr: Vec2;
   heading: number;
+  activityId: string;
+  napping: boolean;
 }
 
 export class Renderer {
   private app!: Application;
   private world!: Container;
   private camera!: Camera;
+  private nightOverlay!: Graphics;
   private views = new Map<number, CreatureView>();
   private elapsedFrames = 0;
+  private light = 1;
+
+  /** Show per-creature activity labels (toggled from the DevPanel). */
+  debugLabels = true;
 
   async init(mount: HTMLElement): Promise<void> {
     this.app = new Application();
@@ -37,24 +46,44 @@ export class Renderer {
     this.app.stage.addChild(this.world);
     this.world.addChild(this.buildGround());
 
+    // Screen-space night tint above the world.
+    this.nightOverlay = new Graphics();
+    this.app.stage.addChild(this.nightOverlay);
+
     this.camera = new Camera(this.world, this.app.canvas);
+  }
+
+  get canvas(): HTMLCanvasElement {
+    return this.app.canvas;
   }
 
   centerOn(x: number, y: number, zoom?: number): void {
     this.camera.centerOn(x, y, zoom);
   }
 
-  /** Snapshot creature positions after each sim tick (curr → prev, sim → curr). */
+  /** Nearest creature to a screen point, within a world-space radius. */
+  pickCreature(state: WorldState, screenX: number, screenY: number): Creature | undefined {
+    const w = this.camera.toWorld(screenX, screenY);
+    const radius = 80 / Math.max(0.2, this.camera.getZoom());
+    let best: Creature | undefined;
+    let bestDist = radius;
+    for (const c of state.creatures) {
+      const d = Math.hypot(c.pos.x - w.x, c.pos.y - w.y);
+      if (d < bestDist) {
+        bestDist = d;
+        best = c;
+      }
+    }
+    return best;
+  }
+
+  /** Snapshot creature state after each sim tick (curr → prev, sim → curr). */
   sync(state: WorldState): void {
+    this.light = getClock(state.tick).light;
     for (const c of state.creatures) {
       let view = this.views.get(c.id);
       if (!view) {
-        view = {
-          node: buildRabbit(),
-          prev: { x: c.pos.x, y: c.pos.y },
-          curr: { x: c.pos.x, y: c.pos.y },
-          heading: c.heading,
-        };
+        view = this.createView(c);
         this.views.set(c.id, view);
         this.world.addChild(view.node);
       }
@@ -63,6 +92,8 @@ export class Renderer {
       view.curr.x = c.pos.x;
       view.curr.y = c.pos.y;
       view.heading = c.heading;
+      view.activityId = c.activity.id;
+      view.napping = c.activity.id === 'nap';
     }
   }
 
@@ -73,19 +104,59 @@ export class Renderer {
       const x = view.prev.x + (view.curr.x - view.prev.x) * alpha;
       const y = view.prev.y + (view.curr.y - view.prev.y) * alpha;
       const moving = Math.hypot(view.curr.x - view.prev.x, view.curr.y - view.prev.y) > 0.5;
-      // Gentle hop-bob while moving; soft breathing at rest. Cosmetic only.
+      // Gentle hop-bob while moving; slow breathing at rest; deep breathing asleep.
       const bob = moving
         ? Math.abs(Math.sin(this.elapsedFrames * 0.25)) * -6
-        : Math.sin(this.elapsedFrames * 0.05) * -1.5;
+        : Math.sin(this.elapsedFrames * (view.napping ? 0.03 : 0.05)) * -1.5;
       view.node.position.set(x, y + bob);
-      // Face direction of travel (sprite art faces right).
       const facingLeft = Math.cos(view.heading) < 0;
       view.node.scale.x = facingLeft ? -1 : 1;
+
+      view.label.visible = this.debugLabels;
+      if (this.debugLabels) {
+        view.label.text = view.napping ? 'nap 💤' : view.activityId;
+        // Labels stay upright and unmirrored regardless of body flip.
+        view.label.scale.x = facingLeft ? -1 : 1;
+      }
     }
+
+    // Night falls: dark blue wash whose strength follows the sim's light level.
+    const w = this.app.renderer.width;
+    const h = this.app.renderer.height;
+    this.nightOverlay
+      .clear()
+      .rect(0, 0, w, h)
+      .fill({ color: 0x16203e, alpha: (1 - this.light) * 0.45 });
+
     this.camera.update();
   }
 
-  /** M0 ground: soft green plane with darker grass patches and tiny flowers. */
+  private createView(c: Creature): CreatureView {
+    const node = buildRabbit();
+    const label = new Text({
+      text: '',
+      style: {
+        fontFamily: 'monospace',
+        fontSize: 13,
+        fill: 0xffffff,
+        stroke: { color: 0x2c3a26, width: 3 },
+      },
+    });
+    label.anchor.set(0.5, 1);
+    label.position.set(0, -52);
+    node.addChild(label);
+    return {
+      node,
+      label,
+      prev: { x: c.pos.x, y: c.pos.y },
+      curr: { x: c.pos.x, y: c.pos.y },
+      heading: c.heading,
+      activityId: c.activity.id,
+      napping: false,
+    };
+  }
+
+  /** M1 ground: soft green plane with darker grass patches and tiny flowers. */
   private buildGround(): Container {
     const ground = new Container();
     const rng = seedRng(20260813); // cosmetic RNG — separate from the sim stream
@@ -93,7 +164,6 @@ export class Renderer {
     const base = new Graphics().rect(0, 0, WORLD_WIDTH, WORLD_HEIGHT).fill(0x8fb573);
     ground.addChild(base);
 
-    // Irregular darker patches give the plane a hand-washed feel.
     const patches = new Graphics();
     for (let i = 0; i < 60; i++) {
       const x = nextRange(rng, 0, WORLD_WIDTH);
@@ -120,7 +190,7 @@ export class Renderer {
   }
 }
 
-/** M0 rabbit: layered soft shapes. Replaced by the real rig pipeline in M3. */
+/** M1 rabbit: layered soft shapes. Replaced by the real rig pipeline in M3. */
 function buildRabbit(): Container {
   const rabbit = new Container();
   const g = new Graphics();
