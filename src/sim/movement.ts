@@ -4,6 +4,7 @@
  */
 import { nextFloat, nextRange, type RngState } from './rng';
 import { WORLD_HEIGHT, WORLD_WIDTH, type Creature, type Vec2 } from './state';
+import { isWater, POND } from './valley';
 
 const EDGE_MARGIN = 120;
 const MAX_TURN = 0.3;
@@ -14,14 +15,14 @@ export function moveToward(c: Creature, target: Vec2, speed: number): number {
   const dy = target.y - c.pos.y;
   const dist = Math.hypot(dx, dy);
   if (dist <= speed) {
-    c.pos.x = target.x;
-    c.pos.y = target.y;
+    if (!isWater(target)) {
+      c.pos.x = target.x;
+      c.pos.y = target.y;
+    }
     return 0;
   }
   c.heading = turnToward(c.heading, Math.atan2(dy, dx), MAX_TURN);
-  c.pos.x += Math.cos(c.heading) * speed;
-  c.pos.y += Math.sin(c.heading) * speed;
-  clampToWorld(c);
+  advance(c, speed);
   return dist - speed;
 }
 
@@ -41,8 +42,32 @@ export function wanderStep(rng: RngState, c: Creature, speed: number): void {
     c.heading = turnToward(c.heading, centerAngle, MAX_TURN);
   }
 
-  c.pos.x += Math.cos(c.heading) * speed;
-  c.pos.y += Math.sin(c.heading) * speed;
+  advance(c, speed);
+}
+
+/**
+ * Step forward along the heading, refusing to enter water: blocked creatures
+ * turn away from the pond and try a shorter step, or stay put this tick.
+ */
+function advance(c: Creature, speed: number): void {
+  const candidate = {
+    x: c.pos.x + Math.cos(c.heading) * speed,
+    y: c.pos.y + Math.sin(c.heading) * speed,
+  };
+  if (isWater(candidate)) {
+    const awayFromPond = Math.atan2(c.pos.y - POND.y, c.pos.x - POND.x);
+    c.heading = turnToward(c.heading, awayFromPond, MAX_TURN * 2);
+    const retry = {
+      x: c.pos.x + Math.cos(c.heading) * speed * 0.5,
+      y: c.pos.y + Math.sin(c.heading) * speed * 0.5,
+    };
+    if (isWater(retry)) return; // stay put this tick
+    c.pos.x = retry.x;
+    c.pos.y = retry.y;
+  } else {
+    c.pos.x = candidate.x;
+    c.pos.y = candidate.y;
+  }
   clampToWorld(c);
 }
 

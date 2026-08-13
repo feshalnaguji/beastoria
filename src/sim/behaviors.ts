@@ -15,6 +15,7 @@ import {
   type Creature,
   type WorldState,
 } from './state';
+import { isWater } from './valley';
 
 const HYSTERESIS_BONUS = 0.15;
 /** A challenger this much stronger overrides min-duration (urgency). */
@@ -144,12 +145,21 @@ function startActivity(state: WorldState, c: Creature, id: ActivityId): void {
       break;
     case 'forage': {
       activity.minTicks = 40;
-      const angle = nextRange(rng, 0, Math.PI * 2);
-      const dist = nextRange(rng, 150, 400);
-      activity.targetPos = {
-        x: Math.max(40, Math.min(WORLD_WIDTH - 40, c.pos.x + Math.cos(angle) * dist)),
-        y: Math.max(40, Math.min(WORLD_HEIGHT - 40, c.pos.y + Math.sin(angle) * dist)),
-      };
+      // Pick a dry-land target; after a few tries, graze right here.
+      let target = { x: c.pos.x, y: c.pos.y };
+      for (let attempt = 0; attempt < 8; attempt++) {
+        const angle = nextRange(rng, 0, Math.PI * 2);
+        const dist = nextRange(rng, 150, 400);
+        const candidate = {
+          x: Math.max(40, Math.min(WORLD_WIDTH - 40, c.pos.x + Math.cos(angle) * dist)),
+          y: Math.max(40, Math.min(WORLD_HEIGHT - 40, c.pos.y + Math.sin(angle) * dist)),
+        };
+        if (!isWater(candidate)) {
+          target = candidate;
+          break;
+        }
+      }
+      activity.targetPos = target;
       break;
     }
     case 'nap':
