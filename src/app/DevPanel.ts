@@ -73,6 +73,7 @@ export class DevPanel {
       if (moved > 6) return; // it was a drag
       const picked = this.renderer.pickCreature(this.state, e.clientX, e.clientY);
       this.selectedId = picked ? picked.id : null;
+      this.renderer.followId = this.selectedId; // click = inspect + follow
     });
   }
 

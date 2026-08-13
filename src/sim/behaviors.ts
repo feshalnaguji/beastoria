@@ -7,7 +7,7 @@
 import type { Clock } from './clock';
 import { moveToward, wanderStep } from './movement';
 import { nextRange } from './rng';
-import { SPECIES } from './species';
+import { SPECIES, speedFor } from './species';
 import {
   WORLD_HEIGHT,
   WORLD_WIDTH,
@@ -70,7 +70,7 @@ export function applyActivity(state: WorldState, c: Creature, _clock: Clock): vo
       break;
 
     case 'wander':
-      wanderStep(state.rng, c, p.speed);
+      wanderStep(state.rng, c, speedFor(c.species, c.stage));
       break;
 
     case 'forage': {
@@ -79,7 +79,7 @@ export function applyActivity(state: WorldState, c: Creature, _clock: Clock): vo
         startActivity(state, c, 'idle');
         break;
       }
-      const remaining = moveToward(c, target, p.speed);
+      const remaining = moveToward(c, target, speedFor(c.species, c.stage));
       if (remaining <= ARRIVE_DIST) {
         c.needs.hunger = clamp01(c.needs.hunger - p.eatRate);
         if (c.needs.hunger <= SATISFIED) startActivity(state, c, 'idle');
@@ -100,7 +100,7 @@ export function applyActivity(state: WorldState, c: Creature, _clock: Clock): vo
       }
       const dist = Math.hypot(partner.pos.x - c.pos.x, partner.pos.y - c.pos.y);
       if (dist > SOCIAL_RANGE * 0.7) {
-        moveToward(c, partner.pos, p.speed);
+        moveToward(c, partner.pos, speedFor(c.species, c.stage));
       } else {
         c.needs.social = clamp01(c.needs.social - p.socialRate);
         if (c.needs.social <= SATISFIED) startActivity(state, c, 'idle');

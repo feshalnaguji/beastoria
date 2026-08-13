@@ -1,24 +1,47 @@
 /**
  * Renderer: observes WorldState snapshots and draws interpolated frames.
- * M2: painterly valley (ground baked to a texture once), day/night color
- * grading with golden-hour glow, LOD tiers. Rig pipeline arrives in M3.
+ * M3: the rig pipeline — live skeletal rigs at close zoom (T2), baked sprite
+ * frames at mid/world zoom (T1/T0), life-stage proportions, day/night grading.
  */
-import { Application, Container, Graphics, Rectangle, Sprite, Text } from 'pixi.js';
+import { Application, Container, Graphics, Sprite, Text } from 'pixi.js';
 import { getClock, type Clock } from '../sim/clock';
-import { WORLD_HEIGHT, WORLD_WIDTH, type Creature, type Vec2, type WorldState } from '../sim/state';
+import {
+  WORLD_HEIGHT,
+  WORLD_WIDTH,
+  type Creature,
+  type LifeStage,
+  type SpeciesId,
+  type Vec2,
+  type WorldState,
+} from '../sim/state';
+import type { ClipName, CreatureRig } from '../rigs/format';
+import { rabbitRig } from '../rigs/rabbitRig';
+import { robinRig } from '../rigs/robinRig';
 import { Camera } from './Camera';
 import { lodTier } from './Lod';
+import { bakedFrame, type BakedFrame } from './creatures/RigBaker';
+import { buildRig, multiplyTints, type RigInstance } from './creatures/RigRenderer';
 import { buildValley } from './terrain/ValleyPainter';
+import { Rectangle } from 'pixi.js';
+
+const RIGS: Record<SpeciesId, CreatureRig> = {
+  rabbit: rabbitRig,
+  robin: robinRig,
+};
 
 interface CreatureView {
-  node: Container;
-  body: Graphics;
+  node: Container; // world-positioned, flip container
+  rig: RigInstance;
+  spriteWrap: Container;
+  sprite: Sprite;
+  frames: { idle: BakedFrame; walkA: BakedFrame; walkB: BakedFrame };
   label: Text;
+  species: SpeciesId;
+  stage: LifeStage;
   prev: Vec2;
   curr: Vec2;
   heading: number;
   activityId: string;
-  napping: boolean;
 }
 
 /** Day/night multiply-tint ramp, keyed by fraction of day. */
@@ -44,11 +67,14 @@ export class Renderer {
   private nightOverlay!: Graphics;
   private glowOverlay!: Graphics;
   private views = new Map<number, CreatureView>();
-  private elapsedFrames = 0;
   private clock: Clock = getClock(0);
+  private lastFrameTime = 0;
 
   /** Show per-creature activity labels (toggled from the DevPanel). */
   debugLabels = true;
+
+  /** Creature id the camera should track (DevPanel click-to-follow). */
+  followId: number | null = null;
 
   async init(mount: HTMLElement): Promise<void> {
     this.app = new Application();
@@ -119,6 +145,8 @@ export class Renderer {
         view = this.createView(c);
         this.views.set(c.id, view);
         this.creatureLayer.addChild(view.node);
+      } else if (view.stage !== c.stage) {
+        this.applyStage(view, c.stage); // creatures grow up
       }
       view.prev.x = view.curr.x;
       view.prev.y = view.curr.y;
@@ -126,75 +154,70 @@ export class Renderer {
       view.curr.y = c.pos.y;
       view.heading = c.heading;
       view.activityId = c.activity.id;
-      view.napping = c.activity.id === 'nap';
     }
   }
 
   /** Draw one frame, interpolating between the last two sim snapshots. */
   render(alpha: number): void {
-    this.elapsedFrames++;
+    const now = performance.now();
+    const dtMs = this.lastFrameTime === 0 ? 16 : Math.min(now - this.lastFrameTime, 100);
+    this.lastFrameTime = now;
+
     const tier = lodTier(this.camera.getZoom());
+    const grade = rampColor(TINT_RAMP, this.clock.dayT);
 
     for (const view of this.views.values()) {
       const x = view.prev.x + (view.curr.x - view.prev.x) * alpha;
       const y = view.prev.y + (view.curr.y - view.prev.y) * alpha;
       const moving = Math.hypot(view.curr.x - view.prev.x, view.curr.y - view.prev.y) > 0.5;
-      // Gentle hop-bob while moving; slow breathing at rest; skipped at world view.
-      const bob =
-        tier === 0
-          ? 0
-          : moving
-            ? Math.abs(Math.sin(this.elapsedFrames * 0.25)) * -6
-            : Math.sin(this.elapsedFrames * (view.napping ? 0.03 : 0.05)) * -1.5;
-      view.node.position.set(x, y + bob);
+      view.node.position.set(x, y);
       const facingLeft = Math.cos(view.heading) < 0;
       view.node.scale.x = facingLeft ? -1 : 1;
 
+      if (tier === 2) {
+        view.rig.root.visible = true;
+        view.spriteWrap.visible = false;
+        view.rig.animator.play(clipFor(view.activityId, moving));
+        view.rig.animator.update(dtMs);
+        const tint = multiplyTints(view.rig.stageTint, grade);
+        for (const g of view.rig.tintables) g.tint = tint;
+      } else {
+        view.rig.root.visible = false;
+        view.spriteWrap.visible = true;
+        // T1 flipbook: alternate walk frames while moving; T0 stays static.
+        const frame =
+          moving && tier === 1
+            ? Math.floor(now / 140) % 2 === 0
+              ? view.frames.walkA
+              : view.frames.walkB
+            : view.frames.idle;
+        view.sprite.texture = frame.texture;
+        view.sprite.position.set(frame.bx, frame.by);
+        view.sprite.tint = grade;
+      }
+
       view.label.visible = this.debugLabels && tier === 2;
       if (view.label.visible) {
-        view.label.text = view.napping ? 'nap 💤' : view.activityId;
+        view.label.text = view.activityId === 'nap' ? 'nap 💤' : view.activityId;
         view.label.scale.x = facingLeft ? -1 : 1;
       }
     }
 
-    this.applyGrading();
+    const followed = this.followId === null ? undefined : this.views.get(this.followId);
+    if (followed) this.camera.centerOn(followed.curr.x, followed.curr.y);
+
+    this.applyOverlays();
     this.camera.update();
-  }
-
-  /** Day/night color grading: multiply tint + golden-hour glow + night wash. */
-  private applyGrading(): void {
-    const tint = rampColor(TINT_RAMP, this.clock.dayT);
-    this.groundSprite.tint = tint;
-    for (const child of this.detailLayer.children) {
-      if (child instanceof Graphics) child.tint = tint;
-    }
-    for (const view of this.views.values()) {
-      view.body.tint = tint;
-    }
-
-    const w = this.app.renderer.width;
-    const h = this.app.renderer.height;
-
-    // Warm additive glow, peaking mid-dawn and mid-dusk.
-    const phase = this.clock.phase;
-    const glow =
-      phase === 'dawn' || phase === 'dusk' ? Math.sin(Math.PI * this.clock.phaseT) * 0.14 : 0;
-    this.glowOverlay
-      .clear()
-      .rect(0, 0, w, h)
-      .fill({ color: phase === 'dawn' ? 0xffb36b : 0xff8f5e, alpha: glow });
-
-    // Deep blue wash as true night settles.
-    this.nightOverlay
-      .clear()
-      .rect(0, 0, w, h)
-      .fill({ color: 0x16203e, alpha: (1 - this.clock.light) * 0.3 });
   }
 
   private createView(c: Creature): CreatureView {
     const node = new Container();
-    const body = buildRabbit();
-    node.addChild(body);
+    const rig = buildRig(RIGS[c.species], c.stage);
+    const spriteWrap = new Container();
+    const sprite = new Sprite();
+    spriteWrap.addChild(sprite);
+    node.addChild(rig.root, spriteWrap);
+
     const label = new Text({
       text: '',
       style: {
@@ -205,19 +228,85 @@ export class Renderer {
       },
     });
     label.anchor.set(0.5, 1);
-    label.position.set(0, -52);
     node.addChild(label);
-    return {
+
+    const view: CreatureView = {
       node,
-      body,
+      rig,
+      spriteWrap,
+      sprite,
+      frames: this.bakeFrames(c.species, c.stage),
       label,
+      species: c.species,
+      stage: c.stage,
       prev: { x: c.pos.x, y: c.pos.y },
       curr: { x: c.pos.x, y: c.pos.y },
       heading: c.heading,
       activityId: c.activity.id,
-      napping: false,
+    };
+    this.positionLabel(view);
+    return view;
+  }
+
+  /** Swap rig + baked frames when a creature grows into its next stage. */
+  private applyStage(view: CreatureView, stage: LifeStage): void {
+    view.stage = stage;
+    view.rig.root.destroy({ children: true });
+    view.rig = buildRig(RIGS[view.species], stage);
+    view.node.addChildAt(view.rig.root, 0);
+    view.frames = this.bakeFrames(view.species, stage);
+    this.positionLabel(view);
+  }
+
+  private bakeFrames(species: SpeciesId, stage: LifeStage): CreatureView['frames'] {
+    const rig = RIGS[species];
+    return {
+      idle: bakedFrame(this.app.renderer, rig, stage, 'idle', 0),
+      walkA: bakedFrame(this.app.renderer, rig, stage, 'walk', 0.25),
+      walkB: bakedFrame(this.app.renderer, rig, stage, 'walk', 0.75),
     };
   }
+
+  private positionLabel(view: CreatureView): void {
+    const scale = RIGS[view.species].stages[view.stage].scale;
+    const height = view.species === 'robin' ? -46 : -70; // roughly the rig's crown
+    view.label.position.set(0, height * scale);
+  }
+
+  /** Golden-hour glow + deep-night wash (screen space). */
+  private applyOverlays(): void {
+    const w = this.app.renderer.width;
+    const h = this.app.renderer.height;
+
+    // Grade the static world layers.
+    const grade = rampColor(TINT_RAMP, this.clock.dayT);
+    this.groundSprite.tint = grade;
+    for (const child of this.detailLayer.children) {
+      if (child instanceof Graphics) child.tint = grade;
+    }
+
+    const phase = this.clock.phase;
+    const glow =
+      phase === 'dawn' || phase === 'dusk' ? Math.sin(Math.PI * this.clock.phaseT) * 0.14 : 0;
+    this.glowOverlay
+      .clear()
+      .rect(0, 0, w, h)
+      .fill({ color: phase === 'dawn' ? 0xffb36b : 0xff8f5e, alpha: glow });
+
+    this.nightOverlay
+      .clear()
+      .rect(0, 0, w, h)
+      .fill({ color: 0x16203e, alpha: (1 - this.clock.light) * 0.3 });
+  }
+}
+
+/** Choose an animation clip from sim activity + motion. */
+function clipFor(activityId: string, moving: boolean): ClipName {
+  if (activityId === 'nap') return 'sleep';
+  if (moving) return 'walk';
+  if (activityId === 'forage') return 'eat';
+  if (activityId === 'socialize') return 'social';
+  return 'idle';
 }
 
 /** Piecewise-linear color ramp lookup. */
@@ -245,30 +334,4 @@ function lerpColor(a: number, b: number, t: number): number {
   const g = Math.round(ag + (bg - ag) * t);
   const bl = Math.round(ab + (bb - ab) * t);
   return (r << 16) | (g << 8) | bl;
-}
-
-/** M2 rabbit: layered soft shapes. Replaced by the real rig pipeline in M3. */
-function buildRabbit(): Graphics {
-  const g = new Graphics();
-
-  // Shadow.
-  g.ellipse(0, 26, 30, 9).fill({ color: 0x3d5a2e, alpha: 0.25 });
-  // Tail.
-  g.circle(-30, 4, 11).fill(0xfaf6ee);
-  // Body (soft capsule).
-  g.roundRect(-32, -14, 62, 40, 20).fill(0xe8dcc8);
-  // Belly wash.
-  g.ellipse(2, 12, 22, 12).fill({ color: 0xfaf6ee, alpha: 0.8 });
-  // Head.
-  g.circle(26, -14, 17).fill(0xe8dcc8);
-  // Ears (long, slightly splayed).
-  g.ellipse(18, -38, 6, 17).fill(0xe8dcc8);
-  g.ellipse(32, -39, 6, 18).fill(0xe8dcc8);
-  g.ellipse(18, -37, 3, 11).fill({ color: 0xf2d8e4, alpha: 0.85 });
-  g.ellipse(32, -38, 3, 12).fill({ color: 0xf2d8e4, alpha: 0.85 });
-  // Eye + nose.
-  g.circle(31, -16, 2.6).fill(0x3a3230);
-  g.ellipse(42, -12, 3.5, 2.5).fill(0xd9a5b5);
-
-  return g;
 }

@@ -5,6 +5,7 @@
  */
 import { applyActivity, decayNeeds, selectBehavior } from './behaviors';
 import { getClock } from './clock';
+import { ageCreatures } from './lifecycle';
 import type { WorldState } from './state';
 
 export const TICKS_PER_SECOND = 10;
@@ -17,6 +18,7 @@ export function tick(state: WorldState, _commands: readonly Command[]): void {
   state.tick++;
   const clock = getClock(state.tick);
   decayNeeds(state);
+  ageCreatures(state);
   for (const c of state.creatures) selectBehavior(state, c, clock);
   for (const c of state.creatures) applyActivity(state, c, clock);
 }
