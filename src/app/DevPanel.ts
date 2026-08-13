@@ -99,14 +99,20 @@ export class DevPanel {
     if (c) {
       lines.push(
         '',
-        `#${c.id} ${c.species} — ${c.activity.id} (${c.activity.ticks}t)`,
+        `#${c.id} ${c.species} ${c.sex} ${c.stage} — ${c.activity.id} (${c.activity.ticks}t)`,
         `hunger ${bar(c.needs.hunger)}`,
         `rest   ${bar(c.needs.rest)}`,
         `social ${bar(c.needs.social)}`,
       );
+      const fam = this.state.families.find((f) => f.id === c.familyId);
+      if (fam) {
+        const role = fam.parentIds.includes(c.id) ? 'parent' : 'child';
+        lines.push(`family #${fam.id} — ${fam.phase} (${role})`);
+      }
     } else {
       lines.push('', '(click a creature to inspect)');
     }
+    lines.push(`families ${this.state.families.length}  memorials ${this.state.memorials.length}`);
     this.info.textContent = lines.join('\n');
   }
 }

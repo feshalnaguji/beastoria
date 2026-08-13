@@ -19,6 +19,18 @@ export interface SpeciesParams {
   eatRate: number;
   sleepRate: number;
   socialRate: number;
+  /** Which home kind this species claims. */
+  homeKind: 'burrow' | 'treeNest';
+  reproduction: {
+    mode: 'egg' | 'live';
+    clutchMin: number;
+    clutchMax: number;
+    /** Incubation / gestation display period, in ticks. */
+    broodTicks: number;
+    /** Pause between clutches (emptyNest), in ticks. */
+    cooldownTicks: number;
+  };
+  population: { floor: number; softCap: number; hardCap: number };
 }
 
 export const SPECIES: Record<SpeciesId, SpeciesParams> = {
@@ -35,6 +47,15 @@ export const SPECIES: Record<SpeciesId, SpeciesParams> = {
     eatRate: 0.004,
     sleepRate: 0.003,
     socialRate: 0.006,
+    homeKind: 'burrow',
+    reproduction: {
+      mode: 'live',
+      clutchMin: 2,
+      clutchMax: 4,
+      broodTicks: 600, // gestation shown as mother resting in the burrow
+      cooldownTicks: 1500,
+    },
+    population: { floor: 3, softCap: 8, hardCap: 12 },
   },
   robin: {
     speed: 8, // quick, hoppy
@@ -49,6 +70,15 @@ export const SPECIES: Record<SpeciesId, SpeciesParams> = {
     eatRate: 0.005,
     sleepRate: 0.003,
     socialRate: 0.006,
+    homeKind: 'treeNest',
+    reproduction: {
+      mode: 'egg',
+      clutchMin: 2,
+      clutchMax: 3,
+      broodTicks: 800, // eggs brooded in the nest, parents alternating
+      cooldownTicks: 1800,
+    },
+    population: { floor: 3, softCap: 8, hardCap: 12 },
   },
 };
 

@@ -2,7 +2,9 @@
  * WorldState: a plain serializable POJO tree. Save = JSON of this. No classes,
  * no functions, no references to presentation. See spec §4.3.
  */
-import { seedRng, nextRange, type RngState } from './rng';
+import { seedRng, nextRange, nextFloat, type RngState } from './rng';
+import type { SimEvent } from './events';
+import { BURROW_SITES, LONE_TREES, NEST_TREES } from './valley';
 
 export interface Vec2 {
   x: number;
@@ -11,9 +13,20 @@ export interface Vec2 {
 
 export type SpeciesId = 'rabbit' | 'robin'; // grows to 8 in M5
 
-export type LifeStage = 'baby' | 'juvenile' | 'adult' | 'elder'; // egg arrives in M4
+export type LifeStage = 'baby' | 'juvenile' | 'adult' | 'elder';
 
-export type ActivityId = 'idle' | 'wander' | 'forage' | 'nap' | 'socialize';
+export type ActivityId =
+  | 'idle'
+  | 'wander'
+  | 'forage'
+  | 'nap'
+  | 'socialize'
+  // Family-directed activities (owned by family.ts, not utility selection):
+  | 'court'
+  | 'brood'
+  | 'feedYoung'
+  | 'gather'
+  | 'pass';
 
 export interface Activity {
   id: ActivityId;
@@ -23,6 +36,8 @@ export interface Activity {
   minTicks: number;
   targetPos?: Vec2 | undefined;
   targetId?: number | undefined;
+  /** Sub-step within multi-leg activities (e.g. feedYoung: 0 fetch, 1 return). */
+  step?: number | undefined;
 }
 
 export interface Needs {
@@ -32,9 +47,13 @@ export interface Needs {
   social: number;
 }
 
+export type Sex = 'm' | 'f';
+
 export interface Creature {
   id: number;
   species: SpeciesId;
+  sex: Sex;
+  familyId: number | null;
   pos: Vec2;
   heading: number; // radians
   stage: LifeStage;
@@ -44,11 +63,50 @@ export interface Creature {
   activity: Activity;
 }
 
+export type FamilyPhase =
+  | 'courting'
+  | 'nesting'
+  | 'expecting'
+  | 'rearing'
+  | 'emptyNest';
+
+export interface Family {
+  id: number;
+  species: SpeciesId;
+  parentIds: number[];
+  childIds: number[];
+  homeId: number | null;
+  phase: FamilyPhase;
+  phaseTicks: number;
+  /** Which parent is currently on brooding/feeding duty (index into parentIds). */
+  dutyParent: number;
+  clutch?: { count: number; broodTicksLeft: number } | undefined;
+}
+
+export type HomeKind = 'burrow' | 'treeNest';
+
+export interface Home {
+  id: number;
+  kind: HomeKind;
+  pos: Vec2;
+  familyId: number | null;
+}
+
+export interface Memorial {
+  pos: Vec2;
+  species: SpeciesId;
+  tick: number;
+}
+
 export interface WorldState {
   tick: number;
   rng: RngState;
   nextId: number;
   creatures: Creature[];
+  families: Family[];
+  homes: Home[];
+  memorials: Memorial[];
+  eventLog: SimEvent[];
 }
 
 export const WORLD_WIDTH = 4096;
@@ -58,26 +116,44 @@ export const WORLD_HEIGHT = 3072;
 // so this runtime import creates no cycle.
 import { SPECIES, type SpeciesParams } from './species';
 
-/** Starting cast: age fractions chosen so every stage is on screen from
- * minute one (frac of each individual's own rolled lifespan). */
-const STARTING_CAST: { species: SpeciesId; ageFrac: number }[] = [
-  { species: 'rabbit', ageFrac: 0.05 }, // baby
-  { species: 'rabbit', ageFrac: 0.2 }, // juvenile
-  { species: 'rabbit', ageFrac: 0.45 },
-  { species: 'rabbit', ageFrac: 0.5 },
-  { species: 'rabbit', ageFrac: 0.6 },
-  { species: 'rabbit', ageFrac: 0.9 }, // elder
-  { species: 'robin', ageFrac: 0.06 }, // chick
-  { species: 'robin', ageFrac: 0.35 },
-  { species: 'robin', ageFrac: 0.55 },
-  { species: 'robin', ageFrac: 0.86 }, // elder
+/** Starting cast: age fractions + sexes chosen so every stage is on screen
+ * and both species can pair up (frac of each individual's rolled lifespan). */
+const STARTING_CAST: { species: SpeciesId; ageFrac: number; sex: Sex }[] = [
+  { species: 'rabbit', ageFrac: 0.05, sex: 'm' }, // baby
+  { species: 'rabbit', ageFrac: 0.2, sex: 'f' }, // juvenile
+  { species: 'rabbit', ageFrac: 0.45, sex: 'm' },
+  { species: 'rabbit', ageFrac: 0.5, sex: 'f' },
+  { species: 'rabbit', ageFrac: 0.6, sex: 'm' },
+  { species: 'rabbit', ageFrac: 0.9, sex: 'f' }, // elder
+  { species: 'robin', ageFrac: 0.06, sex: 'f' }, // chick
+  { species: 'robin', ageFrac: 0.35, sex: 'm' },
+  { species: 'robin', ageFrac: 0.55, sex: 'f' },
+  { species: 'robin', ageFrac: 0.86, sex: 'm' }, // elder
 ];
 
 export function createWorld(seed: number): WorldState {
   const rng = seedRng(seed);
-  const state: WorldState = { tick: 0, rng, nextId: 1, creatures: [] };
-  for (const { species, ageFrac } of STARTING_CAST) {
-    spawnCreature(state, species, randomMeadowPos(rng), ageFrac);
+  const state: WorldState = {
+    tick: 0,
+    rng,
+    nextId: 1,
+    creatures: [],
+    families: [],
+    homes: [],
+    memorials: [],
+    eventLog: [],
+  };
+
+  for (const pos of BURROW_SITES) {
+    state.homes.push({ id: state.nextId++, kind: 'burrow', pos: { ...pos }, familyId: null });
+  }
+  for (const pos of [...LONE_TREES, ...NEST_TREES]) {
+    state.homes.push({ id: state.nextId++, kind: 'treeNest', pos: { ...pos }, familyId: null });
+  }
+
+  for (const { species, ageFrac, sex } of STARTING_CAST) {
+    const c = spawnCreature(state, species, randomMeadowPos(rng), ageFrac);
+    c.sex = sex;
   }
   return state;
 }
@@ -102,6 +178,8 @@ export function spawnCreature(
   const creature: Creature = {
     id: state.nextId++,
     species,
+    sex: nextFloat(rng) < 0.5 ? 'm' : 'f',
+    familyId: null,
     pos: { x: pos.x, y: pos.y },
     heading: nextRange(rng, 0, Math.PI * 2),
     stage: stageFromFractions(p, ageTicks / lifespanTicks),

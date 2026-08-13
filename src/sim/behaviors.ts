@@ -36,12 +36,17 @@ export function decayNeeds(state: WorldState): void {
   }
 }
 
+/** Activities owned by family.ts — utility selection must not stomp them. */
+const FAMILY_ACTIVITIES = new Set<ActivityId>(['court', 'brood', 'feedYoung', 'gather', 'pass']);
+
 export function selectBehavior(state: WorldState, c: Creature, clock: Clock): void {
+  if (FAMILY_ACTIVITIES.has(c.activity.id)) return;
+
   const scores = scoreActivities(state, c, clock);
 
-  let bestId: ActivityId = c.activity.id;
+  let bestId: FreeActivityId = c.activity.id as FreeActivityId; // guarded above
   let bestScore = -Infinity;
-  for (const [id, score] of Object.entries(scores) as [ActivityId, number][]) {
+  for (const [id, score] of Object.entries(scores) as [FreeActivityId, number][]) {
     const adjusted = id === c.activity.id ? score + HYSTERESIS_BONUS : score;
     if (adjusted > bestScore) {
       bestScore = adjusted;
@@ -52,7 +57,7 @@ export function selectBehavior(state: WorldState, c: Creature, clock: Clock): vo
   if (bestId === c.activity.id) return;
 
   // Respect the soft minimum duration unless the challenger is urgent.
-  const currentScore = scores[c.activity.id] + HYSTERESIS_BONUS;
+  const currentScore = scores[c.activity.id as FreeActivityId] + HYSTERESIS_BONUS;
   const challengerScore = scores[bestId];
   if (c.activity.ticks < c.activity.minTicks && challengerScore - currentScore < URGENT_MARGIN) {
     return;
@@ -92,7 +97,8 @@ export function applyActivity(state: WorldState, c: Creature, _clock: Clock): vo
       if (c.needs.rest <= SATISFIED) startActivity(state, c, 'idle');
       break;
 
-    case 'socialize': {
+    case 'socialize':
+    case 'court': {
       const partner = state.creatures.find((o) => o.id === c.activity.targetId);
       if (!partner) {
         startActivity(state, c, 'idle');
@@ -103,18 +109,84 @@ export function applyActivity(state: WorldState, c: Creature, _clock: Clock): vo
         moveToward(c, partner.pos, speedFor(c.species, c.stage));
       } else {
         c.needs.social = clamp01(c.needs.social - p.socialRate);
-        if (c.needs.social <= SATISFIED) startActivity(state, c, 'idle');
+        if (c.activity.id === 'socialize' && c.needs.social <= SATISFIED) {
+          startActivity(state, c, 'idle');
+        }
       }
       break;
     }
+
+    case 'brood': {
+      // Walk to the clutch, then sit; brooding is restful.
+      const target = c.activity.targetPos;
+      if (target) {
+        const remaining = moveToward(c, target, speedFor(c.species, c.stage));
+        if (remaining <= ARRIVE_DIST) {
+          c.needs.rest = clamp01(c.needs.rest - p.sleepRate * 0.5);
+        }
+      }
+      break;
+    }
+
+    case 'feedYoung': {
+      // Two legs: fetch food nearby (step 0), carry it home (step 1).
+      if (c.activity.step === 0 && !c.activity.targetPos) {
+        const angle = nextRange(state.rng, 0, Math.PI * 2);
+        const dist = nextRange(state.rng, 140, 280);
+        const candidate = {
+          x: Math.max(40, Math.min(WORLD_WIDTH - 40, c.pos.x + Math.cos(angle) * dist)),
+          y: Math.max(40, Math.min(WORLD_HEIGHT - 40, c.pos.y + Math.sin(angle) * dist)),
+        };
+        c.activity.targetPos = isWater(candidate) ? { x: c.pos.x, y: c.pos.y } : candidate;
+      }
+      const target = c.activity.targetPos;
+      if (!target) break;
+      const remaining = moveToward(c, target, speedFor(c.species, c.stage));
+      if (remaining <= ARRIVE_DIST) {
+        if (c.activity.step === 0) {
+          // Food gathered — head home.
+          const home = state.homes.find((h) => h.id === c.activity.targetId);
+          if (!home) {
+            startActivity(state, c, 'idle');
+            break;
+          }
+          c.activity.step = 1;
+          c.activity.targetPos = { ...home.pos };
+        } else {
+          // Deliver: feed every hungry baby in the family.
+          for (const other of state.creatures) {
+            if (other.familyId === c.familyId && other.stage === 'baby') {
+              other.needs.hunger = clamp01(other.needs.hunger - 0.35);
+            }
+          }
+          startActivity(state, c, 'idle');
+        }
+      }
+      break;
+    }
+
+    case 'gather': {
+      // Go to a point and settle there (nest-building, mourning, baby leash).
+      const target = c.activity.targetPos;
+      if (!target) break;
+      moveToward(c, target, speedFor(c.species, c.stage));
+      break;
+    }
+
+    case 'pass':
+      // Stillness. The world gathers around them.
+      break;
   }
 }
+
+/** Free-agent activities scored by utility (family duties are assigned, not scored). */
+type FreeActivityId = 'forage' | 'nap' | 'socialize' | 'wander' | 'idle';
 
 function scoreActivities(
   state: WorldState,
   c: Creature,
   clock: Clock,
-): Record<ActivityId, number> {
+): Record<FreeActivityId, number> {
   const p = SPECIES[c.species];
   const dayCurve = p.diurnal ? clock.light : 1 - clock.light;
   const partner = nearestOther(state, c);

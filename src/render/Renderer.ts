@@ -64,6 +64,10 @@ export class Renderer {
   private groundSprite!: Sprite;
   private detailLayer!: Container;
   private creatureLayer!: Container;
+  private homeLayer!: Graphics;
+  private memorialLayer!: Graphics;
+  private homeLabelLayer!: Container;
+  private homeLabels = new Map<number, Text>();
   private nightOverlay!: Graphics;
   private glowOverlay!: Graphics;
   private views = new Map<number, CreatureView>();
@@ -100,8 +104,18 @@ export class Renderer {
     ground.destroy(true);
     this.groundSprite = new Sprite(groundTexture);
     this.detailLayer = detail;
+    this.homeLayer = new Graphics();
+    this.memorialLayer = new Graphics();
+    this.homeLabelLayer = new Container();
     this.creatureLayer = new Container();
-    this.world.addChild(this.groundSprite, this.detailLayer, this.creatureLayer);
+    this.world.addChild(
+      this.groundSprite,
+      this.memorialLayer,
+      this.homeLayer,
+      this.detailLayer,
+      this.creatureLayer,
+      this.homeLabelLayer,
+    );
 
     // Screen-space ambience: warm additive glow (dawn/dusk) + night wash.
     this.glowOverlay = new Graphics();
@@ -139,7 +153,9 @@ export class Renderer {
   /** Snapshot creature state after each sim tick (curr → prev, sim → curr). */
   sync(state: WorldState): void {
     this.clock = getClock(state.tick);
+    const alive = new Set<number>();
     for (const c of state.creatures) {
+      alive.add(c.id);
       let view = this.views.get(c.id);
       if (!view) {
         view = this.createView(c);
@@ -154,6 +170,97 @@ export class Renderer {
       view.curr.y = c.pos.y;
       view.heading = c.heading;
       view.activityId = c.activity.id;
+    }
+    // Creatures who have passed fade from the world.
+    for (const [id, view] of this.views) {
+      if (!alive.has(id)) {
+        view.node.destroy({ children: true });
+        this.views.delete(id);
+        if (this.followId === id) this.followId = null;
+      }
+    }
+    this.syncHomes(state);
+    this.syncMemorials(state);
+  }
+
+  /** Burrows, nests (with eggs while expecting), and family name labels. */
+  private syncHomes(state: WorldState): void {
+    const g = this.homeLayer.clear();
+    const famById = new Map(state.families.map((f) => [f.id, f]));
+
+    for (const home of state.homes) {
+      const fam = home.familyId === null ? undefined : famById.get(home.familyId);
+      if (home.kind === 'burrow') {
+        // Earth mound with a cozy dark entrance.
+        g.ellipse(home.pos.x, home.pos.y + 8, 42, 16).fill({ color: 0x9b7e5e, alpha: 0.9 });
+        g.ellipse(home.pos.x, home.pos.y - 2, 34, 18).fill({ color: 0xaa8d6a, alpha: 0.95 });
+        g.ellipse(home.pos.x, home.pos.y + 4, 15, 10).fill(0x4a3826);
+        g.ellipse(home.pos.x - 26, home.pos.y + 10, 8, 3).fill({ color: 0x7da861, alpha: 0.8 });
+        g.ellipse(home.pos.x + 28, home.pos.y + 12, 9, 3).fill({ color: 0x7da861, alpha: 0.8 });
+      } else {
+        // Twig nest bowl at the tree's foot.
+        const nx = home.pos.x + 38;
+        const ny = home.pos.y + 26;
+        g.ellipse(nx, ny, 20, 9).fill(0x8a6f4d);
+        g.ellipse(nx, ny - 2, 15, 6).fill(0x6d563a);
+        if (fam?.phase === 'expecting') {
+          // Speckled eggs peeking out of the bowl.
+          g.ellipse(nx - 5, ny - 4, 4, 5).fill(0xcfe4e8);
+          g.ellipse(nx + 3, ny - 5, 4, 5).fill(0xd8ebee);
+          g.ellipse(nx + 0.5, ny - 2, 4, 5).fill(0xc8dfe4);
+        }
+      }
+    }
+
+    // Family name labels above claimed homes.
+    const claimed = new Set<number>();
+    for (const home of state.homes) {
+      if (home.familyId === null) continue;
+      const fam = famById.get(home.familyId);
+      if (!fam) continue;
+      claimed.add(home.id);
+      let label = this.homeLabels.get(home.id);
+      if (!label) {
+        label = new Text({
+          text: '',
+          style: {
+            fontFamily: 'Georgia, serif',
+            fontSize: 15,
+            fill: 0xfffbee,
+            stroke: { color: 0x4a4232, width: 3 },
+          },
+        });
+        label.anchor.set(0.5, 1);
+        this.homeLabels.set(home.id, label);
+        this.homeLabelLayer.addChild(label);
+      }
+      label.text = `The ${familyName(fam.id)} family`;
+      label.position.set(home.pos.x, home.pos.y - 34);
+    }
+    for (const [homeId, label] of this.homeLabels) {
+      if (!claimed.has(homeId)) {
+        label.destroy();
+        this.homeLabels.delete(homeId);
+      }
+    }
+  }
+
+  /** Soft flower clusters where elders have peacefully passed. */
+  private syncMemorials(state: WorldState): void {
+    const g = this.memorialLayer.clear();
+    for (const m of state.memorials) {
+      const petals = [0xf2d8e4, 0xfdf6b8, 0xe8eef5, 0xf4cddd];
+      for (let i = 0; i < 7; i++) {
+        // Position petals deterministically off the memorial's own data.
+        const a = (i / 7) * Math.PI * 2 + m.tick * 0.1;
+        const r = 6 + ((m.tick + i * 37) % 14);
+        const color = petals[(m.tick + i) % petals.length] ?? 0xf2d8e4;
+        g.circle(m.pos.x + Math.cos(a) * r, m.pos.y + Math.sin(a) * r * 0.7, 3.2).fill({
+          color,
+          alpha: 0.95,
+        });
+      }
+      g.circle(m.pos.x, m.pos.y, 2.6).fill({ color: 0xfdf6b8, alpha: 0.9 });
     }
   }
 
@@ -173,6 +280,8 @@ export class Renderer {
       view.node.position.set(x, y);
       const facingLeft = Math.cos(view.heading) < 0;
       view.node.scale.x = facingLeft ? -1 : 1;
+      // A passing elder softens — the gentlest farewell.
+      view.node.alpha = view.activityId === 'pass' ? 0.75 : 1;
 
       if (tier === 2) {
         view.rig.root.visible = true;
@@ -202,6 +311,8 @@ export class Renderer {
         view.label.scale.x = facingLeft ? -1 : 1;
       }
     }
+
+    this.homeLabelLayer.visible = tier >= 1;
 
     const followed = this.followId === null ? undefined : this.views.get(this.followId);
     if (followed) this.camera.centerOn(followed.curr.x, followed.curr.y);
@@ -302,11 +413,30 @@ export class Renderer {
 
 /** Choose an animation clip from sim activity + motion. */
 function clipFor(activityId: string, moving: boolean): ClipName {
-  if (activityId === 'nap') return 'sleep';
+  if (activityId === 'nap' || activityId === 'brood' || activityId === 'pass') return 'sleep';
   if (moving) return 'walk';
-  if (activityId === 'forage') return 'eat';
-  if (activityId === 'socialize') return 'social';
+  if (activityId === 'forage' || activityId === 'feedYoung') return 'eat';
+  if (activityId === 'socialize' || activityId === 'court') return 'social';
   return 'idle';
+}
+
+const FAMILY_NAMES = [
+  'Bramble',
+  'Clover',
+  'Willow',
+  'Fern',
+  'Maple',
+  'Hazel',
+  'Rowan',
+  'Aspen',
+  'Poppy',
+  'Birch',
+  'Tansy',
+  'Sorrel',
+];
+
+function familyName(id: number): string {
+  return FAMILY_NAMES[id % FAMILY_NAMES.length] ?? 'Meadow';
 }
 
 /** Piecewise-linear color ramp lookup. */

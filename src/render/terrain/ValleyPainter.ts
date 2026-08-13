@@ -11,7 +11,15 @@
 import { Container, Graphics } from 'pixi.js';
 import { seedRng, nextRange, type RngState } from '../../sim/rng';
 import { WORLD_HEIGHT, WORLD_WIDTH } from '../../sim/state';
-import { FOREST, GROVE, POND, inEllipse, type EllipseZone } from '../../sim/valley';
+import {
+  FOREST,
+  GROVE,
+  LONE_TREES,
+  NEST_TREES,
+  POND,
+  inEllipse,
+  type EllipseZone,
+} from '../../sim/valley';
 
 const COSMETIC_SEED = 20260813;
 
@@ -120,10 +128,9 @@ function buildDetail(rng: RngState): Container {
     const y = FOREST.y + Math.sin(angle) * FOREST.ry * 0.85 * rad;
     drawTree(g, rng, x, y, nextRange(rng, 0.8, 1.4));
   }
-  // A few lone meadow trees.
-  drawTree(g, rng, 2700, 1300, 1.2);
-  drawTree(g, rng, 1500, 2200, 1.0);
-  drawTree(g, rng, 900, 1900, 0.9);
+  // Nest-bearing trees (positions shared with the sim's home sites).
+  for (const t of LONE_TREES) drawTree(g, rng, t.x, t.y, 1.15);
+  for (const t of NEST_TREES) drawTree(g, rng, t.x, t.y, 1.05);
 
   // Berry bushes at the forest edge.
   for (let i = 0; i < 6; i++) {

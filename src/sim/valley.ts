@@ -23,6 +23,29 @@ export const GROVE: EllipseZone = { x: 2300, y: 400, rx: 480, ry: 400 };
 
 export type ZoneId = 'meadow' | 'pond' | 'forest' | 'grove';
 
+/** Lone meadow trees — drawn by the painter AND used as robin nest sites. */
+export const LONE_TREES: Vec2[] = [
+  { x: 2700, y: 1300 },
+  { x: 1500, y: 2200 },
+  { x: 900, y: 1900 },
+];
+
+/** Forest-edge trees that also carry nests. */
+export const NEST_TREES: Vec2[] = [
+  { x: 1450, y: 650 },
+  { x: 1620, y: 1120 },
+  { x: 760, y: 1560 },
+];
+
+/** Rabbit burrow sites in the open meadow. */
+export const BURROW_SITES: Vec2[] = [
+  { x: 1700, y: 1400 },
+  { x: 2400, y: 1800 },
+  { x: 1350, y: 1050 },
+  { x: 2650, y: 1080 },
+  { x: 2050, y: 2250 },
+];
+
 export function inEllipse(p: Vec2, z: EllipseZone): boolean {
   const dx = (p.x - z.x) / z.rx;
   const dy = (p.y - z.y) / z.ry;

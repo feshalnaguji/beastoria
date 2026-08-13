@@ -5,6 +5,7 @@
  */
 import { applyActivity, decayNeeds, selectBehavior } from './behaviors';
 import { getClock } from './clock';
+import { familySystem } from './family';
 import { ageCreatures } from './lifecycle';
 import type { WorldState } from './state';
 
@@ -20,5 +21,6 @@ export function tick(state: WorldState, _commands: readonly Command[]): void {
   decayNeeds(state);
   ageCreatures(state);
   for (const c of state.creatures) selectBehavior(state, c, clock);
+  familySystem(state); // family duties override free-agent choices
   for (const c of state.creatures) applyActivity(state, c, clock);
 }
