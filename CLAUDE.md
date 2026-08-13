@@ -64,6 +64,19 @@ stream (visuals must never perturb the sim); WorldState stays a serializable POJ
 JSON passthrough); population balance = fertility gating vs softCap + wanderer floor failsafe +
 exactly-one phoenix family (rebirth on elder passing).
 
+## Current status (update at each milestone / handoff)
+
+- **Done:** M0 (skeleton+deploy), M1 (sim core: needs/behaviors/clock), M2 (painterly
+  valley, zones, water avoidance, day/night grading), M3 (rig pipeline: rabbit+robin,
+  stages, LOD, follow-cam), M4 (families: pairing, FSM, homes, eggs/birth, brooding
+  turns, feedYoung, dispersal, gentle passing + memorials, population gating)
+- **Next: M5 — all eight species** (deer, duck, koi, owl, dodo, phoenix rigs + species
+  defs; swimming, nocturnal owl schedule, deer herd cohesion, dodo wanderer arrivals,
+  phoenix rebirth; full population balance property tests). Then M6 sound, M7
+  persistence, M8 polish (see spec §6).
+- Live: https://feshalnaguji.github.io/beastoria/ · repo: feshalnaguji/beastoria
+  (GitHub Pages auto-deploys main; CI runs tests+build)
+
 ## Working process (user-agreed)
 
 - Build milestone by milestone (M0–M8 in spec §6); **the user reviews each milestone in the
