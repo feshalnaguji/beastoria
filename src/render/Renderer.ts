@@ -282,6 +282,10 @@ export class Renderer {
           }
           break;
         }
+        default: {
+          const _exhaustive: never = home.kind;
+          void _exhaustive;
+        }
       }
     }
 
