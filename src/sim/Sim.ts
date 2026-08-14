@@ -1,7 +1,7 @@
 /**
  * The deterministic tick pipeline — the sim's only entry point.
  * Fixed order, fixed rate; commands are empty in v1 but the seam exists for v2.
- * Pipeline: clock → needs decay → behavior selection → family FSM →
+ * Pipeline: clock → needs decay → aging → behavior selection → family FSM →
  * population regulator → activity effects/movement.
  */
 import { applyActivity, decayNeeds, selectBehavior } from './behaviors';
