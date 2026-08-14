@@ -1,6 +1,7 @@
 /**
- * Deer keep loose company: scattered to the corners of the valley, the herd
- * drifts back together within a couple of game days.
+ * Deer keep loose company: scattered across the mid-map (away from the world
+ * edges, so wanderStep's edge-avoidance can't fake the convergence), the herd
+ * drifts back together within a couple of game days via real herd cohesion.
  */
 import { describe, expect, it } from 'vitest';
 import { tick } from '../src/sim/Sim';
@@ -18,14 +19,17 @@ describe('deer herd cohesion', () => {
     const state = createWorld(21);
     state.creatures = [];
     state.families = [];
-    const corners = [
-      { x: 400, y: 400 },
-      { x: 3700, y: 400 },
-      { x: 400, y: 2700 },
-      { x: 3700, y: 2700 },
-      { x: 2000, y: 1500 },
+    // Mid-map spread, well clear of the world edges (EDGE_MARGIN=120), so
+    // wanderStep's edge-avoidance pull-to-center cannot be the thing that
+    // converges the herd — only real herd cohesion can.
+    const spread = [
+      { x: 1200, y: 1000 },
+      { x: 2900, y: 1000 },
+      { x: 1200, y: 2100 },
+      { x: 2900, y: 2100 },
+      { x: 2050, y: 1550 },
     ];
-    for (const pos of corners) spawnCreature(state, 'deer', pos, 0.4);
+    for (const pos of spread) spawnCreature(state, 'deer', pos, 0.4);
     const before = meanDistToCentroid(state);
     for (let i = 0; i < 5000; i++) tick(state, []);
     const after = meanDistToCentroid(state);
