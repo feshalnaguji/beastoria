@@ -23,6 +23,11 @@ export class Hud {
       'font-family:Georgia,serif', 'padding:6px 12px', 'border-radius:999px',
       'cursor:pointer', 'user-select:none',
     ].join(';');
+    // Stop the pointerdown from reaching the window's once-only unlock listener first,
+    // so isUnlocked is still false when the click handler below runs — otherwise the
+    // click would immediately toggle muted=true on what the user intended as the
+    // unlock gesture (and persist it).
+    this.chip.addEventListener('pointerdown', (e) => e.stopPropagation());
     this.chip.addEventListener('click', () => {
       if (!this.audio.isUnlocked) {
         this.audio.unlock(); // click itself is a user gesture; onUnlock() re-renders

@@ -20,11 +20,14 @@ interface Bed {
 export class AudioEngine {
   private ctx = new AudioContext();
   private master = this.ctx.createGain();
+  private compressor = this.ctx.createDynamicsCompressor();
   private oneShotBus = this.ctx.createGain();
   private ambienceBus = this.ctx.createGain();
   private buffers = new Map<string, AudioBuffer>();
   private beds = new Map<BedName, Bed>();
   private unlocked = false;
+  /** In-memory fallback for `muted` when localStorage throws (e.g. privacy modes). */
+  private mutedFallback = false;
 
   /** Fired once, at the end of unlock(); lets UI (e.g. the sound chip) react without polling. */
   onUnlock?: () => void;
@@ -32,17 +35,35 @@ export class AudioEngine {
   constructor() {
     this.oneShotBus.connect(this.master);
     this.ambienceBus.connect(this.master);
-    this.master.connect(this.ctx.destination);
+    // The framed one-shot boost (+6dB, see Mixer.callGainDb) over already-mastered
+    // (-1.5dBTP) clips can clip the destination; a gentle compressor gives clean
+    // headroom without altering the mixer's gain values.
+    this.compressor.threshold.value = -6;
+    this.compressor.knee.value = 12;
+    this.compressor.ratio.value = 4;
+    this.compressor.attack.value = 0.003;
+    this.compressor.release.value = 0.25;
+    this.master.connect(this.compressor);
+    this.compressor.connect(this.ctx.destination);
     this.ambienceBus.gain.value = 0;
     this.master.gain.value = this.muted ? 0 : 1;
   }
 
   get muted(): boolean {
-    return localStorage.getItem(MUTE_KEY) === '1';
+    try {
+      return localStorage.getItem(MUTE_KEY) === '1';
+    } catch {
+      return this.mutedFallback;
+    }
   }
 
   set muted(m: boolean) {
-    localStorage.setItem(MUTE_KEY, m ? '1' : '0');
+    this.mutedFallback = m;
+    try {
+      localStorage.setItem(MUTE_KEY, m ? '1' : '0');
+    } catch {
+      // Privacy mode or storage disabled: fall back to in-memory only.
+    }
     this.master.gain.setTargetAtTime(m ? 0 : 1, this.ctx.currentTime, 0.05);
   }
 
@@ -116,11 +137,5 @@ export class AudioEngine {
     gain.gain.value = Math.pow(10, gainDb / 20);
     source.connect(gain).connect(this.oneShotBus);
     source.start();
-  }
-
-  /** Advance bed gain ramps; currently handled by setTargetAtTime, so this is a no-op hook
-   *  reserved for future frame-driven mixing logic (e.g. per-frame LFOs). */
-  update(_dtMs: number): void {
-    // Ramps are driven by the Web Audio clock via setTargetAtTime; nothing to do per frame yet.
   }
 }
