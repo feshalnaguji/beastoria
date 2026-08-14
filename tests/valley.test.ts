@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import { tick } from '../src/sim/Sim';
 import { createWorld } from '../src/sim/state';
+import { SPECIES } from '../src/sim/species';
 import { isWater, zoneAt, POND } from '../src/sim/valley';
 
 describe('valley zones', () => {
@@ -26,6 +27,9 @@ describe('valley zones', () => {
     for (let i = 0; i < 8000; i++) {
       tick(state, []);
       for (const c of state.creatures) {
+        // Water/amphibious species (koi, duck) are expected in the pond; this
+        // check is only about creatures whose medium is strictly 'land'.
+        if (SPECIES[c.species].medium !== 'land') continue;
         expect(isWater(c.pos)).toBe(false);
       }
     }

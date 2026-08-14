@@ -46,7 +46,7 @@ describe('state shape', () => {
 
   it('the starting cast has both sexes of each species (pairing is possible)', () => {
     const state = createWorld(1234);
-    for (const species of ['rabbit', 'robin'] as const) {
+    for (const species of ['rabbit', 'robin', 'deer', 'duck', 'koi', 'owl', 'dodo', 'phoenix'] as const) {
       const sexes = new Set(
         state.creatures.filter((c) => c.species === species).map((c) => c.sex),
       );

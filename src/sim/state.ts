@@ -4,7 +4,17 @@
  */
 import { seedRng, nextRange, nextFloat, type RngState } from './rng';
 import type { SimEvent } from './events';
-import { BURROW_SITES, LONE_TREES, NEST_TREES } from './valley';
+import {
+  BURROW_SITES,
+  LONE_TREES,
+  NEST_TREES,
+  REED_NESTS,
+  LILY_PATCHES,
+  HOLLOW_TREES,
+  GLADES,
+  GROUND_NESTS,
+  GROVE_NEST,
+} from './valley';
 
 export interface Vec2 {
   x: number;
@@ -145,7 +155,41 @@ const STARTING_CAST: { species: SpeciesId; ageFrac: number; sex: Sex }[] = [
   { species: 'robin', ageFrac: 0.35, sex: 'm' },
   { species: 'robin', ageFrac: 0.55, sex: 'f' },
   { species: 'robin', ageFrac: 0.86, sex: 'm' }, // elder
+  { species: 'deer', ageFrac: 0.45, sex: 'm' },
+  { species: 'deer', ageFrac: 0.5, sex: 'f' },
+  { species: 'deer', ageFrac: 0.3, sex: 'f' },
+  { species: 'deer', ageFrac: 0.2, sex: 'm' }, // young stag tags along
+  { species: 'duck', ageFrac: 0.45, sex: 'm' },
+  { species: 'duck', ageFrac: 0.5, sex: 'f' },
+  { species: 'duck', ageFrac: 0.12, sex: 'f' }, // duckling
+  { species: 'koi', ageFrac: 0.45, sex: 'm' },
+  { species: 'koi', ageFrac: 0.5, sex: 'f' },
+  { species: 'koi', ageFrac: 0.3, sex: 'f' },
+  { species: 'koi', ageFrac: 0.6, sex: 'm' },
+  { species: 'owl', ageFrac: 0.45, sex: 'm' },
+  { species: 'owl', ageFrac: 0.5, sex: 'f' },
+  { species: 'dodo', ageFrac: 0.5, sex: 'm' },
+  { species: 'dodo', ageFrac: 0.45, sex: 'f' },
+  { species: 'phoenix', ageFrac: 0.5, sex: 'm' },
+  { species: 'phoenix', ageFrac: 0.55, sex: 'f' },
 ];
+
+/** Where each species wakes up on day one (koi in water, phoenix at the grove). */
+const SPAWN_ANCHORS: Record<SpeciesId, { x: number; y: number; rx: number; ry: number }> = {
+  rabbit: { x: 2048, y: 1536, rx: 700, ry: 500 },
+  robin: { x: 2048, y: 1536, rx: 700, ry: 500 },
+  deer: { x: 2100, y: 1600, rx: 400, ry: 300 },
+  duck: { x: 2500, y: 1900, rx: 150, ry: 90 },
+  koi: { x: 3100, y: 2300, rx: 300, ry: 200 },
+  owl: { x: 950, y: 850, rx: 300, ry: 250 },
+  dodo: { x: 1300, y: 1250, rx: 200, ry: 150 },
+  phoenix: { x: 2300, y: 480, rx: 120, ry: 80 },
+};
+
+function spawnPosFor(rng: RngState, species: SpeciesId): Vec2 {
+  const a = SPAWN_ANCHORS[species];
+  return { x: a.x + nextRange(rng, -a.rx, a.rx), y: a.y + nextRange(rng, -a.ry, a.ry) };
+}
 
 export function createWorld(seed: number): WorldState {
   const rng = seedRng(seed);
@@ -167,18 +211,25 @@ export function createWorld(seed: number): WorldState {
     state.homes.push({ id: state.nextId++, kind: 'treeNest', pos: { ...pos }, familyId: null });
   }
 
+  const siteGroups: [HomeKind, Vec2[]][] = [
+    ['reedNest', REED_NESTS],
+    ['lilyPatch', LILY_PATCHES],
+    ['treeHollow', HOLLOW_TREES],
+    ['glade', GLADES],
+    ['groundNest', GROUND_NESTS],
+    ['groveNest', [GROVE_NEST]],
+  ];
+  for (const [kind, sites] of siteGroups) {
+    for (const pos of sites) {
+      state.homes.push({ id: state.nextId++, kind, pos: { ...pos }, familyId: null });
+    }
+  }
+
   for (const { species, ageFrac, sex } of STARTING_CAST) {
-    const c = spawnCreature(state, species, randomMeadowPos(rng), ageFrac);
+    const c = spawnCreature(state, species, spawnPosFor(rng, species), ageFrac);
     c.sex = sex;
   }
   return state;
-}
-
-function randomMeadowPos(rng: RngState): Vec2 {
-  return {
-    x: WORLD_WIDTH / 2 + nextRange(rng, -700, 700),
-    y: WORLD_HEIGHT / 2 + nextRange(rng, -500, 500),
-  };
 }
 
 export function spawnCreature(
