@@ -14,6 +14,8 @@ import {
   GLADES,
   GROUND_NESTS,
   GROVE_NEST,
+  POND,
+  canOccupy,
 } from './valley';
 
 export interface Vec2 {
@@ -189,7 +191,26 @@ const SPAWN_ANCHORS: Record<SpeciesId, { x: number; y: number; rx: number; ry: n
 
 function spawnPosFor(rng: RngState, species: SpeciesId): Vec2 {
   const a = SPAWN_ANCHORS[species];
-  return { x: a.x + nextRange(rng, -a.rx, a.rx), y: a.y + nextRange(rng, -a.ry, a.ry) };
+  const p = { x: a.x + nextRange(rng, -a.rx, a.rx), y: a.y + nextRange(rng, -a.ry, a.ry) };
+  const medium = SPECIES[species].medium;
+  // Draw-free clamp: never consumes/reorders RNG, so it never reshuffles a
+  // seeded world. If the raw point landed in the wrong medium, project it
+  // radially (relative to the pond) out of / into the water.
+  if (!canOccupy(medium, p)) {
+    const nx = (p.x - POND.x) / POND.rx;
+    const ny = (p.y - POND.y) / POND.ry;
+    const r = Math.hypot(nx, ny);
+    const targetR = medium === 'water' ? 0.85 : 1.08;
+    if (r === 0) {
+      // Only land media can hit this (pond center is always water).
+      return { x: POND.x, y: POND.y - POND.ry * targetR };
+    }
+    return {
+      x: POND.x + (nx / r) * targetR * POND.rx,
+      y: POND.y + (ny / r) * targetR * POND.ry,
+    };
+  }
+  return p;
 }
 
 export function createWorld(seed: number): WorldState {
