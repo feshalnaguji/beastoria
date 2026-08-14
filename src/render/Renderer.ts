@@ -15,8 +15,7 @@ import {
   type WorldState,
 } from '../sim/state';
 import type { ClipName, CreatureRig } from '../rigs/format';
-import { rabbitRig } from '../rigs/rabbitRig';
-import { robinRig } from '../rigs/robinRig';
+import { ALL_RIGS } from '../rigs/allRigs';
 import { Camera } from './Camera';
 import { lodTier } from './Lod';
 import { bakedFrame, type BakedFrame } from './creatures/RigBaker';
@@ -24,14 +23,14 @@ import { buildRig, multiplyTints, type RigInstance } from './creatures/RigRender
 import { buildValley } from './terrain/ValleyPainter';
 import { Rectangle } from 'pixi.js';
 
-const RIGS: Partial<Record<SpeciesId, CreatureRig>> = {
-  rabbit: rabbitRig,
-  robin: robinRig,
-};
+const RIGS: Partial<Record<SpeciesId, CreatureRig>> = Object.fromEntries(
+  ALL_RIGS.map((r) => [r.species, r]),
+);
 
-/** Placeholder until each species' rig lands (Tasks 8–11). */
+const FALLBACK_RIG = ALL_RIGS[0] as CreatureRig;
+
 function rigFor(species: SpeciesId): CreatureRig {
-  return RIGS[species] ?? rabbitRig;
+  return RIGS[species] ?? FALLBACK_RIG;
 }
 
 interface CreatureView {
@@ -48,6 +47,18 @@ interface CreatureView {
   heading: number;
   activityId: string;
 }
+
+/** Roughly the crown of each species' rig, for label placement. */
+const LABEL_HEIGHT: Record<SpeciesId, number> = {
+  rabbit: -70,
+  robin: -46,
+  deer: -120,
+  duck: -52,
+  koi: -34,
+  owl: -70,
+  dodo: -70,
+  phoenix: -110,
+};
 
 /** Day/night multiply-tint ramp, keyed by fraction of day. */
 const NIGHT = 0x7580b0;
@@ -195,24 +206,81 @@ export class Renderer {
 
     for (const home of state.homes) {
       const fam = home.familyId === null ? undefined : famById.get(home.familyId);
-      if (home.kind === 'burrow') {
-        // Earth mound with a cozy dark entrance.
-        g.ellipse(home.pos.x, home.pos.y + 8, 42, 16).fill({ color: 0x9b7e5e, alpha: 0.9 });
-        g.ellipse(home.pos.x, home.pos.y - 2, 34, 18).fill({ color: 0xaa8d6a, alpha: 0.95 });
-        g.ellipse(home.pos.x, home.pos.y + 4, 15, 10).fill(0x4a3826);
-        g.ellipse(home.pos.x - 26, home.pos.y + 10, 8, 3).fill({ color: 0x7da861, alpha: 0.8 });
-        g.ellipse(home.pos.x + 28, home.pos.y + 12, 9, 3).fill({ color: 0x7da861, alpha: 0.8 });
-      } else {
-        // Twig nest bowl at the tree's foot.
-        const nx = home.pos.x + 38;
-        const ny = home.pos.y + 26;
-        g.ellipse(nx, ny, 20, 9).fill(0x8a6f4d);
-        g.ellipse(nx, ny - 2, 15, 6).fill(0x6d563a);
-        if (fam?.phase === 'expecting') {
-          // Speckled eggs peeking out of the bowl.
-          g.ellipse(nx - 5, ny - 4, 4, 5).fill(0xcfe4e8);
-          g.ellipse(nx + 3, ny - 5, 4, 5).fill(0xd8ebee);
-          g.ellipse(nx + 0.5, ny - 2, 4, 5).fill(0xc8dfe4);
+      switch (home.kind) {
+        case 'burrow': {
+          // Earth mound with a cozy dark entrance.
+          g.ellipse(home.pos.x, home.pos.y + 8, 42, 16).fill({ color: 0x9b7e5e, alpha: 0.9 });
+          g.ellipse(home.pos.x, home.pos.y - 2, 34, 18).fill({ color: 0xaa8d6a, alpha: 0.95 });
+          g.ellipse(home.pos.x, home.pos.y + 4, 15, 10).fill(0x4a3826);
+          g.ellipse(home.pos.x - 26, home.pos.y + 10, 8, 3).fill({ color: 0x7da861, alpha: 0.8 });
+          g.ellipse(home.pos.x + 28, home.pos.y + 12, 9, 3).fill({ color: 0x7da861, alpha: 0.8 });
+          break;
+        }
+        case 'treeNest': {
+          // Twig nest bowl at the tree's foot.
+          const nx = home.pos.x + 38;
+          const ny = home.pos.y + 26;
+          g.ellipse(nx, ny, 20, 9).fill(0x8a6f4d);
+          g.ellipse(nx, ny - 2, 15, 6).fill(0x6d563a);
+          if (fam?.phase === 'expecting') {
+            // Speckled eggs peeking out of the bowl.
+            g.ellipse(nx - 5, ny - 4, 4, 5).fill(0xcfe4e8);
+            g.ellipse(nx + 3, ny - 5, 4, 5).fill(0xd8ebee);
+            g.ellipse(nx + 0.5, ny - 2, 4, 5).fill(0xc8dfe4);
+          }
+          break;
+        }
+        case 'reedNest': { // grassy bowl tucked in the reeds
+          g.ellipse(home.pos.x, home.pos.y, 22, 10).fill(0xb5a068);
+          g.ellipse(home.pos.x, home.pos.y - 2, 16, 7).fill(0x8f7c4e);
+          if (fam?.phase === 'expecting') {
+            g.ellipse(home.pos.x - 4, home.pos.y - 3, 4.5, 5.5).fill(0xe8e2ce);
+            g.ellipse(home.pos.x + 4, home.pos.y - 4, 4.5, 5.5).fill(0xefe9d6);
+          }
+          break;
+        }
+        case 'lilyPatch': { // koi spawning bed among the pads
+          g.circle(home.pos.x - 10, home.pos.y, 16).fill({ color: 0x5f9451, alpha: 0.95 });
+          g.circle(home.pos.x + 14, home.pos.y + 8, 12).fill({ color: 0x6da05a, alpha: 0.9 });
+          g.circle(home.pos.x + 4, home.pos.y - 10, 5).fill({ color: 0xf2d8e4 }); // blossom
+          if (fam?.phase === 'expecting') {
+            for (let i = 0; i < 5; i++) { // roe: tiny amber beads
+              g.circle(home.pos.x - 14 + i * 6, home.pos.y + 12, 2).fill({ color: 0xf0c060, alpha: 0.9 });
+            }
+          }
+          break;
+        }
+        case 'treeHollow': { // a cozy dark hollow in an old trunk
+          g.roundRect(home.pos.x - 12, home.pos.y - 30, 24, 46, 10).fill(0x6b4e38);
+          g.ellipse(home.pos.x, home.pos.y - 10, 8, 11).fill(0x2e2018);
+          if (fam?.phase === 'expecting') {
+            g.ellipse(home.pos.x - 2, home.pos.y - 5, 3.5, 4.5).fill(0xf3efe4);
+            g.ellipse(home.pos.x + 3, home.pos.y - 6, 3.5, 4.5).fill(0xeae5d8);
+          }
+          break;
+        }
+        case 'glade': { // flattened-grass deer bed
+          g.ellipse(home.pos.x, home.pos.y, 46, 22).fill({ color: 0xa8bd7e, alpha: 0.7 });
+          g.ellipse(home.pos.x, home.pos.y, 32, 14).fill({ color: 0xc0cf94, alpha: 0.8 });
+          break;
+        }
+        case 'groundNest': { // dodo's ring of twigs on the forest floor
+          g.ellipse(home.pos.x, home.pos.y, 24, 12).fill(0x8a6f4d);
+          g.ellipse(home.pos.x, home.pos.y, 16, 8).fill(0xa89066);
+          if (fam?.phase === 'expecting') {
+            g.ellipse(home.pos.x, home.pos.y - 2, 6, 7).fill(0xf1ead6); // one grand egg
+          }
+          break;
+        }
+        case 'groveNest': { // the phoenix nest: warm stones, faint glow
+          g.ellipse(home.pos.x, home.pos.y + 4, 30, 12).fill({ color: 0xffdda6, alpha: 0.35 });
+          g.ellipse(home.pos.x, home.pos.y, 20, 9).fill(0xb59a72);
+          g.ellipse(home.pos.x, home.pos.y - 2, 13, 6).fill(0x8f7752);
+          if (fam?.phase === 'expecting') {
+            g.ellipse(home.pos.x, home.pos.y - 3, 5, 6.5).fill(0xf4d03f); // the golden egg
+            g.ellipse(home.pos.x, home.pos.y - 3, 8, 9).fill({ color: 0xffb36b, alpha: 0.3 });
+          }
+          break;
         }
       }
     }
@@ -254,6 +322,19 @@ export class Renderer {
   private syncMemorials(state: WorldState): void {
     const g = this.memorialLayer.clear();
     for (const m of state.memorials) {
+      if (m.species === 'phoenix') {
+        // Soft embers, not flowers — the site of a rebirth.
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2 + m.tick * 0.13;
+          const r = 5 + ((m.tick + i * 29) % 10);
+          g.circle(m.pos.x + Math.cos(a) * r, m.pos.y + Math.sin(a) * r * 0.7, 2.4).fill({
+            color: i % 2 === 0 ? 0xf4d03f : 0xd96b35,
+            alpha: 0.85,
+          });
+        }
+        g.circle(m.pos.x, m.pos.y, 3).fill({ color: 0xffdda6, alpha: 0.9 });
+        continue;
+      }
       const petals = [0xf2d8e4, 0xfdf6b8, 0xe8eef5, 0xf4cddd];
       for (let i = 0; i < 7; i++) {
         // Position petals deterministically off the memorial's own data.
@@ -385,8 +466,7 @@ export class Renderer {
 
   private positionLabel(view: CreatureView): void {
     const scale = rigFor(view.species).stages[view.stage].scale;
-    const height = view.species === 'robin' ? -46 : -70; // roughly the rig's crown
-    view.label.position.set(0, height * scale);
+    view.label.position.set(0, LABEL_HEIGHT[view.species] * scale);
   }
 
   /** Golden-hour glow + deep-night wash (screen space). */
