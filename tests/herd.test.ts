@@ -34,6 +34,6 @@ describe('deer herd cohesion', () => {
     for (let i = 0; i < 5000; i++) tick(state, []);
     const after = meanDistToCentroid(state);
     expect(after).toBeLessThan(before * 0.5);
-    expect(after).toBeLessThan(600);
+    expect(after).toBeLessThan(350);
   }, 20000);
 });
