@@ -73,10 +73,13 @@ exactly-one phoenix family (rebirth on elder passing).
   eight species: deer/duck/koi/owl/dodo/phoenix rigs + defs, movement media incl.
   swimming koi + amphibious ducks, nocturnal owls, deer herd cohesion, wanderer
   arrivals, phoenix single-family rebirth, balance property suite 6 seeds × 30 days ×
-  100-day soak)
-- **Next: M6 — sound** (Web Audio engine, autoplay gate, ambience beds, per-family
-  calls from sim 'vocalize' events, zoom mixing, LICENSES.md provenance audit; see
-  spec §4.5). Then M7 persistence, M8 polish (spec §6).
+  100-day soak), M6 (sound: deterministic vocalize tick-output, real CC-licensed
+  voices for 6 species + designed dodo/phoenix from real relatives, 6 ambience beds,
+  Web Audio bus engine + autoplay gate + persisted mute, zoom/zone-aware mixer, call
+  scheduler, HUD sound chip, LICENSES.md provenance gate)
+- **Next: M7 — persistence** (idb-keyval versioned SaveFile, migrations, autosave,
+  offline catch-up at 0.25x capped 2 game-days, welcome-back card, catch-up
+  determinism test; spec §4.6). Then M8 polish (spec §6).
 - Live: https://feshalnaguji.github.io/beastoria/ · repo: feshalnaguji/beastoria
   (GitHub Pages auto-deploys main; CI runs tests+build)
 

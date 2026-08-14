@@ -4,8 +4,14 @@
  */
 import { DevPanel } from './app/DevPanel';
 import { GameLoop } from './app/GameLoop';
+import { AudioEngine } from './audio/AudioEngine';
+import { CallScheduler } from './audio/CallScheduler';
+import type { BedName } from './audio/manifest';
+import { computeMix } from './audio/Mixer';
+import { getClock } from './sim/clock';
 import { tick } from './sim/Sim';
 import { createWorld, WORLD_HEIGHT, WORLD_WIDTH } from './sim/state';
+import { Hud } from './ui/Hud';
 import { Renderer } from './render/Renderer';
 
 async function start(): Promise<void> {
@@ -20,10 +26,21 @@ async function start(): Promise<void> {
 
   renderer.centerOn(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 0.21); // whole valley in view
 
+  const audio = new AudioEngine();
+  const scheduler = new CallScheduler(audio);
+  void audio.preload();
+  window.addEventListener('pointerdown', () => audio.unlock(), { once: true });
+  new Hud(audio);
+
   const loop = new GameLoop(
     () => {
-      tick(state, []);
+      const out = tick(state, []);
       renderer.sync(state);
+      const mix = computeMix(getClock(state.tick), renderer.viewInfo(), state);
+      for (const [bed, gain] of Object.entries(mix.beds) as [BedName, number][]) {
+        audio.setBedTarget(bed, gain);
+      }
+      scheduler.onTick(out.vocalizations, mix, performance.now());
     },
     (alpha) => {
       renderer.render(alpha);
