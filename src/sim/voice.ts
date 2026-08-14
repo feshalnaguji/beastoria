@@ -23,7 +23,7 @@ const BABY_BEG_RATE = 1 / 400; // hungry babies pipe up
 
 /** Deterministic per-(tick,creature) roll in [0,1) — never touches the sim RNG stream. */
 function voiceRoll(tick: number, id: number): number {
-  let h = (tick * 0x9e3779b9 + id * 0x85ebca6b) >>> 0;
+  let h = (Math.imul(tick, 0x9e3779b9) + Math.imul(id, 0x85ebca6b)) >>> 0;
   h ^= h >>> 16;
   h = Math.imul(h, 0x21f0aaad);
   h ^= h >>> 15;
