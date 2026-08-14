@@ -59,12 +59,23 @@ async function start(): Promise<void> {
   // and the welcome card reflects a settled, post-catch-up state.
   if (owed > 0) {
     const overlay = showDawnOverlay();
+    // Fail open: a throw inside runCatchUp must never strand the player on a
+    // frozen overlay. Every exit from drain() — normal completion or error —
+    // resolves the promise, so the await below always settles and boot
+    // continues with whatever (still-valid) state was reached.
     await new Promise<void>((resolve) => {
       const drain = (): void => {
-        const res = runCatchUp(state, owed, 8, () => performance.now());
-        owed -= res.ticksRun;
-        if (!res.done && owed > 0) requestAnimationFrame(drain);
-        else resolve();
+        try {
+          const res = runCatchUp(state, owed, 8, () => performance.now());
+          owed -= res.ticksRun;
+          if (!res.done && owed > 0) {
+            requestAnimationFrame(drain);
+            return;
+          }
+        } catch (err) {
+          console.warn('[catchup] aborted:', err);
+        }
+        resolve();
       };
       drain();
     });
