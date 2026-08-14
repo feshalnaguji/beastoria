@@ -4,7 +4,9 @@
  */
 import type { CreatureRig } from './format';
 import { deerRig } from './deerRig';
+import { duckRig } from './duckRig';
+import { koiRig } from './koiRig';
 import { rabbitRig } from './rabbitRig';
 import { robinRig } from './robinRig';
 
-export const ALL_RIGS: CreatureRig[] = [rabbitRig, robinRig, deerRig];
+export const ALL_RIGS: CreatureRig[] = [rabbitRig, robinRig, deerRig, duckRig, koiRig];
