@@ -24,10 +24,15 @@ import { buildRig, multiplyTints, type RigInstance } from './creatures/RigRender
 import { buildValley } from './terrain/ValleyPainter';
 import { Rectangle } from 'pixi.js';
 
-const RIGS: Record<SpeciesId, CreatureRig> = {
+const RIGS: Partial<Record<SpeciesId, CreatureRig>> = {
   rabbit: rabbitRig,
   robin: robinRig,
 };
+
+/** Placeholder until each species' rig lands (Tasks 8–11). */
+function rigFor(species: SpeciesId): CreatureRig {
+  return RIGS[species] ?? rabbitRig;
+}
 
 interface CreatureView {
   node: Container; // world-positioned, flip container
@@ -323,7 +328,7 @@ export class Renderer {
 
   private createView(c: Creature): CreatureView {
     const node = new Container();
-    const rig = buildRig(RIGS[c.species], c.stage);
+    const rig = buildRig(rigFor(c.species), c.stage);
     const spriteWrap = new Container();
     const sprite = new Sprite();
     spriteWrap.addChild(sprite);
@@ -363,14 +368,14 @@ export class Renderer {
   private applyStage(view: CreatureView, stage: LifeStage): void {
     view.stage = stage;
     view.rig.root.destroy({ children: true });
-    view.rig = buildRig(RIGS[view.species], stage);
+    view.rig = buildRig(rigFor(view.species), stage);
     view.node.addChildAt(view.rig.root, 0);
     view.frames = this.bakeFrames(view.species, stage);
     this.positionLabel(view);
   }
 
   private bakeFrames(species: SpeciesId, stage: LifeStage): CreatureView['frames'] {
-    const rig = RIGS[species];
+    const rig = rigFor(species);
     return {
       idle: bakedFrame(this.app.renderer, rig, stage, 'idle', 0),
       walkA: bakedFrame(this.app.renderer, rig, stage, 'walk', 0.25),
@@ -379,7 +384,7 @@ export class Renderer {
   }
 
   private positionLabel(view: CreatureView): void {
-    const scale = RIGS[view.species].stages[view.stage].scale;
+    const scale = rigFor(view.species).stages[view.stage].scale;
     const height = view.species === 'robin' ? -46 : -70; // roughly the rig's crown
     view.label.position.set(0, height * scale);
   }

@@ -2,7 +2,8 @@
  * Species parameters as data. Two entries in M3 (rabbit, robin); grows to 8
  * in M5, when this becomes the full SpeciesDef registry of the spec.
  */
-import type { LifeStage, SpeciesId } from './state';
+import type { HomeKind, LifeStage, SpeciesId } from './state';
+import type { Medium } from './valley';
 
 export interface SpeciesParams {
   /** World units per tick while moving (adults; stages scale it). */
@@ -20,7 +21,7 @@ export interface SpeciesParams {
   sleepRate: number;
   socialRate: number;
   /** Which home kind this species claims. */
-  homeKind: 'burrow' | 'treeNest';
+  homeKind: HomeKind;
   reproduction: {
     mode: 'egg' | 'live';
     clutchMin: number;
@@ -31,6 +32,16 @@ export interface SpeciesParams {
     cooldownTicks: number;
   };
   population: { floor: number; softCap: number; hardCap: number };
+  /** How the species relates to water: koi water-only, ducks amphibious. */
+  medium: Medium;
+  /** Below-floor / missing-sex arrivals from the map edge (spec §4.3 layer 2). */
+  wandersIn: boolean;
+  /** Herd species drift back toward their herd's centroid while wandering. */
+  herd?: boolean;
+  /** At most one family of this species may ever exist (phoenix). */
+  singleFamily?: boolean;
+  /** An elder's passing leaves a new chick at the grove (phoenix). */
+  rebirth?: boolean;
 }
 
 export const SPECIES: Record<SpeciesId, SpeciesParams> = {
@@ -56,6 +67,8 @@ export const SPECIES: Record<SpeciesId, SpeciesParams> = {
       cooldownTicks: 1500,
     },
     population: { floor: 3, softCap: 8, hardCap: 12 },
+    medium: 'land',
+    wandersIn: true,
   },
   robin: {
     speed: 8, // quick, hoppy
@@ -79,6 +92,101 @@ export const SPECIES: Record<SpeciesId, SpeciesParams> = {
       cooldownTicks: 1800,
     },
     population: { floor: 3, softCap: 8, hardCap: 12 },
+    medium: 'land',
+    wandersIn: true,
+  },
+  deer: {
+    speed: 7,
+    diurnal: true,
+    lifespanTicksMean: 33600, // ≈ 14 game days — the valley's gentle giants
+    stageFractions: { baby: 0.1, juvenile: 0.15, adult: 0.55 },
+    needRates: { hunger: 1 / 1400, rest: 1 / 2600, social: 1 / 1600 },
+    eatRate: 0.0035,
+    sleepRate: 0.003,
+    socialRate: 0.006,
+    homeKind: 'glade',
+    reproduction: { mode: 'live', clutchMin: 1, clutchMax: 2, broodTicks: 700, cooldownTicks: 2400 },
+    population: { floor: 3, softCap: 7, hardCap: 10 },
+    medium: 'land',
+    wandersIn: true,
+    herd: true,
+  },
+  duck: {
+    speed: 6,
+    diurnal: true,
+    lifespanTicksMean: 21600, // ≈ 9 game days
+    stageFractions: { baby: 0.1, juvenile: 0.15, adult: 0.55 },
+    needRates: { hunger: 1 / 1100, rest: 1 / 2400, social: 1 / 1500 },
+    eatRate: 0.0045,
+    sleepRate: 0.003,
+    socialRate: 0.006,
+    homeKind: 'reedNest',
+    reproduction: { mode: 'egg', clutchMin: 2, clutchMax: 4, broodTicks: 750, cooldownTicks: 1700 },
+    population: { floor: 3, softCap: 8, hardCap: 12 },
+    medium: 'amphibious',
+    wandersIn: true,
+  },
+  koi: {
+    speed: 5,
+    diurnal: true,
+    lifespanTicksMean: 36000, // ≈ 15 game days — koi live long
+    stageFractions: { baby: 0.1, juvenile: 0.14, adult: 0.6 },
+    needRates: { hunger: 1 / 1500, rest: 1 / 3000, social: 1 / 2000 },
+    eatRate: 0.004,
+    sleepRate: 0.0025,
+    socialRate: 0.005,
+    homeKind: 'lilyPatch',
+    reproduction: { mode: 'egg', clutchMin: 2, clutchMax: 4, broodTicks: 600, cooldownTicks: 2000 },
+    population: { floor: 3, softCap: 9, hardCap: 13 },
+    medium: 'water',
+    wandersIn: true,
+  },
+  owl: {
+    speed: 8,
+    diurnal: false, // wakes at dusk as the robins roost
+    lifespanTicksMean: 26400, // ≈ 11 game days
+    stageFractions: { baby: 0.1, juvenile: 0.14, adult: 0.56 },
+    needRates: { hunger: 1 / 1300, rest: 1 / 2400, social: 1 / 1800 },
+    eatRate: 0.0045,
+    sleepRate: 0.003,
+    socialRate: 0.005,
+    homeKind: 'treeHollow',
+    reproduction: { mode: 'egg', clutchMin: 1, clutchMax: 3, broodTicks: 800, cooldownTicks: 2200 },
+    population: { floor: 2, softCap: 6, hardCap: 9 },
+    medium: 'land',
+    wandersIn: true,
+  },
+  dodo: {
+    speed: 4, // an unhurried waddle
+    diurnal: true,
+    lifespanTicksMean: 28800, // ≈ 12 game days
+    stageFractions: { baby: 0.12, juvenile: 0.16, adult: 0.5 },
+    needRates: { hunger: 1 / 1200, rest: 1 / 2200, social: 1 / 1400 },
+    eatRate: 0.004,
+    sleepRate: 0.003,
+    socialRate: 0.006,
+    homeKind: 'groundNest',
+    reproduction: { mode: 'egg', clutchMin: 1, clutchMax: 2, broodTicks: 900, cooldownTicks: 2600 },
+    population: { floor: 2, softCap: 5, hardCap: 8 },
+    medium: 'land',
+    wandersIn: true, // canonically: dodos wander into the valley from beyond
+  },
+  phoenix: {
+    speed: 7,
+    diurnal: true,
+    lifespanTicksMean: 16800, // ≈ 7 game days — short, so a rebirth is witnessed
+    stageFractions: { baby: 0.12, juvenile: 0.16, adult: 0.5 },
+    needRates: { hunger: 1 / 1600, rest: 1 / 2600, social: 1 / 2000 },
+    eatRate: 0.004,
+    sleepRate: 0.003,
+    socialRate: 0.005,
+    homeKind: 'groveNest',
+    reproduction: { mode: 'egg', clutchMin: 1, clutchMax: 1, broodTicks: 700, cooldownTicks: 4000 },
+    population: { floor: 1, softCap: 3, hardCap: 4 }, // softCap 3 lets the lone pair re-nest
+    medium: 'land',
+    wandersIn: false, // never wanders in — rebirth is the phoenix's failsafe
+    singleFamily: true,
+    rebirth: true,
   },
 };
 

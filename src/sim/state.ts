@@ -11,7 +11,15 @@ export interface Vec2 {
   y: number;
 }
 
-export type SpeciesId = 'rabbit' | 'robin'; // grows to 8 in M5
+export type SpeciesId =
+  | 'rabbit'
+  | 'robin'
+  | 'deer'
+  | 'duck'
+  | 'koi'
+  | 'owl'
+  | 'dodo'
+  | 'phoenix';
 
 export type LifeStage = 'baby' | 'juvenile' | 'adult' | 'elder';
 
@@ -83,7 +91,15 @@ export interface Family {
   clutch?: { count: number; broodTicksLeft: number } | undefined;
 }
 
-export type HomeKind = 'burrow' | 'treeNest';
+export type HomeKind =
+  | 'burrow'
+  | 'treeNest'
+  | 'reedNest'
+  | 'lilyPatch'
+  | 'treeHollow'
+  | 'glade'
+  | 'groundNest'
+  | 'groveNest';
 
 export interface Home {
   id: number;
