@@ -1,0 +1,59 @@
+/**
+ * Rig data integrity: parts form a valid parent-ordered tree, clips and
+ * stage overrides reference real parts, keyframes are well-formed.
+ * (How rigs LOOK is eyeballed in the browser; this guards structure only.)
+ */
+import { describe, expect, it } from 'vitest';
+import { ALL_RIGS } from '../src/rigs/allRigs';
+import { SPECIES } from '../src/sim/species';
+
+describe.each(ALL_RIGS.map((r) => [r.species, r] as const))('%s rig', (_species, rig) => {
+  it('parts have unique ids and parents defined before children', () => {
+    const seen = new Set<string>();
+    for (const part of rig.parts) {
+      expect(seen.has(part.id)).toBe(false);
+      if (part.parent !== null) expect(seen.has(part.parent)).toBe(true);
+      seen.add(part.id);
+    }
+  });
+
+  it('all four life stages are styled and reference real parts', () => {
+    const ids = new Set(rig.parts.map((p) => p.id));
+    for (const stage of ['baby', 'juvenile', 'adult', 'elder'] as const) {
+      const style = rig.stages[stage];
+      expect(style.scale).toBeGreaterThan(0);
+      for (const partId of Object.keys(style.partScale ?? {})) {
+        expect(ids.has(partId)).toBe(true);
+      }
+    }
+  });
+
+  it('all five clips exist, tracks target real parts, keyframes span 0..1 ascending', () => {
+    const ids = new Set(rig.parts.map((p) => p.id));
+    for (const name of ['idle', 'walk', 'sleep', 'eat', 'social'] as const) {
+      const clip = rig.clips[name];
+      expect(clip.durationMs).toBeGreaterThan(0);
+      for (const track of clip.tracks) {
+        expect(ids.has(track.partId)).toBe(true);
+        for (const channel of [track.rot, track.px, track.py, track.sx, track.sy]) {
+          if (!channel) continue;
+          expect(channel.length).toBeGreaterThanOrEqual(2);
+          for (let i = 1; i < channel.length; i++) {
+            const prev = channel[i - 1];
+            const curr = channel[i];
+            if (prev && curr) expect(curr.t).toBeGreaterThanOrEqual(prev.t);
+          }
+          expect(channel[0]?.t).toBe(0);
+          expect(channel[channel.length - 1]?.t).toBe(1);
+        }
+      }
+    }
+  });
+});
+
+describe('rig coverage', () => {
+  it('every species has a rig', () => {
+    const rigged = new Set(ALL_RIGS.map((r) => r.species));
+    for (const id of Object.keys(SPECIES)) expect(rigged.has(id as never)).toBe(true);
+  });
+});

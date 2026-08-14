@@ -69,11 +69,14 @@ exactly-one phoenix family (rebirth on elder passing).
 - **Done:** M0 (skeleton+deploy), M1 (sim core: needs/behaviors/clock), M2 (painterly
   valley, zones, water avoidance, day/night grading), M3 (rig pipeline: rabbit+robin,
   stages, LOD, follow-cam), M4 (families: pairing, FSM, homes, eggs/birth, brooding
-  turns, feedYoung, dispersal, gentle passing + memorials, population gating)
-- **Next: M5 — all eight species** (deer, duck, koi, owl, dodo, phoenix rigs + species
-  defs; swimming, nocturnal owl schedule, deer herd cohesion, dodo wanderer arrivals,
-  phoenix rebirth; full population balance property tests). Then M6 sound, M7
-  persistence, M8 polish (see spec §6).
+  turns, feedYoung, dispersal, gentle passing + memorials, population gating), M5 (all
+  eight species: deer/duck/koi/owl/dodo/phoenix rigs + defs, movement media incl.
+  swimming koi + amphibious ducks, nocturnal owls, deer herd cohesion, wanderer
+  arrivals, phoenix single-family rebirth, balance property suite 6 seeds × 30 days ×
+  100-day soak)
+- **Next: M6 — sound** (Web Audio engine, autoplay gate, ambience beds, per-family
+  calls from sim 'vocalize' events, zoom mixing, LICENSES.md provenance audit; see
+  spec §4.5). Then M7 persistence, M8 polish (spec §6).
 - Live: https://feshalnaguji.github.io/beastoria/ · repo: feshalnaguji/beastoria
   (GitHub Pages auto-deploys main; CI runs tests+build)
 

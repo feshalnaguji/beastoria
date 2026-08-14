@@ -62,3 +62,45 @@ export function zoneAt(p: Vec2): ZoneId {
   if (inEllipse(p, GROVE)) return 'grove';
   return 'meadow';
 }
+
+/** Duck nests tucked into the reeds on the pond's dry shore. */
+export const REED_NESTS: Vec2[] = [
+  { x: 2600, y: 2050 },
+  { x: 3350, y: 1870 },
+  { x: 2700, y: 2680 },
+];
+
+/** Koi spawning beds among the lily pads (inside the pond). */
+export const LILY_PATCHES: Vec2[] = [
+  { x: 2950, y: 2250 },
+  { x: 3300, y: 2400 },
+];
+
+/** Old forest trees with owl hollows. */
+export const HOLLOW_TREES: Vec2[] = [
+  { x: 700, y: 600 },
+  { x: 1150, y: 950 },
+];
+
+/** Sheltered meadow clearings where deer bed down. */
+export const GLADES: Vec2[] = [
+  { x: 2200, y: 1500 },
+  { x: 1800, y: 1900 },
+];
+
+/** Dodo ground nests at the forest edge. */
+export const GROUND_NESTS: Vec2[] = [
+  { x: 1400, y: 1300 },
+  { x: 600, y: 1200 },
+];
+
+/** The one nest at the ancient tree's roots — the phoenix's, always. */
+export const GROVE_NEST: Vec2 = { x: 2300, y: 430 };
+
+/** How a creature relates to water (spec §4.3 walkability). */
+export type Medium = 'land' | 'water' | 'amphibious';
+
+export function canOccupy(medium: Medium, p: Vec2): boolean {
+  if (medium === 'amphibious') return true;
+  return medium === 'water' ? isWater(p) : !isWater(p);
+}

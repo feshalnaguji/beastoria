@@ -89,8 +89,9 @@ public/audio/   LICENSES.md (per-file provenance — shipping gate), ambience/, 
 - **Creature:** id, species, familyId, sex, stage (egg|baby|juvenile|adult|elder|passing),
   ageTicks, lifespanTicks (rolled ±15% at birth), pos/vel/heading, needs {hunger, rest, social},
   activity {id, ticks, target}, genes {size, hueShift, markings} (cosmetic only).
-- **Tick pipeline (fixed order):** clock → needs decay → behavior selection → movement → activity
-  effects → family FSM → lifecycle/aging → population regulator → collect events.
+- **Tick pipeline (fixed order):** clock → needs decay → aging → behavior selection → family FSM →
+  population regulator → activity effects/movement (implemented order as of M5; replay determinism
+  forbids reordering).
 - **Behavior:** utility scores over ~14 activities (idle, wander, forage, drink, sleepHome, napSpot,
   socialize, preen, court, buildNest, brood, feedYoung, returnHome, pass) with +0.15 hysteresis
   bonus and min-durations to prevent flicker. Owls' day-curve inverted. Brooding parents alternate
