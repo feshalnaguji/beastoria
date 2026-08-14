@@ -62,7 +62,8 @@ migration chain) · `src/ui/` (vanilla TS HUD, WelcomeBack).
 Other invariants: creatures iterated in array order (determinism); cosmetic RNG is a separate
 stream (visuals must never perturb the sim); WorldState stays a serializable POJO (save =
 JSON passthrough); population balance = fertility gating vs softCap + wanderer floor failsafe +
-exactly-one phoenix family (rebirth on elder passing).
+exactly-one phoenix family (rebirth on elder passing). Saves are single-tab last-write-wins in
+v1 (two open tabs overwrite each other's timeline harmlessly).
 
 ## Current status (update at each milestone / handoff)
 
