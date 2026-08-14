@@ -97,6 +97,20 @@ describe('summarizeEvents', () => {
     expect(lines.join('\n')).not.toContain('…and');
   });
 
+  it('skips an unrecognized kind instead of throwing (tampered/future save)', () => {
+    const events: SimEvent[] = [
+      { kind: 'hatched', tick: 100, species: 'duck', count: 2 },
+      { kind: 'somethingWeird' as unknown as SimEvent['kind'], tick: 150, species: 'rabbit' },
+      { kind: 'passed', tick: 200, species: 'owl' },
+    ];
+    expect(() => summarizeEvents(events, 60)).not.toThrow();
+    const lines = summarizeEvents(events, 60);
+    const text = lines.join('\n');
+    expect(text).toContain('duck');
+    expect(text).toContain('owl');
+    expect(lines.length).toBe(2);
+  });
+
   it('8 fresh events → 6 lines with 3-event tail', () => {
     const events: SimEvent[] = [
       { kind: 'hatched', tick: 100, species: 'duck', count: 1 },

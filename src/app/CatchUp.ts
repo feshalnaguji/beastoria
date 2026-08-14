@@ -49,7 +49,13 @@ export function summarizeEvents(events: SimEvent[], sinceTick: number): string[]
   const fresh = events.filter((e) => e.tick > sinceTick);
   const lines: string[] = [];
   for (const e of fresh) {
-    const phrase = KIND_PHRASES[e.kind];
+    // e.kind is typed to the closed SimEventKind union, but a hand-edited or
+    // future-version save can carry a kind this build has never heard of.
+    // Look it up as a possibly-missing key rather than trusting the type.
+    const phrase = (KIND_PHRASES as Partial<Record<string, (species: string, count: number) => string>>)[
+      e.kind
+    ];
+    if (!phrase) continue; // unknown event kind (tampered/future save) — skip, don't crash boot
     lines.push(phrase(e.species, e.count ?? 1));
   }
   if (lines.length === 0) return ['The valley dozed quietly in your absence.'];

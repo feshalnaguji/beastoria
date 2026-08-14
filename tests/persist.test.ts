@@ -8,7 +8,7 @@ import { tick } from '../src/sim/Sim';
 import { createWorld } from '../src/sim/state';
 import { migrate } from '../src/persist/migrations';
 import { SAVE_VERSION } from '../src/persist/schema';
-import { clearSave, loadSave, saveWorld } from '../src/persist/store';
+import { clearSave, loadSave, resumeSaves, saveWorld, suppressSaves } from '../src/persist/store';
 import fixtureV1 from './fixtures/save-v1.json';
 
 function runTicks(state: ReturnType<typeof createWorld>, n: number): void {
@@ -96,5 +96,19 @@ describe('migrations', () => {
     const { set } = await import('idb-keyval');
     await set('beastoria.save', { junk: true });
     expect(await loadSave()).toBeNull();
+  });
+});
+
+// Regression for the reset-resurrection race: DevPanel's reset button calls
+// suppressSaves() before clearSave()+reload(), so a saveWorld triggered by the
+// reload's visibilitychange/pagehide handlers can't re-persist the cleared
+// world. suppressSaves() is module-level latch state — kept last in the file
+// and unlatched immediately after so it can't bleed into earlier tests.
+describe('suppressSaves latch', () => {
+  it('saveWorld is a no-op while suppressed', async () => {
+    suppressSaves();
+    await saveWorld(createWorld(1), 0);
+    expect(await loadSave()).toBeNull();
+    resumeSaves();
   });
 });
