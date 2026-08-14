@@ -8,7 +8,8 @@ import { dodoRig } from './dodoRig';
 import { duckRig } from './duckRig';
 import { koiRig } from './koiRig';
 import { owlRig } from './owlRig';
+import { phoenixRig } from './phoenixRig';
 import { rabbitRig } from './rabbitRig';
 import { robinRig } from './robinRig';
 
-export const ALL_RIGS: CreatureRig[] = [rabbitRig, robinRig, deerRig, duckRig, koiRig, owlRig, dodoRig];
+export const ALL_RIGS: CreatureRig[] = [rabbitRig, robinRig, deerRig, duckRig, koiRig, owlRig, dodoRig, phoenixRig];

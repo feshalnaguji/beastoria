@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { ALL_RIGS } from '../src/rigs/allRigs';
+import { SPECIES } from '../src/sim/species';
 
 describe.each(ALL_RIGS.map((r) => [r.species, r] as const))('%s rig', (_species, rig) => {
   it('parts have unique ids and parents defined before children', () => {
@@ -47,5 +48,12 @@ describe.each(ALL_RIGS.map((r) => [r.species, r] as const))('%s rig', (_species,
         }
       }
     }
+  });
+});
+
+describe('rig coverage', () => {
+  it('every species has a rig', () => {
+    const rigged = new Set(ALL_RIGS.map((r) => r.species));
+    for (const id of Object.keys(SPECIES)) expect(rigged.has(id as never)).toBe(true);
   });
 });
