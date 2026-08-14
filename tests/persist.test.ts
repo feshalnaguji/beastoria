@@ -67,6 +67,31 @@ describe('migrations', () => {
     expect(migrate({ hello: 'world' })).toBeNull();
   });
 
+  it('rejects version-1-shaped objects with a malformed sim body', () => {
+    const base = fixtureV1 as { version: number; savedAtEpochMs: number; sim: object };
+
+    const missingRng = { ...base, sim: { ...base.sim, rng: undefined } };
+    expect(migrate(missingRng)).toBeNull();
+
+    const shortRng = { ...base, sim: { ...base.sim, rng: [1, 2, 3] } };
+    expect(migrate(shortRng)).toBeNull();
+
+    const nonNumericRng = { ...base, sim: { ...base.sim, rng: [1, 2, 3, 'x'] } };
+    expect(migrate(nonNumericRng)).toBeNull();
+
+    const familiesNotArray = { ...base, sim: { ...base.sim, families: {} } };
+    expect(migrate(familiesNotArray)).toBeNull();
+  });
+
+  it('defaults a missing lastWandererTick to {} instead of rejecting', () => {
+    const base = fixtureV1 as { version: number; savedAtEpochMs: number; sim: object };
+    const sim = { ...base.sim } as Record<string, unknown>;
+    delete sim.lastWandererTick;
+    const save = migrate({ ...base, sim });
+    expect(save).not.toBeNull();
+    expect(save?.sim.lastWandererTick).toEqual({});
+  });
+
   it('loadSave survives a corrupt stored value', async () => {
     const { set } = await import('idb-keyval');
     await set('beastoria.save', { junk: true });
