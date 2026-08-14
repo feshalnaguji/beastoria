@@ -76,10 +76,13 @@ exactly-one phoenix family (rebirth on elder passing).
   100-day soak), M6 (sound: deterministic vocalize tick-output, real CC-licensed
   voices for 6 species + designed dodo/phoenix from real relatives, 6 ambience beds,
   Web Audio bus engine + autoplay gate + persisted mute, zoom/zone-aware mixer, call
-  scheduler, HUD sound chip, LICENSES.md provenance gate)
-- **Next: M7 — persistence** (idb-keyval versioned SaveFile, migrations, autosave,
-  offline catch-up at 0.25x capped 2 game-days, welcome-back card, catch-up
-  determinism test; spec §4.6). Then M8 polish (spec §6).
+  scheduler, HUD sound chip, LICENSES.md provenance gate), M7 (persistence: versioned
+  idb saves + migration chain + frozen fixture, autosave 30s/hidden/pagehide,
+  quarter-speed catch-up capped 2 game-days under overlay, welcome-back card, dev
+  reset)
+- **Next: M8 — polish** (grass sway/water shimmer/fireflies/dappled light, HUD clock,
+  DPR cap, real-device perf pass, M5 review carry-forwards in
+  docs/superpowers/reviews/2026-08-14-m5-visual-review.md, final deploy; spec §6).
 - Live: https://feshalnaguji.github.io/beastoria/ · repo: feshalnaguji/beastoria
   (GitHub Pages auto-deploys main; CI runs tests+build)
 
