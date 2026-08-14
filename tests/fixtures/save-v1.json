@@ -1,0 +1,1051 @@
+{
+  "version": 1,
+  "savedAtEpochMs": 1755000000000,
+  "sim": {
+    "tick": 300,
+    "rng": [
+      -1813741153,
+      -1878521457,
+      -608709368,
+      -1641150636
+    ],
+    "nextId": 58,
+    "creatures": [
+      {
+        "id": 24,
+        "species": "rabbit",
+        "sex": "m",
+        "familyId": null,
+        "pos": {
+          "x": 2309.2519253182486,
+          "y": 1373.9075760250832
+        },
+        "heading": 9.894783083481604,
+        "stage": "baby",
+        "ageTicks": 1350,
+        "lifespanTicks": 21017,
+        "needs": {
+          "hunger": 0.21617415271233964,
+          "rest": 0.27351915373001534,
+          "social": 0.3520791397928919
+        },
+        "activity": {
+          "id": "socialize",
+          "ticks": 71,
+          "minTicks": 60,
+          "targetId": 25
+        }
+      },
+      {
+        "id": 25,
+        "species": "rabbit",
+        "sex": "f",
+        "familyId": null,
+        "pos": {
+          "x": 2215.489423545233,
+          "y": 1326.2788184372944
+        },
+        "heading": 9.813364186084984,
+        "stage": "juvenile",
+        "ageTicks": 4397,
+        "lifespanTicks": 20485,
+        "needs": {
+          "hunger": 0.24614624250214684,
+          "rest": 0.1476748600959155,
+          "social": 0.1951329461192438
+        },
+        "activity": {
+          "id": "forage",
+          "ticks": 85,
+          "minTicks": 40,
+          "targetPos": {
+            "x": 2215.489423545233,
+            "y": 1326.2788184372944
+          }
+        }
+      },
+      {
+        "id": 26,
+        "species": "rabbit",
+        "sex": "m",
+        "familyId": null,
+        "pos": {
+          "x": 1751.0979340454944,
+          "y": 1607.5545024802482
+        },
+        "heading": -1.8760037263835063,
+        "stage": "adult",
+        "ageTicks": 10089,
+        "lifespanTicks": 21755,
+        "needs": {
+          "hunger": 0.3109243257781537,
+          "rest": 0.12521946127526415,
+          "social": 0.4406921997699614
+        },
+        "activity": {
+          "id": "socialize",
+          "ticks": 101,
+          "minTicks": 60,
+          "targetId": 29
+        }
+      },
+      {
+        "id": 27,
+        "species": "rabbit",
+        "sex": "f",
+        "familyId": null,
+        "pos": {
+          "x": 1509.221142409377,
+          "y": 1602.6184333574545
+        },
+        "heading": 0.5960935268937326,
+        "stage": "adult",
+        "ageTicks": 12080,
+        "lifespanTicks": 23560,
+        "needs": {
+          "hunger": 0.09543400122038964,
+          "rest": 0.19417870405595852,
+          "social": 0.23296037672885764
+        },
+        "activity": {
+          "id": "socialize",
+          "ticks": 5,
+          "minTicks": 60,
+          "targetId": 26
+        }
+      },
+      {
+        "id": 28,
+        "species": "rabbit",
+        "sex": "m",
+        "familyId": null,
+        "pos": {
+          "x": 2534.6902688279,
+          "y": 1525.576769520372
+        },
+        "heading": 10.016997227996043,
+        "stage": "adult",
+        "ageTicks": 14217,
+        "lifespanTicks": 23195,
+        "needs": {
+          "hunger": 0.15565931142587194,
+          "rest": 0.14020140659995364,
+          "social": 0.29344317657274266
+        },
+        "activity": {
+          "id": "socialize",
+          "ticks": 60,
+          "minTicks": 60,
+          "targetId": 24
+        }
+      },
+      {
+        "id": 29,
+        "species": "rabbit",
+        "sex": "f",
+        "familyId": null,
+        "pos": {
+          "x": 1657.2137035832995,
+          "y": 1298.2259154392066
+        },
+        "heading": 5.195827316228749,
+        "stage": "elder",
+        "ageTicks": 20834,
+        "lifespanTicks": 22816,
+        "needs": {
+          "hunger": 0.2871142810210585,
+          "rest": 0.14565006745140976,
+          "social": 0.12018704898801685
+        },
+        "activity": {
+          "id": "forage",
+          "ticks": 62,
+          "minTicks": 40,
+          "targetPos": {
+            "x": 1679.960586051825,
+            "y": 1254.897607959798
+          }
+        }
+      },
+      {
+        "id": 30,
+        "species": "robin",
+        "sex": "f",
+        "familyId": null,
+        "pos": {
+          "x": 1887.5159104282184,
+          "y": 1551.440463032776
+        },
+        "heading": 8.32387193062364,
+        "stage": "baby",
+        "ageTicks": 1411,
+        "lifespanTicks": 18523,
+        "needs": {
+          "hunger": 0.2010551477270201,
+          "rest": 0.14699947564924734,
+          "social": 0.05548154763039237
+        },
+        "activity": {
+          "id": "idle",
+          "ticks": 9,
+          "minTicks": 55
+        }
+      },
+      {
+        "id": 31,
+        "species": "robin",
+        "sex": "m",
+        "familyId": null,
+        "pos": {
+          "x": 2283.0268958400984,
+          "y": 1641.286425576448
+        },
+        "heading": 4.9493562607498225,
+        "stage": "adult",
+        "ageTicks": 6369,
+        "lifespanTicks": 17342,
+        "needs": {
+          "hunger": 0.162261401717551,
+          "rest": 0.31321027262602286,
+          "social": 0.16293219731934086
+        },
+        "activity": {
+          "id": "forage",
+          "ticks": 59,
+          "minTicks": 40,
+          "targetPos": {
+            "x": 2283.0268958400984,
+            "y": 1641.286425576448
+          }
+        }
+      },
+      {
+        "id": 32,
+        "species": "robin",
+        "sex": "f",
+        "familyId": null,
+        "pos": {
+          "x": 1862.188771016757,
+          "y": 1601.3139332986793
+        },
+        "heading": -1.100906030145738,
+        "stage": "adult",
+        "ageTicks": 11213,
+        "lifespanTicks": 19842,
+        "needs": {
+          "hunger": 0.18164590719155965,
+          "rest": 0.1420326155147822,
+          "social": 0.05298546301946149
+        },
+        "activity": {
+          "id": "idle",
+          "ticks": 12,
+          "minTicks": 78
+        }
+      },
+      {
+        "id": 33,
+        "species": "robin",
+        "sex": "m",
+        "familyId": null,
+        "pos": {
+          "x": 2201.9889778819397,
+          "y": 1804.5890369348301
+        },
+        "heading": 3.8200976628677648,
+        "stage": "elder",
+        "ageTicks": 18841,
+        "lifespanTicks": 21560,
+        "needs": {
+          "hunger": 0.06292674352880565,
+          "rest": 0.33257614078466136,
+          "social": 0.19847837479319227
+        },
+        "activity": {
+          "id": "idle",
+          "ticks": 15,
+          "minTicks": 58
+        }
+      },
+      {
+        "id": 34,
+        "species": "deer",
+        "sex": "m",
+        "familyId": 51,
+        "pos": {
+          "x": 2083.5015945136547,
+          "y": 1570.5506233964115
+        },
+        "heading": 4.602940282984269,
+        "stage": "adult",
+        "ageTicks": 13632,
+        "lifespanTicks": 29627,
+        "needs": {
+          "hunger": 0.41357395487305565,
+          "rest": 0.29095774936453567,
+          "social": 0
+        },
+        "activity": {
+          "id": "court",
+          "ticks": 300,
+          "minTicks": 60,
+          "targetId": 35
+        }
+      },
+      {
+        "id": 35,
+        "species": "deer",
+        "sex": "f",
+        "familyId": 51,
+        "pos": {
+          "x": 2056.220044568181,
+          "y": 1587.3969695530832
+        },
+        "heading": 0.5887228584872769,
+        "stage": "adult",
+        "ageTicks": 17487,
+        "lifespanTicks": 34374,
+        "needs": {
+          "hunger": 0.48755179400489523,
+          "rest": 0.2255873891381658,
+          "social": 0
+        },
+        "activity": {
+          "id": "court",
+          "ticks": 300,
+          "minTicks": 60,
+          "targetId": 34
+        }
+      },
+      {
+        "id": 36,
+        "species": "deer",
+        "sex": "f",
+        "familyId": null,
+        "pos": {
+          "x": 1861.8420109144809,
+          "y": 1248.6532437686983
+        },
+        "heading": 4.225272490902435,
+        "stage": "adult",
+        "ageTicks": 8991,
+        "lifespanTicks": 28971,
+        "needs": {
+          "hunger": 0.15368661949810408,
+          "rest": 0.24654616947249636,
+          "social": 0.1590837179012563
+        },
+        "activity": {
+          "id": "forage",
+          "ticks": 108,
+          "minTicks": 40,
+          "targetPos": {
+            "x": 1861.8420109144809,
+            "y": 1248.6532437686983
+          }
+        }
+      },
+      {
+        "id": 37,
+        "species": "deer",
+        "sex": "m",
+        "familyId": null,
+        "pos": {
+          "x": 2114.499669790694,
+          "y": 1703.8498095930402
+        },
+        "heading": 10.531561239791683,
+        "stage": "juvenile",
+        "ageTicks": 6146,
+        "lifespanTicks": 29232,
+        "needs": {
+          "hunger": 0.08779420353685259,
+          "rest": 0.27993994684388057,
+          "social": 0.23567925193346806
+        },
+        "activity": {
+          "id": "socialize",
+          "ticks": 34,
+          "minTicks": 60,
+          "targetId": 35
+        }
+      },
+      {
+        "id": 38,
+        "species": "duck",
+        "sex": "m",
+        "familyId": 52,
+        "pos": {
+          "x": 2609.079752501014,
+          "y": 1894.0989947218748
+        },
+        "heading": 5.161675839567995,
+        "stage": "adult",
+        "ageTicks": 9293,
+        "lifespanTicks": 19985,
+        "needs": {
+          "hunger": 0.4230910734485175,
+          "rest": 0.21670715047512382,
+          "social": 0
+        },
+        "activity": {
+          "id": "court",
+          "ticks": 300,
+          "minTicks": 60,
+          "targetId": 39
+        }
+      },
+      {
+        "id": 39,
+        "species": "duck",
+        "sex": "f",
+        "familyId": 52,
+        "pos": {
+          "x": 2640.267887180554,
+          "y": 1841.6776478313823
+        },
+        "heading": 7.875806691863687,
+        "stage": "adult",
+        "ageTicks": 11414,
+        "lifespanTicks": 22228,
+        "needs": {
+          "hunger": 0.5203603567301555,
+          "rest": 0.29399452358484557,
+          "social": 0
+        },
+        "activity": {
+          "id": "court",
+          "ticks": 300,
+          "minTicks": 60,
+          "targetId": 38
+        }
+      },
+      {
+        "id": 40,
+        "species": "duck",
+        "sex": "f",
+        "familyId": null,
+        "pos": {
+          "x": 2794.006528173094,
+          "y": 1917.3574234688506
+        },
+        "heading": 6.1538441775069215,
+        "stage": "juvenile",
+        "ageTicks": 3117,
+        "lifespanTicks": 23481,
+        "needs": {
+          "hunger": 0.2862660312398607,
+          "rest": 0.14758539510238897,
+          "social": 0.11998942818120048
+        },
+        "activity": {
+          "id": "forage",
+          "ticks": 65,
+          "minTicks": 40,
+          "targetPos": {
+            "x": 2794.006528173094,
+            "y": 1917.3574234688506
+          }
+        }
+      },
+      {
+        "id": 41,
+        "species": "koi",
+        "sex": "m",
+        "familyId": 56,
+        "pos": {
+          "x": 2959.1526105417697,
+          "y": 2189.177688142642
+        },
+        "heading": 1.8067450621493801,
+        "stage": "adult",
+        "ageTicks": 18351,
+        "lifespanTicks": 40115,
+        "needs": {
+          "hunger": 0.2602631122572359,
+          "rest": 0.2160633030813164,
+          "social": 0
+        },
+        "activity": {
+          "id": "court",
+          "ticks": 187,
+          "minTicks": 60,
+          "targetId": 43
+        }
+      },
+      {
+        "id": 42,
+        "species": "koi",
+        "sex": "f",
+        "familyId": 53,
+        "pos": {
+          "x": 2859.0159988451805,
+          "y": 2358.776212275857
+        },
+        "heading": -0.01382838286788024,
+        "stage": "adult",
+        "ageTicks": 19265,
+        "lifespanTicks": 37931,
+        "needs": {
+          "hunger": 0.23422616440802949,
+          "rest": 0.3248169513186475,
+          "social": 0
+        },
+        "activity": {
+          "id": "court",
+          "ticks": 300,
+          "minTicks": 60,
+          "targetId": 44
+        }
+      },
+      {
+        "id": 43,
+        "species": "koi",
+        "sex": "f",
+        "familyId": 56,
+        "pos": {
+          "x": 2944.792136122137,
+          "y": 2248.9067173093845
+        },
+        "heading": 4.948337715739169,
+        "stage": "adult",
+        "ageTicks": 11999,
+        "lifespanTicks": 38998,
+        "needs": {
+          "hunger": 0.4874913519481143,
+          "rest": 0.17458775446284502,
+          "social": 0
+        },
+        "activity": {
+          "id": "court",
+          "ticks": 187,
+          "minTicks": 60,
+          "targetId": 41
+        }
+      },
+      {
+        "id": 44,
+        "species": "koi",
+        "sex": "m",
+        "familyId": 53,
+        "pos": {
+          "x": 2889.0601157855563,
+          "y": 2305.852078513407
+        },
+        "heading": 2.4331223055830944,
+        "stage": "adult",
+        "ageTicks": 23259,
+        "lifespanTicks": 38266,
+        "needs": {
+          "hunger": 0.26753177302889625,
+          "rest": 0.3009703964227826,
+          "social": 0
+        },
+        "activity": {
+          "id": "court",
+          "ticks": 300,
+          "minTicks": 60,
+          "targetId": 42
+        }
+      },
+      {
+        "id": 45,
+        "species": "owl",
+        "sex": "m",
+        "familyId": 55,
+        "pos": {
+          "x": 831.9657196108775,
+          "y": 773.8271087630538
+        },
+        "heading": 0.537398818625444,
+        "stage": "adult",
+        "ageTicks": 12481,
+        "lifespanTicks": 27071,
+        "needs": {
+          "hunger": 0.4109636273181303,
+          "rest": 0.38688602217007717,
+          "social": 0
+        },
+        "activity": {
+          "id": "court",
+          "ticks": 292,
+          "minTicks": 60,
+          "targetId": 46
+        }
+      },
+      {
+        "id": 46,
+        "species": "owl",
+        "sex": "f",
+        "familyId": 55,
+        "pos": {
+          "x": 884.602890257464,
+          "y": 805.1935615184063
+        },
+        "heading": 3.6789914722152366,
+        "stage": "adult",
+        "ageTicks": 11831,
+        "lifespanTicks": 23063,
+        "needs": {
+          "hunger": 0.28435345587248945,
+          "rest": 0.2772064217366307,
+          "social": 0
+        },
+        "activity": {
+          "id": "court",
+          "ticks": 292,
+          "minTicks": 60,
+          "targetId": 45
+        }
+      },
+      {
+        "id": 47,
+        "species": "dodo",
+        "sex": "m",
+        "familyId": 57,
+        "pos": {
+          "x": 1511.5017753390805,
+          "y": 1140.9000538430735
+        },
+        "heading": -2.2994128451288707,
+        "stage": "adult",
+        "ageTicks": 15679,
+        "lifespanTicks": 30758,
+        "needs": {
+          "hunger": 0.31963751331251583,
+          "rest": 0.19627734912686476,
+          "social": 0.05779906945888686
+        },
+        "activity": {
+          "id": "court",
+          "ticks": 85,
+          "minTicks": 60,
+          "targetId": 48
+        }
+      },
+      {
+        "id": 48,
+        "species": "dodo",
+        "sex": "f",
+        "familyId": 57,
+        "pos": {
+          "x": 1471.2388985326784,
+          "y": 1095.7840042249418
+        },
+        "heading": 0.8421798084609204,
+        "stage": "adult",
+        "ageTicks": 11756,
+        "lifespanTicks": 25459,
+        "needs": {
+          "hunger": 0.39499379314948097,
+          "rest": 0.15246394007009584,
+          "social": 0
+        },
+        "activity": {
+          "id": "court",
+          "ticks": 85,
+          "minTicks": 60,
+          "targetId": 47
+        }
+      },
+      {
+        "id": 49,
+        "species": "phoenix",
+        "sex": "m",
+        "familyId": 54,
+        "pos": {
+          "x": 2352.909943871109,
+          "y": 483.1245779366084
+        },
+        "heading": 5.602461051423562,
+        "stage": "adult",
+        "ageTicks": 9444,
+        "lifespanTicks": 18288,
+        "needs": {
+          "hunger": 0.28522924936841837,
+          "rest": 0.19422133412176107,
+          "social": 0
+        },
+        "activity": {
+          "id": "court",
+          "ticks": 300,
+          "minTicks": 60,
+          "targetId": 50
+        }
+      },
+      {
+        "id": 50,
+        "species": "phoenix",
+        "sex": "f",
+        "familyId": 54,
+        "pos": {
+          "x": 2401.38237068886,
+          "y": 443.8687008753323
+        },
+        "heading": 2.460868397833769,
+        "stage": "adult",
+        "ageTicks": 8946,
+        "lifespanTicks": 15720,
+        "needs": {
+          "hunger": 0.4763240261468996,
+          "rest": 0.22272942956500877,
+          "social": 0
+        },
+        "activity": {
+          "id": "court",
+          "ticks": 300,
+          "minTicks": 60,
+          "targetId": 49
+        }
+      }
+    ],
+    "families": [
+      {
+        "id": 51,
+        "species": "deer",
+        "parentIds": [
+          34,
+          35
+        ],
+        "childIds": [],
+        "homeId": null,
+        "phase": "nesting",
+        "phaseTicks": 0,
+        "dutyParent": 0
+      },
+      {
+        "id": 52,
+        "species": "duck",
+        "parentIds": [
+          38,
+          39
+        ],
+        "childIds": [],
+        "homeId": null,
+        "phase": "nesting",
+        "phaseTicks": 0,
+        "dutyParent": 0
+      },
+      {
+        "id": 53,
+        "species": "koi",
+        "parentIds": [
+          42,
+          44
+        ],
+        "childIds": [],
+        "homeId": null,
+        "phase": "nesting",
+        "phaseTicks": 0,
+        "dutyParent": 0
+      },
+      {
+        "id": 54,
+        "species": "phoenix",
+        "parentIds": [
+          49,
+          50
+        ],
+        "childIds": [],
+        "homeId": null,
+        "phase": "nesting",
+        "phaseTicks": 0,
+        "dutyParent": 0
+      },
+      {
+        "id": 55,
+        "species": "owl",
+        "parentIds": [
+          45,
+          46
+        ],
+        "childIds": [],
+        "homeId": null,
+        "phase": "courting",
+        "phaseTicks": 292,
+        "dutyParent": 0
+      },
+      {
+        "id": 56,
+        "species": "koi",
+        "parentIds": [
+          41,
+          43
+        ],
+        "childIds": [],
+        "homeId": null,
+        "phase": "courting",
+        "phaseTicks": 187,
+        "dutyParent": 0
+      },
+      {
+        "id": 57,
+        "species": "dodo",
+        "parentIds": [
+          47,
+          48
+        ],
+        "childIds": [],
+        "homeId": null,
+        "phase": "courting",
+        "phaseTicks": 85,
+        "dutyParent": 0
+      }
+    ],
+    "homes": [
+      {
+        "id": 1,
+        "kind": "burrow",
+        "pos": {
+          "x": 1700,
+          "y": 1400
+        },
+        "familyId": null
+      },
+      {
+        "id": 2,
+        "kind": "burrow",
+        "pos": {
+          "x": 2400,
+          "y": 1800
+        },
+        "familyId": null
+      },
+      {
+        "id": 3,
+        "kind": "burrow",
+        "pos": {
+          "x": 1350,
+          "y": 1050
+        },
+        "familyId": null
+      },
+      {
+        "id": 4,
+        "kind": "burrow",
+        "pos": {
+          "x": 2650,
+          "y": 1080
+        },
+        "familyId": null
+      },
+      {
+        "id": 5,
+        "kind": "burrow",
+        "pos": {
+          "x": 2050,
+          "y": 2250
+        },
+        "familyId": null
+      },
+      {
+        "id": 6,
+        "kind": "treeNest",
+        "pos": {
+          "x": 2700,
+          "y": 1300
+        },
+        "familyId": null
+      },
+      {
+        "id": 7,
+        "kind": "treeNest",
+        "pos": {
+          "x": 1500,
+          "y": 2200
+        },
+        "familyId": null
+      },
+      {
+        "id": 8,
+        "kind": "treeNest",
+        "pos": {
+          "x": 900,
+          "y": 1900
+        },
+        "familyId": null
+      },
+      {
+        "id": 9,
+        "kind": "treeNest",
+        "pos": {
+          "x": 1450,
+          "y": 650
+        },
+        "familyId": null
+      },
+      {
+        "id": 10,
+        "kind": "treeNest",
+        "pos": {
+          "x": 1620,
+          "y": 1120
+        },
+        "familyId": null
+      },
+      {
+        "id": 11,
+        "kind": "treeNest",
+        "pos": {
+          "x": 760,
+          "y": 1560
+        },
+        "familyId": null
+      },
+      {
+        "id": 12,
+        "kind": "reedNest",
+        "pos": {
+          "x": 2600,
+          "y": 2050
+        },
+        "familyId": null
+      },
+      {
+        "id": 13,
+        "kind": "reedNest",
+        "pos": {
+          "x": 3350,
+          "y": 1870
+        },
+        "familyId": null
+      },
+      {
+        "id": 14,
+        "kind": "reedNest",
+        "pos": {
+          "x": 2700,
+          "y": 2680
+        },
+        "familyId": null
+      },
+      {
+        "id": 15,
+        "kind": "lilyPatch",
+        "pos": {
+          "x": 2950,
+          "y": 2250
+        },
+        "familyId": null
+      },
+      {
+        "id": 16,
+        "kind": "lilyPatch",
+        "pos": {
+          "x": 3300,
+          "y": 2400
+        },
+        "familyId": null
+      },
+      {
+        "id": 17,
+        "kind": "treeHollow",
+        "pos": {
+          "x": 700,
+          "y": 600
+        },
+        "familyId": null
+      },
+      {
+        "id": 18,
+        "kind": "treeHollow",
+        "pos": {
+          "x": 1150,
+          "y": 950
+        },
+        "familyId": null
+      },
+      {
+        "id": 19,
+        "kind": "glade",
+        "pos": {
+          "x": 2200,
+          "y": 1500
+        },
+        "familyId": null
+      },
+      {
+        "id": 20,
+        "kind": "glade",
+        "pos": {
+          "x": 1800,
+          "y": 1900
+        },
+        "familyId": null
+      },
+      {
+        "id": 21,
+        "kind": "groundNest",
+        "pos": {
+          "x": 1400,
+          "y": 1300
+        },
+        "familyId": null
+      },
+      {
+        "id": 22,
+        "kind": "groundNest",
+        "pos": {
+          "x": 600,
+          "y": 1200
+        },
+        "familyId": null
+      },
+      {
+        "id": 23,
+        "kind": "groveNest",
+        "pos": {
+          "x": 2300,
+          "y": 430
+        },
+        "familyId": null
+      }
+    ],
+    "memorials": [],
+    "eventLog": [
+      {
+        "kind": "paired",
+        "tick": 1,
+        "species": "deer",
+        "familyId": 51
+      },
+      {
+        "kind": "paired",
+        "tick": 1,
+        "species": "duck",
+        "familyId": 52
+      },
+      {
+        "kind": "paired",
+        "tick": 1,
+        "species": "koi",
+        "familyId": 53
+      },
+      {
+        "kind": "paired",
+        "tick": 1,
+        "species": "phoenix",
+        "familyId": 54
+      },
+      {
+        "kind": "paired",
+        "tick": 9,
+        "species": "owl",
+        "familyId": 55
+      },
+      {
+        "kind": "paired",
+        "tick": 114,
+        "species": "koi",
+        "familyId": 56
+      },
+      {
+        "kind": "paired",
+        "tick": 216,
+        "species": "dodo",
+        "familyId": 57
+      }
+    ],
+    "lastWandererTick": {}
+  }
+}

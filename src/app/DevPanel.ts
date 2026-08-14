@@ -2,6 +2,7 @@
  * Dev panel (dev tool, not game UI): toggled with the backquote (~) key.
  * Speed control, clock readout, FPS, creature inspector via click.
  */
+import { clearSave, suppressSaves } from '../persist/store';
 import { getClock } from '../sim/clock';
 import type { WorldState } from '../sim/state';
 import type { GameLoop } from './GameLoop';
@@ -47,6 +48,19 @@ export class DevPanel {
       this.renderer.debugLabels = !this.renderer.debugLabels;
     });
     buttons.appendChild(labelToggle);
+
+    const resetButton = document.createElement('button');
+    resetButton.textContent = '🌱 reset valley';
+    resetButton.style.cssText = 'font:12px monospace;cursor:pointer;margin-left:6px;';
+    resetButton.addEventListener('click', () => {
+      // Suppress saves first: location.reload() fires visibilitychange/pagehide
+      // on the way out, and those handlers would otherwise re-persist the
+      // world we're about to clear (see src/persist/store.ts suppressSaves).
+      suppressSaves();
+      void clearSave().then(() => location.reload());
+    });
+    buttons.appendChild(resetButton);
+
     this.root.appendChild(buttons);
 
     this.info = document.createElement('pre');
