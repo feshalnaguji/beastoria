@@ -150,6 +150,26 @@ export class Renderer {
     this.camera.centerOn(x, y, zoom);
   }
 
+  /**
+   * World-space view center + zoom, for the audio mixer. `Camera.toWorld`
+   * expects CSS-pixel screen coordinates (it works from `getBoundingClientRect()`,
+   * which is CSS pixels, same space as pointer events' clientX/clientY — see
+   * `pickCreature` below, which forwards raw client coords unmodified).
+   * `this.app.renderer.width/height` are DEVICE pixels (the drawing-buffer size;
+   * with `autoDensity: true` the canvas's CSS size is that divided by
+   * `resolution`), so we divide by `this.app.renderer.resolution` first to get
+   * back to CSS pixels before asking for the canvas center. The #app canvas
+   * fills the full viewport at (0,0) (see index.html), so this canvas-center
+   * point resolves to exactly the camera's own (x, y) target.
+   */
+  viewInfo(): { x: number; y: number; zoom: number } {
+    const c = this.camera.toWorld(
+      this.app.renderer.width / this.app.renderer.resolution / 2,
+      this.app.renderer.height / this.app.renderer.resolution / 2,
+    );
+    return { x: c.x, y: c.y, zoom: this.camera.getZoom() };
+  }
+
   /** Nearest creature to a screen point, within a world-space radius. */
   pickCreature(state: WorldState, screenX: number, screenY: number): Creature | undefined {
     const w = this.camera.toWorld(screenX, screenY);
