@@ -15,7 +15,7 @@ import {
   type Creature,
   type WorldState,
 } from './state';
-import { isWater } from './valley';
+import { canOccupy } from './valley';
 
 const HYSTERESIS_BONUS = 0.15;
 /** A challenger this much stronger overrides min-duration (urgency). */
@@ -69,13 +69,14 @@ export function selectBehavior(state: WorldState, c: Creature, clock: Clock): vo
 export function applyActivity(state: WorldState, c: Creature, _clock: Clock): void {
   c.activity.ticks++;
   const p = SPECIES[c.species];
+  const medium = p.medium;
 
   switch (c.activity.id) {
     case 'idle':
       break;
 
     case 'wander':
-      wanderStep(state.rng, c, speedFor(c.species, c.stage));
+      wanderStep(state.rng, c, speedFor(c.species, c.stage), medium);
       break;
 
     case 'forage': {
@@ -84,7 +85,7 @@ export function applyActivity(state: WorldState, c: Creature, _clock: Clock): vo
         startActivity(state, c, 'idle');
         break;
       }
-      const remaining = moveToward(c, target, speedFor(c.species, c.stage));
+      const remaining = moveToward(c, target, speedFor(c.species, c.stage), medium);
       if (remaining <= ARRIVE_DIST) {
         c.needs.hunger = clamp01(c.needs.hunger - p.eatRate);
         if (c.needs.hunger <= SATISFIED) startActivity(state, c, 'idle');
@@ -106,7 +107,7 @@ export function applyActivity(state: WorldState, c: Creature, _clock: Clock): vo
       }
       const dist = Math.hypot(partner.pos.x - c.pos.x, partner.pos.y - c.pos.y);
       if (dist > SOCIAL_RANGE * 0.7) {
-        moveToward(c, partner.pos, speedFor(c.species, c.stage));
+        moveToward(c, partner.pos, speedFor(c.species, c.stage), medium);
       } else {
         c.needs.social = clamp01(c.needs.social - p.socialRate);
         if (c.activity.id === 'socialize' && c.needs.social <= SATISFIED) {
@@ -120,7 +121,7 @@ export function applyActivity(state: WorldState, c: Creature, _clock: Clock): vo
       // Walk to the clutch, then sit; brooding is restful.
       const target = c.activity.targetPos;
       if (target) {
-        const remaining = moveToward(c, target, speedFor(c.species, c.stage));
+        const remaining = moveToward(c, target, speedFor(c.species, c.stage), medium);
         if (remaining <= ARRIVE_DIST) {
           c.needs.rest = clamp01(c.needs.rest - p.sleepRate * 0.5);
         }
@@ -137,11 +138,11 @@ export function applyActivity(state: WorldState, c: Creature, _clock: Clock): vo
           x: Math.max(40, Math.min(WORLD_WIDTH - 40, c.pos.x + Math.cos(angle) * dist)),
           y: Math.max(40, Math.min(WORLD_HEIGHT - 40, c.pos.y + Math.sin(angle) * dist)),
         };
-        c.activity.targetPos = isWater(candidate) ? { x: c.pos.x, y: c.pos.y } : candidate;
+        c.activity.targetPos = canOccupy(medium, candidate) ? candidate : { x: c.pos.x, y: c.pos.y };
       }
       const target = c.activity.targetPos;
       if (!target) break;
-      const remaining = moveToward(c, target, speedFor(c.species, c.stage));
+      const remaining = moveToward(c, target, speedFor(c.species, c.stage), medium);
       if (remaining <= ARRIVE_DIST) {
         if (c.activity.step === 0) {
           // Food gathered — head home.
@@ -169,7 +170,7 @@ export function applyActivity(state: WorldState, c: Creature, _clock: Clock): vo
       // Go to a point and settle there (nest-building, mourning, baby leash).
       const target = c.activity.targetPos;
       if (!target) break;
-      moveToward(c, target, speedFor(c.species, c.stage));
+      moveToward(c, target, speedFor(c.species, c.stage), medium);
       break;
     }
 
@@ -217,8 +218,9 @@ function startActivity(state: WorldState, c: Creature, id: ActivityId): void {
       break;
     case 'forage': {
       activity.minTicks = 40;
-      // Pick a dry-land target; after a few tries, graze right here.
+      // Pick a target the species can occupy; after a few tries, graze right here.
       let target = { x: c.pos.x, y: c.pos.y };
+      const medium = SPECIES[c.species].medium;
       for (let attempt = 0; attempt < 8; attempt++) {
         const angle = nextRange(rng, 0, Math.PI * 2);
         const dist = nextRange(rng, 150, 400);
@@ -226,7 +228,7 @@ function startActivity(state: WorldState, c: Creature, id: ActivityId): void {
           x: Math.max(40, Math.min(WORLD_WIDTH - 40, c.pos.x + Math.cos(angle) * dist)),
           y: Math.max(40, Math.min(WORLD_HEIGHT - 40, c.pos.y + Math.sin(angle) * dist)),
         };
-        if (!isWater(candidate)) {
+        if (canOccupy(medium, candidate)) {
           target = candidate;
           break;
         }

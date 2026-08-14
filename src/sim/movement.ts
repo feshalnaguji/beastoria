@@ -4,30 +4,30 @@
  */
 import { nextFloat, nextRange, type RngState } from './rng';
 import { WORLD_HEIGHT, WORLD_WIDTH, type Creature, type Vec2 } from './state';
-import { isWater, POND } from './valley';
+import { canOccupy, POND, type Medium } from './valley';
 
 const EDGE_MARGIN = 120;
 const MAX_TURN = 0.3;
 
 /** Steer toward `target` and advance; returns remaining distance. */
-export function moveToward(c: Creature, target: Vec2, speed: number): number {
+export function moveToward(c: Creature, target: Vec2, speed: number, medium: Medium): number {
   const dx = target.x - c.pos.x;
   const dy = target.y - c.pos.y;
   const dist = Math.hypot(dx, dy);
   if (dist <= speed) {
-    if (!isWater(target)) {
+    if (canOccupy(medium, target)) {
       c.pos.x = target.x;
       c.pos.y = target.y;
     }
     return 0;
   }
   c.heading = turnToward(c.heading, Math.atan2(dy, dx), MAX_TURN);
-  advance(c, speed);
+  advance(c, speed, medium);
   return dist - speed;
 }
 
 /** Gentle random wander with occasional pauses; turns back near world edges. */
-export function wanderStep(rng: RngState, c: Creature, speed: number): void {
+export function wanderStep(rng: RngState, c: Creature, speed: number, medium: Medium): void {
   if (nextFloat(rng) < 0.06) return; // organic pauses
 
   c.heading += nextRange(rng, -0.35, 0.35);
@@ -42,26 +42,31 @@ export function wanderStep(rng: RngState, c: Creature, speed: number): void {
     c.heading = turnToward(c.heading, centerAngle, MAX_TURN);
   }
 
-  advance(c, speed);
+  advance(c, speed, medium);
 }
 
 /**
- * Step forward along the heading, refusing to enter water: blocked creatures
- * turn away from the pond and try a shorter step, or stay put this tick.
+ * Step forward along the heading, respecting the creature's medium: blocked
+ * creatures turn back toward their medium's heart and try a shorter step,
+ * or stay put this tick.
  */
-function advance(c: Creature, speed: number): void {
+function advance(c: Creature, speed: number, medium: Medium): void {
   const candidate = {
     x: c.pos.x + Math.cos(c.heading) * speed,
     y: c.pos.y + Math.sin(c.heading) * speed,
   };
-  if (isWater(candidate)) {
-    const awayFromPond = Math.atan2(c.pos.y - POND.y, c.pos.x - POND.x);
-    c.heading = turnToward(c.heading, awayFromPond, MAX_TURN * 2);
+  if (!canOccupy(medium, candidate)) {
+    // Land creatures turn away from the pond; water creatures turn back into it.
+    const back =
+      medium === 'water'
+        ? Math.atan2(POND.y - c.pos.y, POND.x - c.pos.x)
+        : Math.atan2(c.pos.y - POND.y, c.pos.x - POND.x);
+    c.heading = turnToward(c.heading, back, MAX_TURN * 2);
     const retry = {
       x: c.pos.x + Math.cos(c.heading) * speed * 0.5,
       y: c.pos.y + Math.sin(c.heading) * speed * 0.5,
     };
-    if (isWater(retry)) return; // stay put this tick
+    if (!canOccupy(medium, retry)) return; // stay put this tick
     c.pos.x = retry.x;
     c.pos.y = retry.y;
   } else {
