@@ -39,14 +39,17 @@ describe('vocalizations', () => {
     const state = createWorld(99);
     collectOver(state, 2000);
     expect(state.eventLog.every((e) => (e.kind as string) !== 'vocalize')).toBe(true);
-    expect(JSON.parse(JSON.stringify(state))).toEqual(JSON.parse(JSON.stringify(state)));
+    expect(JSON.stringify(state)).not.toContain('vocal');
   });
 
   it('owls call at night and are silent at midday', () => {
     const night = collectOver(choirWorld('owl', 0.8), 1200);
-    // 700 ticks keeps the whole window inside the 'day' phase (dayFrac 0.3→0.59,
-    // short of DUSK_END=0.63) — 1200 ticks would run the clock into real night
-    // and correctly start the owls calling, which isn't what "midday" means here.
+    // 700 ticks runs the window from dayFrac 0.3 to ~0.59, past DAY_END=0.55
+    // into early dusk — but owls stay silent until clock.light <= 0.2, which
+    // doesn't happen until well after dusk starts, so the window is still
+    // correctly "midday" for the owls even though the phase label isn't.
+    // 1200 ticks would run the clock far enough into real night to correctly
+    // start the owls calling, which isn't what "midday" means here.
     const noon = collectOver(choirWorld('owl', 0.3), 700);
     expect(night.filter((v) => v.species === 'owl').length).toBeGreaterThan(0);
     expect(noon.filter((v) => v.species === 'owl').length).toBe(0);
