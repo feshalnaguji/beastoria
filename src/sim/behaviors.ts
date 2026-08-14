@@ -5,7 +5,7 @@
  * so creatures don't flicker. (Spec §4.3.)
  */
 import type { Clock } from './clock';
-import { moveToward, wanderStep } from './movement';
+import { moveToward, turnToward, wanderStep } from './movement';
 import { nextRange } from './rng';
 import { SPECIES, speedFor } from './species';
 import {
@@ -13,6 +13,7 @@ import {
   WORLD_WIDTH,
   type ActivityId,
   type Creature,
+  type Vec2,
   type WorldState,
 } from './state';
 import { canOccupy } from './valley';
@@ -24,6 +25,35 @@ const URGENT_MARGIN = 0.35;
 const SATISFIED = 0.05;
 const SOCIAL_RANGE = 90;
 const ARRIVE_DIST = 10;
+const HERD_RADIUS = 350;
+const HERD_TURN = 0.1;
+
+/** Centroid of same-species creatures other than `c` (herd species only call sites). */
+function herdCentroid(state: WorldState, c: Creature): Vec2 | undefined {
+  let sx = 0;
+  let sy = 0;
+  let n = 0;
+  for (const other of state.creatures) {
+    if (other.id === c.id || other.species !== c.species) continue;
+    sx += other.pos.x;
+    sy += other.pos.y;
+    n++;
+  }
+  if (n === 0) return undefined;
+  return { x: sx / n, y: sy / n };
+}
+
+/** Beyond the herd's edge, lean the wander heading back toward the others. */
+function applyHerdPull(state: WorldState, c: Creature): void {
+  const centroid = herdCentroid(state, c);
+  if (!centroid) return;
+  if (Math.hypot(centroid.x - c.pos.x, centroid.y - c.pos.y) <= HERD_RADIUS) return;
+  c.heading = turnToward(
+    c.heading,
+    Math.atan2(centroid.y - c.pos.y, centroid.x - c.pos.x),
+    HERD_TURN,
+  );
+}
 
 export function decayNeeds(state: WorldState): void {
   for (const c of state.creatures) {
@@ -76,6 +106,7 @@ export function applyActivity(state: WorldState, c: Creature, _clock: Clock): vo
       break;
 
     case 'wander':
+      if (p.herd) applyHerdPull(state, c);
       wanderStep(state.rng, c, speedFor(c.species, c.stage), medium);
       break;
 
@@ -220,9 +251,22 @@ function startActivity(state: WorldState, c: Creature, id: ActivityId): void {
       activity.minTicks = 40;
       // Pick a target the species can occupy; after a few tries, graze right here.
       let target = { x: c.pos.x, y: c.pos.y };
-      const medium = SPECIES[c.species].medium;
+      const species = SPECIES[c.species];
+      const medium = species.medium;
+      // Herd species beyond the herd's edge bias candidate sampling toward the
+      // herd centroid instead of sampling the full circle.
+      let angleCenter: number | undefined;
+      if (species.herd) {
+        const centroid = herdCentroid(state, c);
+        if (centroid && Math.hypot(centroid.x - c.pos.x, centroid.y - c.pos.y) > HERD_RADIUS) {
+          angleCenter = Math.atan2(centroid.y - c.pos.y, centroid.x - c.pos.x);
+        }
+      }
       for (let attempt = 0; attempt < 8; attempt++) {
-        const angle = nextRange(rng, 0, Math.PI * 2);
+        const angle =
+          angleCenter !== undefined
+            ? angleCenter + nextRange(rng, -1.2, 1.2)
+            : nextRange(rng, 0, Math.PI * 2);
         const dist = nextRange(rng, 150, 400);
         const candidate = {
           x: Math.max(40, Math.min(WORLD_WIDTH - 40, c.pos.x + Math.cos(angle) * dist)),
