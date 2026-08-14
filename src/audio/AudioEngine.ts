@@ -26,6 +26,9 @@ export class AudioEngine {
   private beds = new Map<BedName, Bed>();
   private unlocked = false;
 
+  /** Fired once, at the end of unlock(); lets UI (e.g. the sound chip) react without polling. */
+  onUnlock?: () => void;
+
   constructor() {
     this.oneShotBus.connect(this.master);
     this.ambienceBus.connect(this.master);
@@ -53,6 +56,7 @@ export class AudioEngine {
     this.unlocked = true;
     void this.ctx.resume();
     this.ambienceBus.gain.setTargetAtTime(1, this.ctx.currentTime, 0.7); // ~2s fade
+    this.onUnlock?.();
   }
 
   /** Fetch+decode everything in the manifest; missing files log once and stay silent. */

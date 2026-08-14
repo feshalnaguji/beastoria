@@ -11,6 +11,7 @@ import { computeMix } from './audio/Mixer';
 import { getClock } from './sim/clock';
 import { tick } from './sim/Sim';
 import { createWorld, WORLD_HEIGHT, WORLD_WIDTH } from './sim/state';
+import { Hud } from './ui/Hud';
 import { Renderer } from './render/Renderer';
 
 async function start(): Promise<void> {
@@ -29,6 +30,7 @@ async function start(): Promise<void> {
   const scheduler = new CallScheduler(audio);
   void audio.preload();
   window.addEventListener('pointerdown', () => audio.unlock(), { once: true });
+  new Hud(audio);
 
   const loop = new GameLoop(
     () => {
