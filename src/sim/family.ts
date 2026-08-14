@@ -16,6 +16,7 @@ import {
   type WorldState,
 } from './state';
 import { spawnCreature } from './state';
+import { GROVE_NEST } from './valley';
 
 const PAIR_RANGE = 200;
 const COURT_TICKS = 300;
@@ -70,8 +71,32 @@ function handlePassings(state: WorldState): void {
   for (const c of passed) {
     state.memorials.push({ pos: { x: c.pos.x, y: c.pos.y }, species: c.species, tick: state.tick });
     emit(state, { kind: 'passed', tick: state.tick, species: c.species, pos: { ...c.pos } });
+    if (SPECIES[c.species].rebirth) rebirth(state, c);
     removeCreature(state, c);
   }
+}
+
+/** The phoenix's passing leaves a new chick in soft embers at the grove. */
+function rebirth(state: WorldState, elder: Creature): void {
+  const fam =
+    elder.familyId === null ? undefined : state.families.find((f) => f.id === elder.familyId);
+  const pos = {
+    x: GROVE_NEST.x + nextRange(state.rng, -30, 30),
+    y: GROVE_NEST.y + nextRange(state.rng, -20, 20),
+  };
+  const chick = spawnCreature(state, elder.species, pos, 0);
+  if (fam) {
+    chick.familyId = fam.id;
+    fam.childIds.push(chick.id);
+    if (fam.phase !== 'rearing' && fam.phase !== 'expecting') enterPhase(fam, 'rearing');
+  }
+  emit(state, {
+    kind: 'reborn',
+    tick: state.tick,
+    species: elder.species,
+    pos: { ...pos },
+    ...(fam ? { familyId: fam.id } : {}),
+  });
 }
 
 function removeCreature(state: WorldState, c: Creature): void {
@@ -95,6 +120,9 @@ function formPairs(state: WorldState): void {
   for (const a of state.creatures) {
     if (!eligibleSingle(a)) continue;
     if (!populationAllowsPairing(state, a.species)) continue;
+    if (SPECIES[a.species].singleFamily && state.families.some((f) => f.species === a.species)) {
+      continue;
+    }
     for (const b of state.creatures) {
       if (b.id <= a.id || !eligibleSingle(b)) continue;
       if (b.species !== a.species || b.sex === a.sex) continue;
