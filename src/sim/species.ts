@@ -42,6 +42,8 @@ export interface SpeciesParams {
   singleFamily?: boolean;
   /** An elder's passing leaves a new chick at the grove (phoenix). */
   rebirth?: boolean;
+  /** Per-tick call probability per eligible adult (modulated by day-phase). */
+  voice: { rate: number; dawnMult?: number };
 }
 
 export const SPECIES: Record<SpeciesId, SpeciesParams> = {
@@ -69,6 +71,7 @@ export const SPECIES: Record<SpeciesId, SpeciesParams> = {
     population: { floor: 3, softCap: 7, hardCap: 12 },
     medium: 'land',
     wandersIn: true,
+    voice: { rate: 1 / 8000 }, // a rare soft thump
   },
   robin: {
     speed: 8, // quick, hoppy
@@ -94,6 +97,7 @@ export const SPECIES: Record<SpeciesId, SpeciesParams> = {
     population: { floor: 3, softCap: 7, hardCap: 12 },
     medium: 'land',
     wandersIn: true,
+    voice: { rate: 1 / 700, dawnMult: 6 },
   },
   deer: {
     speed: 7,
@@ -110,6 +114,7 @@ export const SPECIES: Record<SpeciesId, SpeciesParams> = {
     medium: 'land',
     wandersIn: true,
     herd: true,
+    voice: { rate: 1 / 4000 },
   },
   duck: {
     speed: 6,
@@ -125,6 +130,7 @@ export const SPECIES: Record<SpeciesId, SpeciesParams> = {
     population: { floor: 3, softCap: 7, hardCap: 12 },
     medium: 'amphibious',
     wandersIn: true,
+    voice: { rate: 1 / 900 },
   },
   koi: {
     speed: 5,
@@ -140,6 +146,7 @@ export const SPECIES: Record<SpeciesId, SpeciesParams> = {
     population: { floor: 3, softCap: 7, hardCap: 13 },
     medium: 'water',
     wandersIn: true,
+    voice: { rate: 1 / 3000 }, // a surface plop
   },
   owl: {
     speed: 8,
@@ -155,6 +162,7 @@ export const SPECIES: Record<SpeciesId, SpeciesParams> = {
     population: { floor: 2, softCap: 6, hardCap: 9 },
     medium: 'land',
     wandersIn: true,
+    voice: { rate: 1 / 800 },
   },
   dodo: {
     speed: 4, // an unhurried waddle
@@ -170,6 +178,7 @@ export const SPECIES: Record<SpeciesId, SpeciesParams> = {
     population: { floor: 2, softCap: 5, hardCap: 8 },
     medium: 'land',
     wandersIn: true, // canonically: dodos wander into the valley from beyond
+    voice: { rate: 1 / 1500 },
   },
   phoenix: {
     speed: 7,
@@ -187,6 +196,7 @@ export const SPECIES: Record<SpeciesId, SpeciesParams> = {
     wandersIn: false, // never wanders in — rebirth is the phoenix's failsafe
     singleFamily: true,
     rebirth: true,
+    voice: { rate: 1 / 2500, dawnMult: 3 },
   },
 };
 
