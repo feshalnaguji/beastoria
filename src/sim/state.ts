@@ -133,6 +133,7 @@ export interface WorldState {
   homes: Home[];
   memorials: Memorial[];
   eventLog: SimEvent[];
+  lastWandererTick: Partial<Record<SpeciesId, number>>;
 }
 
 export const WORLD_WIDTH = 4096;
@@ -202,6 +203,7 @@ export function createWorld(seed: number): WorldState {
     homes: [],
     memorials: [],
     eventLog: [],
+    lastWandererTick: {},
   };
 
   for (const pos of BURROW_SITES) {

@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { moveToward } from '../src/sim/movement';
 import { tick } from '../src/sim/Sim';
+import { SPECIES } from '../src/sim/species';
 import { createWorld, spawnCreature, type WorldState } from '../src/sim/state';
 import { isWater, POND } from '../src/sim/valley';
 
@@ -26,9 +27,14 @@ describe('movement media', () => {
     for (let i = 0; i < 4; i++) {
       spawnCreature(state, 'koi', { x: POND.x - 100 + i * 60, y: POND.y + 40 }, 0.4);
     }
+    // bareWorld() empties every species, so the population regulator (M5)
+    // will wander in creatures of other, non-water species over a long run;
+    // this test only cares about koi's own water-medium invariant.
     for (let s = 0; s < 80; s++) {
       runTicks(state, 50);
-      for (const c of state.creatures) expect(isWater(c.pos)).toBe(true);
+      for (const c of state.creatures.filter((c) => c.species === 'koi')) {
+        expect(isWater(c.pos)).toBe(true);
+      }
     }
   });
 
@@ -36,9 +42,15 @@ describe('movement media', () => {
     const state = bareWorld();
     spawnCreature(state, 'rabbit', { x: 2500, y: 2000 }, 0.4); // near the shore
     spawnCreature(state, 'deer', { x: 2600, y: 1900 }, 0.4);
+    // bareWorld() empties every species, so the population regulator (M5)
+    // may wander in creatures of other species (including amphibious ducks,
+    // which may legitimately enter the pond); restrict the invariant to
+    // land-medium creatures.
     for (let s = 0; s < 60; s++) {
       runTicks(state, 50);
-      for (const c of state.creatures) expect(isWater(c.pos)).toBe(false);
+      for (const c of state.creatures.filter((c) => SPECIES[c.species].medium === 'land')) {
+        expect(isWater(c.pos)).toBe(false);
+      }
     }
   });
 

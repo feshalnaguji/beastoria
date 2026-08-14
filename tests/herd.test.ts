@@ -29,7 +29,13 @@ describe('deer herd cohesion', () => {
       { x: 2900, y: 2100 },
       { x: 2050, y: 1550 },
     ];
-    for (const pos of spread) spawnCreature(state, 'deer', pos, 0.4);
+    // Balanced sexes: the population regulator (M5) wanders in a mate when a
+    // species' unpaired singles are all one sex, which would otherwise inject
+    // a stray deer at the map edge and spoil the cohesion measurement below.
+    spread.forEach((pos, i) => {
+      const d = spawnCreature(state, 'deer', pos, 0.4);
+      d.sex = i % 2 === 0 ? 'm' : 'f';
+    });
     const before = meanDistToCentroid(state);
     for (let i = 0; i < 5000; i++) tick(state, []);
     const after = meanDistToCentroid(state);

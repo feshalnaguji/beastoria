@@ -4,7 +4,15 @@
  */
 import type { SpeciesId, Vec2, WorldState } from './state';
 
-export type SimEventKind = 'paired' | 'nested' | 'eggLaid' | 'born' | 'hatched' | 'passed';
+export type SimEventKind =
+  | 'paired'
+  | 'nested'
+  | 'eggLaid'
+  | 'born'
+  | 'hatched'
+  | 'passed'
+  | 'wandererArrived'
+  | 'reborn';
 
 export interface SimEvent {
   kind: SimEventKind;
