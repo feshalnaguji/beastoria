@@ -50,4 +50,24 @@ describe('phoenix rebirth', () => {
       expect(phoenixes(state).length).toBeGreaterThan(0);
     }
   }, 60000);
+
+  it('a family with no living parents left is dissolved so rebirth orphans grow up free', () => {
+    const state = createWorld(55);
+    // Let the starting pair court and nest so the grove home is claimed.
+    runTicks(state, 350);
+    const fam = state.families.find((f) => f.species === 'phoenix');
+    expect(fam).toBeDefined();
+    const groveHome = state.homes.find((h) => h.kind === 'groveNest');
+    expect(groveHome?.familyId).toBe(fam?.id);
+
+    // Both parents die of old age together.
+    for (const p of phoenixes(state)) p.ageTicks = p.lifespanTicks - 20;
+    runTicks(state, 800);
+
+    expect(state.families.some((f) => f.species === 'phoenix')).toBe(false);
+    const flock = phoenixes(state);
+    const orphanChicks = flock.filter((c) => c.familyId === null);
+    expect(orphanChicks.length).toBeGreaterThan(0);
+    expect(groveHome?.familyId).toBeNull();
+  });
 });

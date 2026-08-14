@@ -385,10 +385,20 @@ function setIfFree(c: Creature, activity: Creature['activity']): void {
   c.activity = activity;
 }
 
-/** Remove families with no members; free their homes. */
+/**
+ * Remove families with no parents left — whether or not children remain.
+ * A parentless family can never do anything again (stepFamily short-circuits
+ * on `parents.length === 0`), so any lingering children (e.g. a phoenix
+ * rebirth chick attached just before the last parent's passing completed)
+ * are released as free agents rather than left as permanent orphans. Also
+ * covers ordinary families with no members at all; frees the claimed home.
+ */
 function cleanupFamilies(state: WorldState): void {
   for (const fam of [...state.families]) {
-    if (fam.parentIds.length === 0 && fam.childIds.length === 0) {
+    if (fam.parentIds.length === 0) {
+      for (const c of state.creatures) {
+        if (c.familyId === fam.id) c.familyId = null;
+      }
       const home = homeOf(state, fam);
       if (home) home.familyId = null;
       state.families.splice(state.families.indexOf(fam), 1);
