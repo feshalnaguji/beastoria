@@ -80,19 +80,25 @@ export class AmbientEffects {
     this.buildFireflies(renderer);
   }
 
-  /** Renderer calls this once per rendered frame, after day/night grading. */
-  update(dtMs: number, clock: Clock, view: { x: number; y: number; zoom: number }): void {
+  /**
+   * Renderer calls this once per rendered frame, after day/night grading.
+   * `zoom` is the only view value consumed (x/y are unused), so the caller
+   * passes `camera.getZoom()` directly rather than a view-info object.
+   */
+  update(dtMs: number, clock: Clock, zoom: number): void {
     this.elapsedMs += dtMs;
     const t = this.elapsedMs;
 
     // Grass sway — invisible at world zoom anyway, so skip the work entirely.
-    if (view.zoom >= 0.35) {
+    if (zoom >= 0.35) {
       for (const tuft of this.tufts) tuft.node.skew.x = Math.sin(t / tuft.period + tuft.phase) * 0.06;
     }
 
     // Water shimmer: two noise tiles scrolling opposite ways, dimmer by night.
     const shimmerLight = 0.4 + 0.6 * clock.light;
     this.shimmerA.tilePosition.x += dtMs * SHIMMER_SPEED;
+    // y-drift (×0.4) is an intentional embellishment beyond the brief's
+    // x-only scroll — a touch of diagonal motion reads less like a treadmill.
     this.shimmerA.tilePosition.y += dtMs * SHIMMER_SPEED * 0.4;
     this.shimmerB.tilePosition.x -= dtMs * SHIMMER_SPEED;
     this.shimmerB.tilePosition.y -= dtMs * SHIMMER_SPEED * 0.4;

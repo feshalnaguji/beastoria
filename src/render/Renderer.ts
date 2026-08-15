@@ -446,7 +446,11 @@ export class Renderer {
 
     this.applyOverlays();
     this.camera.update();
-    this.ambient.update(dtMs, this.clock, this.viewInfo());
+    // Zoom is the only view value AmbientEffects consumes — pass it directly
+    // (no-alloc) rather than round-tripping through viewInfo(), which builds
+    // two object literals and calls getBoundingClientRect() per call and was
+    // designed for the 10Hz audio mixer, not this 60Hz render loop.
+    this.ambient.update(dtMs, this.clock, this.camera.getZoom());
   }
 
   private createView(c: Creature): CreatureView {
