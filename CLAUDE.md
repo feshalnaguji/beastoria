@@ -23,9 +23,10 @@ any design-affecting work. The spec is the source of truth; this file is the sum
 
 - **Zero cost, ever:** MIT/OSS tooling only, free hosting tiers only (GitHub Pages/Vercel free),
   CC0/CC-BY/public-domain assets only. No paid services, licenses, or subscriptions.
-- **Audio licensing:** CC0/PD first, CC-BY with credit in `public/audio/LICENSES.md` (per-file
-  source URL, author, license, edits). **Never** xeno-canto or BBC Sound Effects (non-commercial
-  licenses). Real recordings only; dodo/phoenix voices are designed from real relatives per spec.
+- **Audio licensing:** CC0/PD first, CC-BY or CC-BY-SA with credit in `public/audio/LICENSES.md`
+  (per-file source URL, author, license, edits; CC-BY-SA derivatives stay CC-BY-SA). **Never**
+  xeno-canto or BBC Sound Effects (non-commercial licenses). Real recordings only; dodo/phoenix
+  voices are designed from real relatives per spec.
 - **Gentle realism:** full life cycles incl. peaceful elder passings; NO on-screen predation ever.
 - **Art:** 100% code-crafted layered vector art (rigs as TS data). No AI images, no asset packs.
 - **Targets:** desktop + mobile browsers, 60fps goal, touch pan/pinch.
@@ -84,15 +85,19 @@ v1 (two open tabs overwrite each other's timeline harmlessly).
   lifecycle — 2-day prune + age fade, ambient effects — grass sway/water
   shimmer/dappled light/fireflies, HUD clock + sound-chip a11y + dynamic min-zoom
   world edge, label declutter, DPR/bundle verification — bundle delta +39.29 kB,
-  under the 50 kB target)
-- **Status: v1 COMPLETE — Pure Living Terrarium shipped.** Next: v2 Caretaker World
-  (only after the user decides to proceed; feeding, care, unlocking families).
-- **Awaiting user review:** real-browser FPS check (automated environment was
-  software-rendered — untrustworthy), ambient-effects subtlety glance, the parked
-  socialize/court de-clump ring (recoverable at commit 8835c73), and the open
-  CC-BY-SA audio licensing decision (5 sources are CC-BY-SA vs. this file's
-  "CC0/CC-BY/PD" letter — user chooses: bless CC-BY-SA in the constraint text, or
-  swap those sources).
+  under the 50 kB target), M9 (alive: camera clamped so off-world background can never
+  show + dt-normalized damping + deltaMode-aware wheel zoom + single render loop +
+  fullscreen chip; six-frame speed-true walk bakes + bird legs + T2 threshold at 0.55;
+  sim 'air' movement medium — robin/owl/phoenix fly, cross the pond, never rest on
+  water — plus 19 FOOD_SPOTS forage anchors; socialize/court de-clump ring restored
+  with root causes fixed — phoenix grove leash + larder, hardCap enforced at laying
+  and hatching; flap/swim presentation (lift, shadow detach, duck ripple); carry/sit
+  clips + activity glyphs + hatch/birth/pairing sparkles + gentle-passing fades +
+  berry clusters at food spots; 135 tests)
+- **Status: v1.1 shipped.** Next: v2 Caretaker World (only after the user decides to
+  proceed; feeding, care, unlocking families).
+- **Awaiting user review:** real-device FPS + visual polish pass on the live site
+  (flight/swim/glyphs close-ups, T2-at-0.55 perf).
 - Live: https://feshalnaguji.github.io/beastoria/ · repo: feshalnaguji/beastoria
   (GitHub Pages auto-deploys main; CI runs tests+build)
 
