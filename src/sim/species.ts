@@ -60,6 +60,12 @@ export interface SpeciesParams {
   rebirth?: boolean;
   /** Per-tick call probability per eligible adult (modulated by day-phase). */
   voice: { rate: number; dawnMult?: number };
+  /**
+   * Override for the idle activity's soft-minimum duration range, in ticks
+   * (M10 task 3). Omitted species use behaviors.ts's default 30-80 — a
+   * squirrel's tighter 10-30 makes it dart-and-pause instead of loitering.
+   */
+  idleMinTicks?: { min: number; max: number };
 }
 
 export const SPECIES: Record<SpeciesId, SpeciesParams> = {
@@ -260,6 +266,76 @@ export const SPECIES: Record<SpeciesId, SpeciesParams> = {
     singleFamily: true,
     rebirth: true,
     voice: { rate: 1 / 2500, dawnMult: 3 },
+  },
+  squirrel: {
+    speed: 7,
+    diurnal: true,
+    lifespanTicksMean: 19200, // ≈ 8 game days — quick little lives
+    stageFractions: { baby: 0.12, juvenile: 0.16, adult: 0.55 },
+    needRates: { hunger: 1 / 1100, rest: 1 / 2400, social: 1 / 1600 },
+    eatRate: 0.0045,
+    sleepRate: 0.003,
+    socialRate: 0.006,
+    homeKind: 'drey',
+    reproduction: {
+      mode: 'live',
+      clutchMin: 2,
+      clutchMax: 3,
+      broodTicks: 550,
+      cooldownTicks: 1900,
+      feedMode: 'nurse',
+    },
+    population: { floor: 2, softCap: 6, hardCap: 10 },
+    medium: 'land',
+    wandersIn: true,
+    voice: { rate: 1 / 1000 }, // a chattery little alarm
+    idleMinTicks: { min: 10, max: 30 }, // darty: quick pauses, not loitering
+  },
+  frog: {
+    speed: 4,
+    diurnal: true,
+    lifespanTicksMean: 16800, // ≈ 7 game days
+    stageFractions: { baby: 0.14, juvenile: 0.16, adult: 0.5 },
+    needRates: { hunger: 1 / 1300, rest: 1 / 2600, social: 1 / 1800 },
+    eatRate: 0.004,
+    sleepRate: 0.003,
+    socialRate: 0.005,
+    homeKind: 'spawnClump',
+    reproduction: {
+      mode: 'egg',
+      clutchMin: 4,
+      clutchMax: 6,
+      broodTicks: 550,
+      cooldownTicks: 2400,
+      feedMode: 'self',
+    },
+    population: { floor: 3, softCap: 8, hardCap: 14 },
+    medium: 'amphibious',
+    wandersIn: true,
+    voice: { rate: 1 / 900, dawnMult: 2 }, // an evening chorus
+  },
+  turtle: {
+    speed: 2, // the valley's slowest — serene
+    diurnal: true,
+    lifespanTicksMean: 30000, // ≈ 12.5 game days — famously long-lived
+    stageFractions: { baby: 0.1, juvenile: 0.16, adult: 0.56 },
+    needRates: { hunger: 1 / 1600, rest: 1 / 3000, social: 1 / 2200 },
+    eatRate: 0.0035,
+    sleepRate: 0.0025,
+    socialRate: 0.004,
+    homeKind: 'sandNest',
+    reproduction: {
+      mode: 'egg',
+      clutchMin: 2,
+      clutchMax: 4,
+      broodTicks: 900,
+      cooldownTicks: 2600,
+      feedMode: 'self',
+    },
+    population: { floor: 2, softCap: 5, hardCap: 8 },
+    medium: 'amphibious',
+    wandersIn: true,
+    voice: { rate: 0 }, // silent by design — turtles never vocalize
   },
 };
 

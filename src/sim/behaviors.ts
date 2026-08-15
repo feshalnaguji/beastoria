@@ -447,9 +447,12 @@ function startActivity(state: WorldState, c: Creature, requested: ActivityId): v
   activity.targetId = undefined;
 
   switch (id) {
-    case 'idle':
-      activity.minTicks = Math.floor(nextRange(rng, 30, 80));
+    case 'idle': {
+      // Per-species dart-and-pause override (M10 task 3); default 30-80.
+      const range = SPECIES[c.species].idleMinTicks ?? { min: 30, max: 80 };
+      activity.minTicks = Math.floor(nextRange(rng, range.min, range.max));
       break;
+    }
     case 'wander':
       activity.minTicks = Math.floor(nextRange(rng, 40, 120));
       break;

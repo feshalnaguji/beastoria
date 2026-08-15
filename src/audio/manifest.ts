@@ -29,6 +29,11 @@ export const AUDIO_MANIFEST: {
     koi: { call: [BASE + 'families/koi/call1', BASE + 'families/koi/call2'] },
     dodo: { call: [BASE + 'families/dodo/call1', BASE + 'families/dodo/call2'] },
     phoenix: { call: [BASE + 'families/phoenix/call1', BASE + 'families/phoenix/call2'] },
+    squirrel: { call: [BASE + 'families/squirrel/call1'] },
+    frog: { call: [BASE + 'families/frog/call1', BASE + 'families/frog/call2'] },
+    // turtle: no entry — silent by design (species.ts's voice.rate: 0 means
+    // it never rolls a vocalization in the first place; graceful silence
+    // either way, per this file's header comment).
   },
   beds: {
     dawnChorus: BASE + 'ambience/dawn-chorus',

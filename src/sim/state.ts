@@ -14,6 +14,9 @@ import {
   GLADES,
   GROUND_NESTS,
   GROVE_NEST,
+  DREY_SITES,
+  FROG_SPAWN_CLUMPS,
+  TURTLE_SAND_NESTS,
   nearestRestable,
 } from './valley';
 
@@ -30,7 +33,10 @@ export type SpeciesId =
   | 'koi'
   | 'owl'
   | 'dodo'
-  | 'phoenix';
+  | 'phoenix'
+  | 'squirrel'
+  | 'frog'
+  | 'turtle';
 
 export type LifeStage = 'baby' | 'juvenile' | 'adult' | 'elder';
 
@@ -110,7 +116,10 @@ export type HomeKind =
   | 'treeHollow'
   | 'glade'
   | 'groundNest'
-  | 'groveNest';
+  | 'groveNest'
+  | 'drey'
+  | 'spawnClump'
+  | 'sandNest';
 
 export interface Home {
   id: number;
@@ -174,6 +183,21 @@ const STARTING_CAST: { species: SpeciesId; ageFrac: number; sex: Sex }[] = [
   { species: 'dodo', ageFrac: 0.45, sex: 'f' },
   { species: 'phoenix', ageFrac: 0.5, sex: 'm' },
   { species: 'phoenix', ageFrac: 0.55, sex: 'f' },
+  // M10: three new neighbors, appended last so the original eight species'
+  // RNG draw sequence (and every seeded fixture/test built on it) is
+  // untouched — these only add draws after them, never reorder them.
+  { species: 'squirrel', ageFrac: 0.08, sex: 'm' }, // kit
+  { species: 'squirrel', ageFrac: 0.4, sex: 'f' },
+  { species: 'squirrel', ageFrac: 0.5, sex: 'm' },
+  { species: 'squirrel', ageFrac: 0.85, sex: 'f' }, // elder
+  { species: 'frog', ageFrac: 0.1, sex: 'f' }, // froglet
+  { species: 'frog', ageFrac: 0.45, sex: 'm' },
+  { species: 'frog', ageFrac: 0.5, sex: 'f' },
+  { species: 'frog', ageFrac: 0.5, sex: 'm' },
+  { species: 'frog', ageFrac: 0.5, sex: 'f' }, // a small chorus
+  { species: 'turtle', ageFrac: 0.5, sex: 'm' },
+  { species: 'turtle', ageFrac: 0.55, sex: 'f' },
+  { species: 'turtle', ageFrac: 0.9, sex: 'm' }, // ancient elder
 ];
 
 /** Where each species wakes up on day one (koi in water, phoenix at the grove). */
@@ -186,6 +210,9 @@ const SPAWN_ANCHORS: Record<SpeciesId, { x: number; y: number; rx: number; ry: n
   owl: { x: 950, y: 850, rx: 300, ry: 250 },
   dodo: { x: 1300, y: 1250, rx: 200, ry: 150 },
   phoenix: { x: 2300, y: 480, rx: 120, ry: 80 },
+  squirrel: { x: 850, y: 750, rx: 350, ry: 300 },
+  frog: { x: 2800, y: 2150, rx: 180, ry: 120 },
+  turtle: { x: 2700, y: 2000, rx: 200, ry: 140 },
 };
 
 function spawnPosFor(rng: RngState, species: SpeciesId): Vec2 {
@@ -224,6 +251,11 @@ export function createWorld(seed: number): WorldState {
     ['glade', GLADES],
     ['groundNest', GROUND_NESTS],
     ['groveNest', [GROVE_NEST]],
+    // M10 task 3: appended after the original eight home kinds so every
+    // existing home's id is unchanged — only new ids are added at the tail.
+    ['drey', DREY_SITES],
+    ['spawnClump', FROG_SPAWN_CLUMPS],
+    ['sandNest', TURTLE_SAND_NESTS],
   ];
   for (const [kind, sites] of siteGroups) {
     for (const pos of sites) {

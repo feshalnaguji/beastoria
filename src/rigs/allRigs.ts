@@ -6,10 +6,25 @@ import type { CreatureRig } from './format';
 import { deerRig } from './deerRig';
 import { dodoRig } from './dodoRig';
 import { duckRig } from './duckRig';
+import { frogRig } from './frogRig';
 import { koiRig } from './koiRig';
 import { owlRig } from './owlRig';
 import { phoenixRig } from './phoenixRig';
 import { rabbitRig } from './rabbitRig';
 import { robinRig } from './robinRig';
+import { squirrelRig } from './squirrelRig';
+import { turtleRig } from './turtleRig';
 
-export const ALL_RIGS: CreatureRig[] = [rabbitRig, robinRig, deerRig, duckRig, koiRig, owlRig, dodoRig, phoenixRig];
+export const ALL_RIGS: CreatureRig[] = [
+  rabbitRig,
+  robinRig,
+  deerRig,
+  duckRig,
+  koiRig,
+  owlRig,
+  dodoRig,
+  phoenixRig,
+  squirrelRig,
+  frogRig,
+  turtleRig,
+];

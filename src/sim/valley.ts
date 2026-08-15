@@ -97,6 +97,26 @@ export const GROUND_NESTS: Vec2[] = [
 /** The one nest at the ancient tree's roots — the phoenix's, always. */
 export const GROVE_NEST: Vec2 = { x: 2300, y: 430 };
 
+/** Squirrel dreys — twiggy balls woven high in the forest canopy (M10). */
+export const DREY_SITES: Vec2[] = [
+  { x: 850, y: 500 },
+  { x: 550, y: 950 },
+  { x: 1100, y: 650 },
+];
+
+/** Frog spawn clumps laid among the reeds, near the koi's lily beds (M10). */
+export const FROG_SPAWN_CLUMPS: Vec2[] = [
+  { x: 2870, y: 2180 },
+  { x: 3260, y: 2330 },
+  { x: 2680, y: 2600 },
+];
+
+/** Turtle sand nests scooped into the pond's shore band (M10). */
+export const TURTLE_SAND_NESTS: Vec2[] = [
+  { x: 2552, y: 2070 },
+  { x: 3650, y: 2530 },
+];
+
 /**
  * How a creature relates to water (spec §4.3 walkability).
  * 'air' is the flying media: nowhere in the valley is off-limits in passing.

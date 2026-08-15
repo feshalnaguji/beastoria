@@ -45,7 +45,11 @@ describe('the air medium', () => {
 
   it('a robin crosses the pond in a straight line; a rabbit cannot', () => {
     const state = bareWorld(17);
-    const robin = spawnCreature(state, 'robin', { x: 2550, y: 2300 }, 0.4); // west shore
+    // West shore, clearly dry (a safe margin outside the pond ellipse — not
+    // razor's-edge on the boundary, which made this scenario sensitive to
+    // the spawned creature's random initial heading; see M10 task 3's
+    // justification table for why that heading now differs for seed 17).
+    const robin = spawnCreature(state, 'robin', { x: 2500, y: 2300 }, 0.4);
     const target = { x: 3700, y: 2300 }; // dry land due east — straight through the water
     const speed = speedFor('robin', 'adult');
     let ticksTaken = -1;
@@ -62,7 +66,7 @@ describe('the air medium', () => {
     expect(ticksTaken).toBeGreaterThan(0);
     expect(ticksTaken).toBeLessThan(400);
 
-    const rabbit = spawnCreature(state, 'rabbit', { x: 2550, y: 2300 }, 0.4);
+    const rabbit = spawnCreature(state, 'rabbit', { x: 2500, y: 2300 }, 0.4);
     for (let i = 0; i < 400; i++) {
       moveToward(rabbit, target, speedFor('rabbit', 'adult'), 'land');
       expect(isWater(rabbit.pos)).toBe(false);

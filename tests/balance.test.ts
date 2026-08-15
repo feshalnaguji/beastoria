@@ -17,6 +17,10 @@ import { SPECIES } from '../src/sim/species';
 import { createWorld, type SpeciesId, type WorldState } from '../src/sim/state';
 
 const ALL = Object.keys(SPECIES) as SpeciesId[];
+/** M10 task 3: the three new neighbors must establish themselves quickly —
+ * not just survive to the end of the soak. */
+const NEW_SPECIES: SpeciesId[] = ['squirrel', 'frog', 'turtle'];
+const DAY5_TICK = 5 * TICKS_PER_DAY;
 
 function counts(state: WorldState): Record<string, number> {
   const out: Record<string, number> = {};
@@ -38,6 +42,11 @@ function soak(seed: number, days: number): void {
         expect(c[id], `${id} over hardCap at tick ${state.tick} (seed ${seed})`).toBeLessThanOrEqual(
           SPECIES[id].population.hardCap,
         );
+      }
+    }
+    if (state.tick === DAY5_TICK) {
+      for (const id of NEW_SPECIES) {
+        expect(c[id], `${id} not yet present by day 5 (seed ${seed})`).toBeGreaterThan(0);
       }
     }
     if (t % 60 !== 0) continue;

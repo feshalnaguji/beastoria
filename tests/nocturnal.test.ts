@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { TICKS_PER_DAY } from '../src/sim/clock';
 import { tick } from '../src/sim/Sim';
+import { SPECIES } from '../src/sim/species';
 import { createWorld, spawnCreature, type WorldState } from '../src/sim/state';
 import { isWater } from '../src/sim/valley';
 
@@ -42,22 +43,37 @@ describe('nocturnal owls', () => {
 });
 
 describe('starting world', () => {
-  it('koi start in the pond; every creature starts somewhere it can be', () => {
+  it('koi start in the pond; every creature starts somewhere its medium allows', () => {
     // 39, 41, 57 are seeds where the un-clamped rabbit/robin spawn box
     // (2048±700, 1536±500) overlapped the pond ellipse and produced a
     // land creature stuck in water (see spawnPosFor's medium clamp).
     for (const seed of [39, 41, 57, 1234]) {
       const state = createWorld(seed);
       for (const c of state.creatures) {
-        if (c.species === 'koi') expect(isWater(c.pos)).toBe(true);
-        else expect(isWater(c.pos)).toBe(false);
+        const medium = SPECIES[c.species].medium;
+        if (medium === 'water') expect(isWater(c.pos)).toBe(true);
+        else if (medium === 'land') expect(isWater(c.pos)).toBe(false);
+        // Amphibious species (duck, frog, turtle) may legitimately wake up
+        // either in or out of the water — no assertion either way (M10).
       }
     }
   });
   it('homes exist for every home kind', () => {
     const state = createWorld(1);
     const kinds = new Set(state.homes.map((h) => h.kind));
-    for (const k of ['burrow', 'treeNest', 'reedNest', 'lilyPatch', 'treeHollow', 'glade', 'groundNest', 'groveNest']) {
+    for (const k of [
+      'burrow',
+      'treeNest',
+      'reedNest',
+      'lilyPatch',
+      'treeHollow',
+      'glade',
+      'groundNest',
+      'groveNest',
+      'drey',
+      'spawnClump',
+      'sandNest',
+    ]) {
       expect(kinds.has(k as never)).toBe(true);
     }
   });

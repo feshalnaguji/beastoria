@@ -1,16 +1,38 @@
 /**
- * The full 8-species registry: every species defined, params sane,
+ * The full species registry: every species defined, params sane,
  * home kinds and movement media consistent with the valley.
  */
 import { describe, expect, it } from 'vitest';
 import { SPECIES } from '../src/sim/species';
-import { canOccupy, GROVE_NEST, isWater, LILY_PATCHES, POND, REED_NESTS } from '../src/sim/valley';
+import {
+  canOccupy,
+  DREY_SITES,
+  FROG_SPAWN_CLUMPS,
+  GROVE_NEST,
+  isWater,
+  LILY_PATCHES,
+  POND,
+  REED_NESTS,
+  TURTLE_SAND_NESTS,
+} from '../src/sim/valley';
 import type { SpeciesId } from '../src/sim/state';
 
-const ALL: SpeciesId[] = ['rabbit', 'robin', 'deer', 'duck', 'koi', 'owl', 'dodo', 'phoenix'];
+const ALL: SpeciesId[] = [
+  'rabbit',
+  'robin',
+  'deer',
+  'duck',
+  'koi',
+  'owl',
+  'dodo',
+  'phoenix',
+  'squirrel',
+  'frog',
+  'turtle',
+];
 
 describe('species registry', () => {
-  it('defines all eight species', () => {
+  it('defines all eleven species', () => {
     expect(Object.keys(SPECIES).sort()).toEqual([...ALL].sort());
   });
 
@@ -41,6 +63,22 @@ describe('species registry', () => {
     for (const p of LILY_PATCHES) expect(isWater(p)).toBe(true); // koi homes in the pond
     for (const p of REED_NESTS) expect(isWater(p)).toBe(false); // duck nests on the shore
     expect(isWater(GROVE_NEST)).toBe(false);
+    for (const p of DREY_SITES) expect(isWater(p)).toBe(false); // squirrel dreys are dry forest
+    for (const p of TURTLE_SAND_NESTS) expect(isWater(p)).toBe(false); // sand nests are dry shore
+    // Frog spawn clumps are amphibious homes — no dry/wet requirement.
+    expect(FROG_SPAWN_CLUMPS.length).toBeGreaterThan(0);
+  });
+
+  it('M10: squirrel darts, frog is a silent-croaking chorus, turtle is silent and slowest', () => {
+    expect(SPECIES.squirrel.medium).toBe('land');
+    expect(SPECIES.squirrel.idleMinTicks).toEqual({ min: 10, max: 30 });
+    expect(SPECIES.frog.medium).toBe('amphibious');
+    expect(SPECIES.frog.reproduction.feedMode).toBe('self');
+    expect(SPECIES.turtle.medium).toBe('amphibious');
+    expect(SPECIES.turtle.reproduction.feedMode).toBe('self');
+    expect(SPECIES.turtle.voice.rate).toBe(0); // silent by design
+    const speeds = Object.values(SPECIES).map((p) => p.speed);
+    expect(SPECIES.turtle.speed).toBe(Math.min(...speeds)); // the valley's slowest
   });
 
   it('canOccupy: land avoids water, water requires it, amphibious goes anywhere', () => {

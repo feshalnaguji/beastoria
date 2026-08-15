@@ -33,6 +33,9 @@ sources are themselves licensed under the same CC-BY-SA version.
 | families/phoenix/call1.webm, .m4a | https://commons.wikimedia.org/wiki/File:Grus_canadensis_Denali_National_Park.ogg (crane) + https://commons.wikimedia.org/wiki/File:Whooper_Swan_(Cygnus_cygnus)_(W_CYGNUS_CYGNUS_R1_C6).ogg (swan) + https://commons.wikimedia.org/wiki/File:Yellowstone_sound_library_-_Common_Loon_-_001.mp3 (loon) | Innotata (crane, Denali NP); Beeld en Geluid Collecties (swan); Thesupermat / Yellowstone NPS sound library (loon) | Public domain (crane); CC BY 4.0 (swan); Public domain (loon) | Designed phoenix voice, layered from Sandhill Crane bugle phrase (substitute for common crane — no allowed-license common crane recording found; trimmed 3.0s @0s, highpass 200Hz, leading) + Whooper Swan warmth (trimmed 3.3s @16.9s, highpass 150Hz, −6dB, delayed +120ms) + Common Loon wail (trimmed 3.0s @8.5s, highpass 300Hz, −9dB, delayed +350ms, ghosting in late); amix weights 1/0.6/0.45, gentle fade-in, loudnorm, mono opus 64k/aac 96k |
 | families/phoenix/call2.webm, .m4a | https://commons.wikimedia.org/wiki/File:Grus_canadensis_Denali_National_Park.ogg (crane) + https://pixabay.com/sound-effects/nature-mourning-dove-coo-335480/ (mourning dove) | Innotata (crane, Denali NP); DRAGON-STUDIO (Pixabay, mourning dove) | Public domain (crane); Pixabay Content License (mourning dove) | Designed phoenix idle/contentment voice: Mourning Dove purr bed (trimmed 3.0s @1.8s, highpass 150Hz, −3dB) under a short Sandhill Crane bugle fragment (trimmed 0.9s @0.15s, highpass 250Hz, −4dB, delayed +300ms); amix weights 1/0.7, fade-in + fade-out, loudnorm, mono opus 64k/aac 96k |
 | ambience/ember-glow.webm, .m4a | https://pixabay.com/sound-effects/film-special-effects-crackling-campfire-68477/ | CaganCelik (Freesound) / freesound_community (Pixabay) | Pixabay Content License | "Crackling Campfire"; trimmed 45.0s @2.0s for a seamless loop, lowpass 2000Hz, −12dB, 0.4s in/out fade, loudnorm I=-24 (sits quietly under everything near the phoenix grove), mono opus 56k/aac 96k |
+| families/squirrel/call1.webm, .m4a | https://commons.wikimedia.org/wiki/File:Tamiasciurus_douglasii.ogg | Parande (English Wikipedia username), transferred to Commons by Innotata | CC BY-SA 3.0 | Douglas Squirrel (Tamiasciurus douglasii) alarm call, recorded at Puget Sound, WA (substitute species for a generic tree-squirrel chatter per brief — no allowed-license Eastern Grey/Fox Squirrel chatter recording found); trimmed 1.3s @0.45s (a rapid-fire chatter burst), highpass 250Hz, denoise, loudnorm, opus 56k/aac 96k |
+| families/frog/call1.webm, .m4a | https://commons.wikimedia.org/wiki/File:Wood_Frogs_calling_in_spring.ogg | D. Gordon E. Robertson (Wikimedia username Dger) | CC BY-SA 3.0 | Wood Frog (Rana sylvatica) spring calls, Mer Bleue Conservation Area, Ottawa, Ontario; trimmed 1.4s @0.30s, highpass 150Hz, denoise, loudnorm, opus 56k/aac 96k |
+| families/frog/call2.webm, .m4a | https://commons.wikimedia.org/wiki/File:Wood_Frogs_calling_in_spring.ogg | D. Gordon E. Robertson (Wikimedia username Dger) | CC BY-SA 3.0 | Same source; trimmed 1.8s @3.20s (a later croak in the chorus), highpass 150Hz, denoise, loudnorm, opus 56k/aac 96k |
 
 ## Skipped items (not shipped — see Task 2 report for detail)
 
@@ -41,6 +44,13 @@ sources are themselves licensed under the same CC-BY-SA version.
 - `families/duck/baby1` (duckling peeps): no allowed-license mallard duckling peep recording
   found; skipped per brief's explicit example.
 - `families/rabbit/sniff` (optional stretch item): not sourced; skipped, optional per brief.
+- `families/turtle/*` (M10 task 3): turtle ships silent by design — a realistic choice (turtles are
+  essentially voiceless) matched in `src/sim/species.ts` via `voice: { rate: 0 }`, so it never rolls
+  a vocalization in the first place; `src/audio/manifest.ts` also carries no `turtle` entry.
+- `families/frog/*` extra variant (M10 task 3): `File:Frog_sounds.ogg` (pobblebonk + motorbike
+  frogs, Lake Seppings, CC BY-SA 4.0, Hughesdarren) was pulled as a second-source candidate but its
+  usable calls were too brief/sparse (silence-detected: two isolated ~20ms blips in 33s) to cut a
+  clean one-shot from; not shipped. `call1`/`call2` both come from the Wood Frog source instead.
 
 ## Task 3 raw ingredients (unprocessed, staged in `assets_raw/`, gitignored — not shipped by this task)
 

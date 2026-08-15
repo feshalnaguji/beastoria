@@ -189,6 +189,9 @@ const LABEL_HEIGHT: Record<SpeciesId, number> = {
   owl: -70,
   dodo: -70,
   phoenix: -110,
+  squirrel: -46,
+  frog: -30,
+  turtle: -22,
 };
 
 /** Day/night multiply-tint ramp, keyed by fraction of day. */
@@ -525,6 +528,42 @@ export class Renderer {
           if (fam?.phase === 'expecting') {
             g.ellipse(home.pos.x, home.pos.y - 3, 5, 6.5).fill(0xf4d03f); // the golden egg
             g.ellipse(home.pos.x, home.pos.y - 3, 8, 9).fill({ color: 0xffb36b, alpha: 0.3 });
+          }
+          break;
+        }
+        case 'drey': { // a twiggy ball woven high in a forest tree
+          const dx = home.pos.x;
+          const dy = home.pos.y - 30;
+          g.circle(dx, dy + 4, 17).fill(0x6d563a);
+          g.circle(dx, dy, 15).fill(0x8a6f4d);
+          g.circle(dx - 4, dy - 5, 6).fill({ color: 0xa89066, alpha: 0.85 });
+          if (fam?.phase === 'expecting') {
+            g.ellipse(dx - 3, dy - 2, 3.5, 4.5).fill(0xf1ead6);
+            g.ellipse(dx + 3, dy - 3, 3.5, 4.5).fill(0xe8e2ce);
+          }
+          break;
+        }
+        case 'spawnClump': { // frog spawn: a jelly clump among the reeds
+          g.ellipse(home.pos.x, home.pos.y + 4, 20, 8).fill({ color: 0x5f9451, alpha: 0.5 });
+          for (let i = 0; i < 6; i++) {
+            const ang = (i / 6) * Math.PI * 2;
+            g.circle(home.pos.x + Math.cos(ang) * 7, home.pos.y + Math.sin(ang) * 5, 3.2).fill({
+              color: 0xd8e8c8,
+              alpha: 0.75,
+            });
+          }
+          g.circle(home.pos.x, home.pos.y, 3.5).fill({ color: 0xc4d9a8, alpha: 0.85 });
+          if (fam?.phase === 'expecting') {
+            g.circle(home.pos.x, home.pos.y - 1, 2).fill(0x3a3230);
+          }
+          break;
+        }
+        case 'sandNest': { // turtle's small sand mound scooped into the shore
+          g.ellipse(home.pos.x, home.pos.y + 6, 26, 10).fill({ color: 0xdcc9a0, alpha: 0.9 });
+          g.ellipse(home.pos.x, home.pos.y, 18, 8).fill({ color: 0xe8d8b0, alpha: 0.95 });
+          if (fam?.phase === 'expecting') {
+            g.ellipse(home.pos.x - 4, home.pos.y - 1, 3.5, 3).fill(0xf1ead6);
+            g.ellipse(home.pos.x + 4, home.pos.y - 1, 3.5, 3).fill(0xe8e2ce);
           }
           break;
         }
