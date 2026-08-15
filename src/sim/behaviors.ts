@@ -138,6 +138,11 @@ export function applyActivity(state: WorldState, c: Creature, _clock: Clock): vo
       }
       const dist = Math.hypot(partner.pos.x - c.pos.x, partner.pos.y - c.pos.y);
       if (dist > SOCIAL_RANGE * 0.7) {
+        // A ring-offset approach (idOffsetAngle-based, same trick as the
+        // family.ts nest ring below) was tried here to de-clump socializing
+        // groups, but it shifted arrival timing enough to regress two
+        // seeded long-run tests via the shared RNG stream. Parked, not
+        // rejected — recoverable at commit 8835c73, pending a user decision.
         moveToward(c, partner.pos, speedFor(c.species, c.stage), medium);
       } else {
         c.needs.social = clamp01(c.needs.social - p.socialRate);

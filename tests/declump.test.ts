@@ -21,8 +21,8 @@ describe('idOffsetAngle', () => {
   });
 });
 
-describe('socializing creatures do not queue', () => {
-  it('four lonely rabbits converging on one popular rabbit end up spread, not collinear', () => {
+describe('family nest-building does not stack parents on one point', () => {
+  it('four lonely rabbits pair off and nest-build spread, not collinear', () => {
     const state: WorldState = createWorld(13);
     state.creatures = [];
     state.families = [];
@@ -36,7 +36,10 @@ describe('socializing creatures do not queue', () => {
     }
     state.tick = 2400 * 10 + 720; // midday
     for (let i = 0; i < 600; i++) tick(state, []);
-    // Measure pairwise minimum distance among the seekers near the magnet:
+    // The "magnet" doesn't attract them directly — formPairs pairs the four
+    // seekers off with each other immediately (they spawn well within
+    // PAIR_RANGE), so this measures spacing of the resulting nest-gather
+    // ring points, not the socialize/court ring. Pairwise minimum distance:
     const pos = state.creatures.filter((c) => seekers.includes(c.id)).map((c) => c.pos);
     let minPair = Infinity;
     for (let a = 0; a < pos.length; a++) {
