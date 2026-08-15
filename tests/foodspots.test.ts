@@ -4,6 +4,7 @@
  * instead of a random patch of empty meadow.
  */
 import { describe, expect, it } from 'vitest';
+import { forageTarget } from '../src/sim/behaviors';
 import { tick } from '../src/sim/Sim';
 import { SPECIES } from '../src/sim/species';
 import {
@@ -11,10 +12,11 @@ import {
   spawnCreature,
   WORLD_HEIGHT,
   WORLD_WIDTH,
+  type SpeciesId,
   type Vec2,
   type WorldState,
 } from '../src/sim/state';
-import { BURROW_SITES, FOOD_SPOTS, GLADES, isWater } from '../src/sim/valley';
+import { BURROW_SITES, FOOD_SPOTS, GLADES, isWater, inEllipse, POND } from '../src/sim/valley';
 
 /** Mirrors the constants in behaviors.ts (module-private by design). */
 const FORAGE_SPREAD = 24;
@@ -149,4 +151,26 @@ describe('foraging aims at food', () => {
     }
     expect(minPair).toBeGreaterThan(15);
   }, 20000);
+
+  it('c) land species never forage inside the pond\'s 1.18x shore band', () => {
+    // A generous margin around the pond (comfortably past the 1.10x reed
+    // spots and their 24-unit scatter, and the feathered sand band that
+    // reads visually as "on the water" out to ~1.18x): no land-medium
+    // species may ever be sent to forage in here — that's the reed spots'
+    // exclusive territory (ducks/koi/fliers only).
+    const shoreBand = { x: POND.x, y: POND.y, rx: POND.rx * 1.18, ry: POND.ry * 1.18 };
+    const landSpecies: SpeciesId[] = ['rabbit', 'deer', 'dodo'];
+    for (const species of landSpecies) {
+      const state = bareWorld(31);
+      // Deliberately near the pond's west shore, where a reed spot is the
+      // closest food spot by far — the scenario that actually exercises the
+      // bug (a rabbit spawned in the middle of the meadow never has a reed
+      // spot among its nearest three, so it never trips the old bug).
+      const c = spawnCreature(state, species, { x: 2500, y: 2300 }, 0.4);
+      for (let i = 0; i < 500; i++) {
+        const target = forageTarget(state, c);
+        expect(inEllipse(target, shoreBand)).toBe(false);
+      }
+    }
+  });
 });

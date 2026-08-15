@@ -10,7 +10,11 @@ const EDGE_MARGIN = 120;
 const MAX_TURN = 0.3;
 
 /**
- * Steer toward `target` and advance; returns remaining distance.
+ * Steer toward `target` and advance; returns remaining distance, or -1 if
+ * within snapping range but the target is illegal ground for `landing` (the
+ * snap was refused, and the creature did not move this tick — callers that
+ * treat any non-positive return as "arrived" must guard against this; see
+ * behaviors.ts's socialize/court case, the one caller that acts on it).
  * `medium` governs what the creature may pass through; `landing` (default:
  * the same) governs where it may come to rest — a flier crosses the pond on
  * 'air' but only snaps onto a target its 'land' landing medium allows.
@@ -29,8 +33,9 @@ export function moveToward(
     if (canOccupy(landing, target)) {
       c.pos.x = target.x;
       c.pos.y = target.y;
+      return 0;
     }
-    return 0;
+    return -1; // refused the snap — do not lie about having arrived
   }
   c.heading = turnToward(c.heading, Math.atan2(dy, dx), MAX_TURN);
   advance(c, speed, medium);
@@ -63,20 +68,49 @@ export function wanderStep(rng: RngState, c: Creature, speed: number, medium: Me
  */
 function advance(c: Creature, speed: number, medium: Medium): void {
   // Stranded in the wrong medium (a hand-placed spawn inside the pond, say):
-  // strike out for the nearest legal ground WITHOUT testing the intermediate
-  // step, or the creature would be pinned there forever — every short step
-  // out of the middle of the pond is still in the pond.
+  // strike out for the nearest legal ground. Every candidate step is
+  // checked, mirroring the legal branch below (full step, then a turned-back
+  // half-step retry) — never a blind step. A step "counts" if it reaches
+  // legal ground outright, or if it is at least strictly nearer the escape
+  // point than staying put: literal canOccupy is too strict a gate here on
+  // its own (a creature more than one step's distance from shore would never
+  // find a single LEGAL candidate until the last tick of the crossing, and
+  // gating on canOccupy alone would hold it in place forever — trading the
+  // water-walking bug for a permanent freeze, which is exactly what this
+  // milestone is against). The combined check still guarantees the two
+  // things that matter: no candidate is ever accepted blind, and no tick
+  // ever drifts deeper into the water — only outright-legal or strictly
+  // closer-to-shore steps are taken, so it can only approach the boundary,
+  // never recede from it.
   if (!canOccupy(medium, c.pos)) {
     const escape = nearestRestable(medium, c.pos);
+    const currentDist = Math.hypot(escape.x - c.pos.x, escape.y - c.pos.y);
     c.heading = turnToward(
       c.heading,
       Math.atan2(escape.y - c.pos.y, escape.x - c.pos.x),
       MAX_TURN * 2,
     );
-    c.pos.x += Math.cos(c.heading) * speed;
-    c.pos.y += Math.sin(c.heading) * speed;
-    clampToWorld(c);
-    return;
+    const full = {
+      x: c.pos.x + Math.cos(c.heading) * speed,
+      y: c.pos.y + Math.sin(c.heading) * speed,
+    };
+    if (canOccupy(medium, full) || Math.hypot(full.x - escape.x, full.y - escape.y) < currentDist) {
+      c.pos.x = full.x;
+      c.pos.y = full.y;
+      clampToWorld(c);
+      return;
+    }
+    const half = {
+      x: c.pos.x + Math.cos(c.heading) * speed * 0.5,
+      y: c.pos.y + Math.sin(c.heading) * speed * 0.5,
+    };
+    if (canOccupy(medium, half) || Math.hypot(half.x - escape.x, half.y - escape.y) < currentDist) {
+      c.pos.x = half.x;
+      c.pos.y = half.y;
+      clampToWorld(c);
+      return;
+    }
+    return; // neither candidate makes progress: hold rather than drift deeper
   }
   const candidate = {
     x: c.pos.x + Math.cos(c.heading) * speed,

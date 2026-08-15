@@ -16,7 +16,7 @@ import {
   type Vec2,
   type WorldState,
 } from './state';
-import { canOccupy, FOOD_SPOTS, GROVE_NEST, type FoodSpot } from './valley';
+import { canOccupy, FOOD_SPOTS, GROVE_NEST, nearestRestable, type FoodSpot, type Medium } from './valley';
 
 const HYSTERESIS_BONUS = 0.15;
 /** A challenger this much stronger overrides min-duration (urgency). */
@@ -25,6 +25,15 @@ const URGENT_MARGIN = 0.35;
 const SATISFIED = 0.05;
 const SOCIAL_RANGE = 90;
 const ARRIVE_DIST = 10;
+/**
+ * Progress-bail window for a stalled socialize/court approach (M10): a
+ * checkpoint of the creature's own position taken every this-many ticks,
+ * reused from the activity's existing `targetPos` field so the bail is
+ * stateless (no new Creature field) — see the socialize/court case.
+ */
+const PROGRESS_CHECK_TICKS = 100;
+/** A stall checkpoint counts as "no progress" below this much net movement. */
+const PROGRESS_MIN_DIST = 1;
 const HERD_RADIUS = 350;
 const HERD_TURN = 0.1;
 /** How many of the nearest food spots a forager chooses between. */
@@ -58,6 +67,23 @@ const GROVE_FOOD_SPOTS: readonly FoodSpot[] = FOOD_SPOTS.filter(
 /** Can this creature come to rest exactly where it is standing? */
 function restingIsLegal(c: Creature): boolean {
   return canOccupy(landingMediumOf(c.species), c.pos);
+}
+
+/**
+ * The approach point on the ring around `partnerPos` for socialize/court: a
+ * deterministic per-id angle (idOffsetAngle), no RNG draws, so a group
+ * settles into a loose circle instead of a conga line down one bearing.
+ * Clamped to legal ground (M10 fix): the raw ring can fall in the water for
+ * a partner standing close to the shore, and an unclamped target left the
+ * approach with nothing to reach — moveToward would refuse the final snap
+ * every tick, forever.
+ */
+export function socializeRing(partnerPos: Vec2, id: number, landing: Medium): Vec2 {
+  const raw = {
+    x: partnerPos.x + Math.cos(idOffsetAngle(id)) * SOCIAL_RANGE * 0.45,
+    y: partnerPos.y + Math.sin(idOffsetAngle(id)) * SOCIAL_RANGE * 0.45,
+  };
+  return nearestRestable(landing, raw);
 }
 
 /** Centroid of same-species creatures other than `c` (herd species only call sites). */
@@ -162,7 +188,8 @@ export function applyActivity(state: WorldState, c: Creature, _clock: Clock): vo
       if (p.herd) applyHerdPull(state, c);
       const leash = groveLeashTarget(state, c);
       if (leash) {
-        if (moveToward(c, leash, speedFor(c.species, c.stage), medium, landing) <= ARRIVE_DIST) {
+        const remaining = moveToward(c, leash, speedFor(c.species, c.stage), medium, landing);
+        if (remaining >= 0 && remaining <= ARRIVE_DIST) {
           c.activity.targetPos = undefined; // home again; drift on as normal
         }
         break;
@@ -180,7 +207,7 @@ export function applyActivity(state: WorldState, c: Creature, _clock: Clock): vo
         break;
       }
       const remaining = moveToward(c, target, speedFor(c.species, c.stage), medium, landing);
-      if (remaining <= ARRIVE_DIST) {
+      if (remaining >= 0 && remaining <= ARRIVE_DIST) {
         c.needs.hunger = clamp01(c.needs.hunger - p.eatRate);
         if (c.needs.hunger <= SATISFIED) startActivity(state, c, 'idle');
       }
@@ -203,13 +230,36 @@ export function applyActivity(state: WorldState, c: Creature, _clock: Clock): vo
       if (dist > SOCIAL_RANGE * 0.7) {
         // Approach a point on a ring around the partner (deterministic per-id
         // angle, no RNG draws) so a group settles into a loose circle instead
-        // of a conga line down one bearing.
-        const ring = {
-          x: partner.pos.x + Math.cos(idOffsetAngle(c.id)) * SOCIAL_RANGE * 0.45,
-          y: partner.pos.y + Math.sin(idOffsetAngle(c.id)) * SOCIAL_RANGE * 0.45,
-        };
-        moveToward(c, ring, speedFor(c.species, c.stage), medium, landing);
+        // of a conga line down one bearing — clamped to legal ground, so a
+        // ring point that would fall in the water is never chased forever.
+        const ring = socializeRing(partner.pos, c.id, landing);
+        const remaining = moveToward(c, ring, speedFor(c.species, c.stage), medium, landing);
+        if (remaining < 0) {
+          // moveToward refused an illegal snap (shouldn't happen now that
+          // the ring is clamped, but the contract says don't lie about it —
+          // fall back exactly like the stall bail below).
+          startActivity(state, c, 'wander');
+          break;
+        }
+
+        // Progress bail: a stateless stall check reusing the activity's own
+        // `targetPos` (otherwise unused here) as a checkpoint of this
+        // creature's position, taken every PROGRESS_CHECK_TICKS ticks. If a
+        // full window passes with less than a world unit of net movement,
+        // stop chasing and wander instead of holding forever.
+        if (c.activity.ticks % PROGRESS_CHECK_TICKS === 0) {
+          const checkpoint = c.activity.targetPos;
+          if (
+            checkpoint &&
+            Math.hypot(c.pos.x - checkpoint.x, c.pos.y - checkpoint.y) < PROGRESS_MIN_DIST
+          ) {
+            startActivity(state, c, 'wander');
+            break;
+          }
+          c.activity.targetPos = { x: c.pos.x, y: c.pos.y };
+        }
       } else {
+        c.activity.targetPos = undefined; // clear the approach checkpoint
         c.needs.social = clamp01(c.needs.social - p.socialRate);
         if (c.activity.id === 'socialize' && c.needs.social <= SATISFIED) {
           startActivity(state, c, 'idle');
@@ -223,7 +273,7 @@ export function applyActivity(state: WorldState, c: Creature, _clock: Clock): vo
       const target = c.activity.targetPos;
       if (target) {
         const remaining = moveToward(c, target, speedFor(c.species, c.stage), medium, landing);
-        if (remaining <= ARRIVE_DIST) {
+        if (remaining >= 0 && remaining <= ARRIVE_DIST) {
           c.needs.rest = clamp01(c.needs.rest - p.sleepRate * 0.5);
         }
       }
@@ -246,7 +296,7 @@ export function applyActivity(state: WorldState, c: Creature, _clock: Clock): vo
       const target = c.activity.targetPos;
       if (!target) break;
       const remaining = moveToward(c, target, speedFor(c.species, c.stage), medium, landing);
-      if (remaining <= ARRIVE_DIST) {
+      if (remaining >= 0 && remaining <= ARRIVE_DIST) {
         if (c.activity.step === 0) {
           // Food gathered — head home.
           const home = state.homes.find((h) => h.id === c.activity.targetId);
@@ -354,7 +404,7 @@ function startActivity(state: WorldState, c: Creature, requested: ActivityId): v
  * Water species are the exception: every food spot is dry land by definition,
  * so koi keep grazing open water sampled around themselves, exactly as before.
  */
-function forageTarget(state: WorldState, c: Creature): Vec2 {
+export function forageTarget(state: WorldState, c: Creature): Vec2 {
   const rng = state.rng;
   const species = SPECIES[c.species];
   const landing = landingMediumOf(c.species);
@@ -383,7 +433,7 @@ function forageTarget(state: WorldState, c: Creature): Vec2 {
   // A leashed phoenix only ever eats at the grove, so no meal can pull it
   // past its leash (see GROVE_FOOD_SPOTS).
   const larder = leashedToGrove(c) && GROVE_FOOD_SPOTS.length > 0 ? GROVE_FOOD_SPOTS : FOOD_SPOTS;
-  const near = nearestFoodSpots(larder, anchor, choices);
+  const near = nearestFoodSpots(larder, anchor, choices, species.medium);
   const pick = near[Math.min(near.length - 1, Math.floor(nextRange(rng, 0, near.length)))];
   if (!pick) return { x: c.pos.x, y: c.pos.y }; // unreachable: FOOD_SPOTS is non-empty
   const ring = species.herd ? HERD_FORAGE_RING : 0;
@@ -411,9 +461,24 @@ function speciesCentroid(state: WorldState, c: Creature): Vec2 | undefined {
   return n === 0 ? undefined : { x: sx / n, y: sy / n };
 }
 
-/** The `n` spots of `larder` closest to `p`, nearest first (stable, RNG-free). */
-function nearestFoodSpots(larder: readonly FoodSpot[], p: Vec2, n: number): FoodSpot[] {
-  return [...larder]
+/**
+ * The `n` spots of `larder` closest to `p`, nearest first (stable, RNG-free).
+ * Ground-walking land species (rabbit, deer, dodo — `medium === 'land'`)
+ * never get offered the reed spots on the pond's dry shore band: those spots
+ * are legal ground, but a rabbit visibly walking the feathered sand out to
+ * them reads to a watching player as "on the water" (M10). Flying species
+ * that only LAND on 'land' (robin/owl/phoenix, `medium === 'air'`) and
+ * amphibious/water species are unaffected — they don't walk the shore to get
+ * there, so the ambiguity doesn't apply.
+ */
+function nearestFoodSpots(
+  larder: readonly FoodSpot[],
+  p: Vec2,
+  n: number,
+  medium: Medium,
+): FoodSpot[] {
+  const pool = medium === 'land' ? larder.filter((s) => s.zone !== 'pond') : larder;
+  return [...pool]
     .sort((a, b) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(b.x - p.x, b.y - p.y))
     .slice(0, n);
 }
