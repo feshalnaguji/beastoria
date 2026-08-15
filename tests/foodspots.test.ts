@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { tick } from '../src/sim/Sim';
+import { SPECIES } from '../src/sim/species';
 import {
   createWorld,
   spawnCreature,
@@ -13,7 +14,12 @@ import {
   type Vec2,
   type WorldState,
 } from '../src/sim/state';
-import { FOOD_SPOTS, isWater } from '../src/sim/valley';
+import { BURROW_SITES, FOOD_SPOTS, GLADES, isWater } from '../src/sim/valley';
+
+/** Mirrors the constants in behaviors.ts (module-private by design). */
+const FORAGE_SPREAD = 24;
+const HERD_FORAGE_RING = 55;
+const HERD_FORAGE_SPREAD = 20;
 
 function nearestSpotDist(p: Vec2): number {
   let best = Infinity;
@@ -29,12 +35,21 @@ function bareWorld(seed: number): WorldState {
 }
 
 describe('FOOD_SPOTS', () => {
-  it('sixteen anchors: twelve at the forest and grove edges, four in the reeds', () => {
-    expect(FOOD_SPOTS.length).toBe(16);
+  it('nineteen anchors: twelve at the forest and grove edges, four reeds, three meadow patches', () => {
+    expect(FOOD_SPOTS.length).toBe(19);
     const byZone = { forest: 0, grove: 0, pond: 0, meadow: 0 };
     for (const s of FOOD_SPOTS) byZone[s.zone]++;
     expect(byZone.forest + byZone.grove).toBe(12);
     expect(byZone.pond).toBe(4);
+    expect(byZone.meadow).toBe(3);
+  });
+
+  it('no meadow home is a long commute from a meal', () => {
+    // Burrows (rabbits) and glades (deer) sit in the open meadow; before the
+    // meadow patches existed the worst of them was 721 units from any food.
+    for (const home of [...BURROW_SITES, ...GLADES]) {
+      expect(nearestSpotDist(home)).toBeLessThanOrEqual(520);
+    }
   });
 
   it('every spot is dry land, well inside the world rect', () => {
@@ -63,8 +78,75 @@ describe('foraging aims at food', () => {
       if (lastTarget && target.x === lastTarget.x && target.y === lastTarget.y) continue;
       lastTarget = target;
       seen++;
-      expect(nearestSpotDist(target)).toBeLessThanOrEqual(60);
+      expect(nearestSpotDist(target)).toBeLessThanOrEqual(FORAGE_SPREAD);
     }
     expect(seen).toBe(3);
+  }, 20000);
+
+  it('every forager in a real world aims at the larder, within its own spread', () => {
+    const state = createWorld(29);
+    let checked = 0;
+    for (let t = 0; t < 3000; t++) {
+      tick(state, []);
+      for (const c of state.creatures) {
+        const p = SPECIES[c.species];
+        if ((p.landingMedium ?? p.medium) === 'water') continue; // koi graze open water
+        const target = c.activity.targetPos;
+        if (c.activity.id !== 'forage' || !target) continue;
+        // Herds ring their shared patch; everyone else scatters on their own.
+        const bound = p.herd ? HERD_FORAGE_RING + HERD_FORAGE_SPREAD : FORAGE_SPREAD;
+        expect(nearestSpotDist(target)).toBeLessThanOrEqual(bound);
+        checked++;
+      }
+    }
+    expect(checked).toBeGreaterThan(100);
+  }, 20000);
+
+  it('deer ring their shared patch instead of piling onto its centre', () => {
+    const state = bareWorld(21);
+    const deer = [];
+    for (let i = 0; i < 5; i++) {
+      const d = spawnCreature(state, 'deer', { x: 2000 + i * 40, y: 1500 }, 0.4);
+      d.sex = i % 2 === 0 ? 'm' : 'f';
+      deer.push(d);
+    }
+    state.tick = 2400 * 10 + 720;
+    const offsets: Vec2[] = [];
+    for (let t = 0; t < 300 && offsets.length < 5; t++) {
+      for (const d of deer) d.needs.hunger = 1;
+      tick(state, []);
+      if (offsets.length > 0) continue;
+      if (!deer.every((d) => d.activity.id === 'forage' && d.activity.targetPos)) continue;
+      // Same shared patch for everyone…
+      const spots = new Set(
+        deer.map((d) => {
+          const t2 = d.activity.targetPos as Vec2;
+          let best = FOOD_SPOTS[0] as (typeof FOOD_SPOTS)[number];
+          for (const s of FOOD_SPOTS) {
+            if (Math.hypot(s.x - t2.x, s.y - t2.y) < Math.hypot(best.x - t2.x, best.y - t2.y)) {
+              best = s;
+            }
+          }
+          return `${best.x},${best.y}`;
+        }),
+      );
+      expect(spots.size).toBe(1);
+      // …but each on its own arc of it, never stacked on the middle.
+      for (const d of deer) {
+        const t2 = d.activity.targetPos as Vec2;
+        offsets.push(t2);
+        expect(nearestSpotDist(t2)).toBeGreaterThan(HERD_FORAGE_RING - HERD_FORAGE_SPREAD);
+      }
+    }
+    expect(offsets.length).toBe(5);
+    let minPair = Infinity;
+    for (let a = 0; a < offsets.length; a++) {
+      for (let b = a + 1; b < offsets.length; b++) {
+        const oa = offsets[a];
+        const ob = offsets[b];
+        if (oa && ob) minPair = Math.min(minPair, Math.hypot(oa.x - ob.x, oa.y - ob.y));
+      }
+    }
+    expect(minPair).toBeGreaterThan(15);
   }, 20000);
 });

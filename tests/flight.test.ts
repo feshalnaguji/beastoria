@@ -98,4 +98,31 @@ describe('the air medium', () => {
     // …and the invariant isn't vacuous: they really do fly out over the pond.
     expect(overWaterTicks).toBeGreaterThan(0);
   }, 20000);
+
+  it('a lone owl stranded over the pond gets itself ashore instead of parking', () => {
+    // The hole this covers: a flier with NO same-species neighbour (owl floor
+    // is 2; the phoenix is routinely singular after a passing) and every
+    // reason to stop — pinned rest at midday makes 'nap' the runaway winner,
+    // and it has no partner, so the socialize fallback fires too. Stopped
+    // activities must be dropped from the running, not merely blocked.
+    const state = bareWorld(41);
+    state.tick = 2400 * 10 + 720; // midday: an owl's deepest sleep pressure
+    const owl = spawnCreature(state, 'owl', { x: POND.x, y: POND.y }, 0.4);
+    owl.activity = { id: 'idle', ticks: 0, minTicks: 80 }; // parked on open water
+    expect(isWater(owl.pos)).toBe(true);
+
+    let ashoreAt = -1;
+    for (let t = 0; t < 600; t++) {
+      // Keep it a genuine singleton: hold off the wanderer failsafe so no
+      // second owl ever arrives to be its partner.
+      state.lastWandererTick.owl = state.tick;
+      owl.needs = { hunger: 1, rest: 1, social: 1 };
+      tick(state, []);
+      if (ashoreAt < 0 && !isWater(owl.pos)) ashoreAt = t;
+      // Never at rest over the water — from the very first tick onwards.
+      if (STOPPED.has(owl.activity.id)) expect(isWater(owl.pos)).toBe(false);
+    }
+    expect(ashoreAt).toBeGreaterThanOrEqual(0);
+    expect(ashoreAt).toBeLessThan(400);
+  }, 20000);
 });

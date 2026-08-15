@@ -17,11 +17,15 @@ function phoenixes(state: WorldState) {
 
 /**
  * The grove leash (M9): an unattached phoenix that strays past GROVE_LEASH
- * (420) turns for the ancient tree. It can overshoot by at most one steering
- * arc — a few ticks at speed 7 while it comes about — so 500 is the analytic
- * hard bound, and it holds every tick rather than only at the end.
+ * (520) turns for the ancient tree, and only ever forages at grove spots
+ * (all within 471 + 24 scatter = 495 of the nest), so no meal can carry it
+ * across the leash — the line between two points inside a disc stays inside
+ * it. The only overshoot is the steering arc after the leash trips: one step
+ * (speed 7) plus the radial gain while it comes about at MAX_TURN 0.3 rad
+ * per tick, ≈ 27 ⇒ 520 + 34 ≈ 554. Bound set at 560; measured worst across
+ * 10 seeds × 12 000 ticks is 519. Holds every tick, not just at the end.
  */
-const GROVE_BOUND = 500;
+const GROVE_BOUND = 560;
 
 function distToNest(p: { x: number; y: number }): number {
   return Math.hypot(p.x - GROVE_NEST.x, p.y - GROVE_NEST.y);
@@ -56,12 +60,21 @@ describe('phoenix rebirth', () => {
     const state = createWorld(12);
     for (const p of phoenixes(state)) p.ageTicks = p.lifespanTicks - 20;
     let maxStray = 0;
+    let meals = 0;
     for (let i = 0; i < 8000; i++) {
       tick(state, []);
       for (const c of phoenixes(state)) {
-        if (c.familyId === null) maxStray = Math.max(maxStray, distToNest(c.pos));
+        if (c.familyId !== null) continue;
+        maxStray = Math.max(maxStray, distToNest(c.pos));
+        // Every meal is inside the leash (GROVE_LEASH 520 − scatter 24), so a
+        // forage errand can never trip the leash and yank the bird home.
+        if (c.activity.id === 'forage' && c.activity.targetPos) {
+          expect(distToNest(c.activity.targetPos)).toBeLessThanOrEqual(496);
+          meals++;
+        }
       }
     }
+    expect(meals).toBeGreaterThan(100); // it really does eat out there
     expect(maxStray).toBeGreaterThan(GROVE_BOUND * 0.5); // they do roam the grove…
     expect(maxStray).toBeLessThan(GROVE_BOUND); // …but never leave it
   }, 30000);

@@ -136,9 +136,11 @@ export function nearestRestable(medium: Medium, p: Vec2): Vec2 {
  * places creatures are actually seen eating.
  *
  * Deterministic authored data (like POND itself): 12 grass/berry spots just
- * inside the forest and grove edges (ellipse ×0.98) and 4 reed spots on the
- * pond's dry shore (ellipse ×1.10). Every spot is dry land inside the world
- * rect, so land, air and amphibious creatures can all reach one.
+ * inside the forest and grove edges (ellipse ×0.98), 4 reed spots on the
+ * pond's dry shore (ellipse ×1.10), and 3 open-meadow grass patches so the
+ * meadow dwellers aren't commuting to the treeline for every meal. Every
+ * spot is dry land inside the world rect, so land, air and amphibious
+ * creatures can all reach one.
  *
  * `zone` names the spot's anchor zone — for reeds that is the pond they hug,
  * even though the spot itself is (by construction) outside the water.
@@ -163,4 +165,8 @@ export const FOOD_SPOTS: readonly FoodSpot[] = [
   ...[0, 45, 90, 135].map((d) => onEllipse(GROVE, 'grove', 0.98, d)),
   // Pond shore: reeds and waterweed, just clear of the water.
   ...[0, 90, 180, 270].map((d) => onEllipse(POND, 'pond', 1.1, d)),
+  // Open meadow: clover and long grass, clear of every zone and the shore.
+  { x: 1600, y: 1900, zone: 'meadow' },
+  { x: 2500, y: 1400, zone: 'meadow' },
+  { x: 1200, y: 2300, zone: 'meadow' },
 ];

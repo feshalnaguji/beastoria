@@ -31,12 +31,34 @@ const HERD_TURN = 0.1;
 const FORAGE_CHOICES = 3;
 /** Radius of the scatter around the chosen food spot. */
 const FORAGE_SPREAD = 24;
-/** Herds share one patch, so they need more elbow room on it. */
-const HERD_FORAGE_SPREAD = 60;
-/** How far an unattached phoenix may drift from the ancient tree. */
-const GROVE_LEASH = 420;
+/** Herds share one patch: members space out along a ring on it (id-hashed). */
+const HERD_FORAGE_RING = 55;
+const HERD_FORAGE_SPREAD = 20;
+/**
+ * How far an unattached phoenix may drift from the ancient tree. Must exceed
+ * the farthest grove food spot (471) plus the forage scatter (24), or the bird
+ * would be yanked home mid-meal; `GROVE_FOOD_SPOTS` then keeps every phoenix
+ * errand inside this radius, so the leash never interrupts one.
+ */
+const GROVE_LEASH = 520;
 /** Activities in which a creature holds still — it must be able to stand there. */
 const STOPPED_ACTIVITIES = new Set<ActivityId>(['idle', 'nap']);
+
+/**
+ * The food spots an unattached phoenix is allowed to choose between: those a
+ * leashed bird can reach AND eat at without ever crossing GROVE_LEASH (the
+ * scatter is added to the spot, so the spot itself must clear the margin).
+ * A straight line between two points inside a disc stays inside it, so no
+ * phoenix forage errand can ever trip the leash.
+ */
+const GROVE_FOOD_SPOTS: readonly FoodSpot[] = FOOD_SPOTS.filter(
+  (s) => Math.hypot(s.x - GROVE_NEST.x, s.y - GROVE_NEST.y) <= GROVE_LEASH - FORAGE_SPREAD,
+);
+
+/** Can this creature come to rest exactly where it is standing? */
+function restingIsLegal(c: Creature): boolean {
+  return canOccupy(landingMediumOf(c.species), c.pos);
+}
 
 /** Centroid of same-species creatures other than `c` (herd species only call sites). */
 function herdCentroid(state: WorldState, c: Creature): Vec2 | undefined {
@@ -91,9 +113,16 @@ export function selectBehavior(state: WorldState, c: Creature, clock: Clock): vo
 
   const scores = scoreActivities(state, c, clock);
 
+  // A flier over the pond may not stop there: idling and napping never move,
+  // so settling mid-water would strand it. Stopped activities are dropped
+  // from the running entirely (rather than blocking the switch), so it picks
+  // the best MOVING activity and rests once it is back over land.
+  const canRest = restingIsLegal(c);
+
   let bestId: FreeActivityId = c.activity.id as FreeActivityId; // guarded above
   let bestScore = -Infinity;
   for (const [id, score] of Object.entries(scores) as [FreeActivityId, number][]) {
+    if (!canRest && STOPPED_ACTIVITIES.has(id)) continue;
     const adjusted = id === c.activity.id ? score + HYSTERESIS_BONUS : score;
     if (adjusted > bestScore) {
       bestScore = adjusted;
@@ -103,15 +132,16 @@ export function selectBehavior(state: WorldState, c: Creature, clock: Clock): vo
 
   if (bestId === c.activity.id) return;
 
-  // A flier over the pond may not stop there: idling and napping never move,
-  // so settling mid-water would strand it. It keeps travelling (every target
-  // is on landable ground) and rests once it's back over land.
-  if (STOPPED_ACTIVITIES.has(bestId) && !canOccupy(landingMediumOf(c.species), c.pos)) return;
-
-  // Respect the soft minimum duration unless the challenger is urgent.
+  // Respect the soft minimum duration unless the challenger is urgent — or
+  // unless the creature is stranded somewhere it cannot rest, in which case
+  // getting moving again outranks hysteresis.
   const currentScore = scores[c.activity.id as FreeActivityId] + HYSTERESIS_BONUS;
   const challengerScore = scores[bestId];
-  if (c.activity.ticks < c.activity.minTicks && challengerScore - currentScore < URGENT_MARGIN) {
+  if (
+    canRest &&
+    c.activity.ticks < c.activity.minTicks &&
+    challengerScore - currentScore < URGENT_MARGIN
+  ) {
     return;
   }
 
@@ -278,10 +308,7 @@ function startActivity(state: WorldState, c: Creature, requested: ActivityId): v
   // Safety net for the internal "…and then go idle" paths: a creature that
   // cannot rest where it stands (a flier caught over the pond) drifts on
   // instead of settling on the water. One RNG draw either way.
-  const id =
-    STOPPED_ACTIVITIES.has(requested) && !canOccupy(landingMediumOf(c.species), c.pos)
-      ? 'wander'
-      : requested;
+  const id = STOPPED_ACTIVITIES.has(requested) && !restingIsLegal(c) ? 'wander' : requested;
   const rng = state.rng;
   const activity = c.activity;
   activity.id = id;
@@ -308,7 +335,10 @@ function startActivity(state: WorldState, c: Creature, requested: ActivityId): v
       activity.minTicks = 60;
       const partner = nearestOther(state, c);
       activity.targetId = partner?.id;
-      if (!partner) activity.id = 'idle';
+      // Nobody to sit with (a lone owl, a singular phoenix): fall back through
+      // the same conversion, so a flier over the pond drifts on rather than
+      // parking on open water.
+      if (!partner) activity.id = restingIsLegal(c) ? 'idle' : 'wander';
       break;
     }
   }
@@ -340,21 +370,30 @@ function forageTarget(state: WorldState, c: Creature): Vec2 {
   }
 
   // A herd grazes together: every deer eats at the one patch nearest the
-  // herd's centre, spread wider so they share it rather than stack on it.
-  // The anchor deliberately INCLUDES the forager, so every member computes
-  // the same centre and the herd can't split between two patches.
+  // herd's centre, then takes its own place on a ring around it (id-hashed,
+  // no RNG) so they form a loose grazing arc rather than a pile. The anchor
+  // deliberately INCLUDES the forager, so every member computes the same
+  // centre and the herd can't split between two patches.
   // Solitary species choose among their own three nearest spots.
   const centroid = species.herd ? speciesCentroid(state, c) : undefined;
   const anchor = centroid ?? c.pos;
   const choices = species.herd ? 1 : FORAGE_CHOICES;
   const spread = species.herd ? HERD_FORAGE_SPREAD : FORAGE_SPREAD;
 
-  const near = nearestFoodSpots(anchor, choices);
+  // A leashed phoenix only ever eats at the grove, so no meal can pull it
+  // past its leash (see GROVE_FOOD_SPOTS).
+  const larder = leashedToGrove(c) && GROVE_FOOD_SPOTS.length > 0 ? GROVE_FOOD_SPOTS : FOOD_SPOTS;
+  const near = nearestFoodSpots(larder, anchor, choices);
   const pick = near[Math.min(near.length - 1, Math.floor(nextRange(rng, 0, near.length)))];
   if (!pick) return { x: c.pos.x, y: c.pos.y }; // unreachable: FOOD_SPOTS is non-empty
+  const ring = species.herd ? HERD_FORAGE_RING : 0;
+  const ringAngle = idOffsetAngle(c.id);
   const angle = nextRange(rng, 0, Math.PI * 2);
   const dist = nextRange(rng, 0, spread);
-  const candidate = clampToField(pick.x + Math.cos(angle) * dist, pick.y + Math.sin(angle) * dist);
+  const candidate = clampToField(
+    pick.x + Math.cos(ringAngle) * ring + Math.cos(angle) * dist,
+    pick.y + Math.sin(ringAngle) * ring + Math.sin(angle) * dist,
+  );
   return canOccupy(landing, candidate) ? candidate : { x: pick.x, y: pick.y };
 }
 
@@ -372,12 +411,10 @@ function speciesCentroid(state: WorldState, c: Creature): Vec2 | undefined {
   return n === 0 ? undefined : { x: sx / n, y: sy / n };
 }
 
-/** The `n` food spots closest to `p`, nearest first (stable, RNG-free). */
-function nearestFoodSpots(p: Vec2, n: number): FoodSpot[] {
-  return [...FOOD_SPOTS]
-    .sort(
-      (a, b) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(b.x - p.x, b.y - p.y),
-    )
+/** The `n` spots of `larder` closest to `p`, nearest first (stable, RNG-free). */
+function nearestFoodSpots(larder: readonly FoodSpot[], p: Vec2, n: number): FoodSpot[] {
+  return [...larder]
+    .sort((a, b) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(b.x - p.x, b.y - p.y))
     .slice(0, n);
 }
 
@@ -394,13 +431,18 @@ function clampToField(x: number, y: number): Vec2 {
  * grove turns for home rather than free-roaming the valley. Same draw pattern
  * as family.ts's baby leash — two draws, once per outbound trip.
  */
+/** An unattached phoenix belongs to the ancient tree. */
+function leashedToGrove(c: Creature): boolean {
+  return c.species === 'phoenix' && c.familyId === null;
+}
+
 function strayedFromGrove(c: Creature): boolean {
-  if (c.species !== 'phoenix' || c.familyId !== null) return false;
+  if (!leashedToGrove(c)) return false;
   return Math.hypot(c.pos.x - GROVE_NEST.x, c.pos.y - GROVE_NEST.y) > GROVE_LEASH;
 }
 
 function groveLeashTarget(state: WorldState, c: Creature): Vec2 | undefined {
-  if (c.species !== 'phoenix' || c.familyId !== null) return undefined;
+  if (!leashedToGrove(c)) return undefined;
   if (c.activity.targetPos) return c.activity.targetPos; // already heading home
   if (!strayedFromGrove(c)) return undefined;
   c.activity.targetPos = {

@@ -18,7 +18,7 @@ import {
   type WorldState,
 } from './state';
 import { spawnCreature } from './state';
-import { GROVE_NEST, nearestRestable } from './valley';
+import { canOccupy, GROVE_NEST, nearestRestable } from './valley';
 
 const PAIR_RANGE = 200;
 const COURT_TICKS = 300;
@@ -112,10 +112,12 @@ function removeCreature(state: WorldState, c: Creature): void {
   if (!fam) return;
   fam.parentIds = fam.parentIds.filter((id) => id !== c.id);
   fam.childIds = fam.childIds.filter((id) => id !== c.id);
-  // Release gathered mourners back to their day.
+  // Release gathered mourners back to their day — a flier that sat vigil out
+  // over the water drifts on instead of parking on it.
   for (const kin of state.creatures) {
     if (kin.familyId === c.familyId && kin.activity.id === 'gather') {
-      kin.activity = { id: 'idle', ticks: 0, minTicks: 40 };
+      const canRest = canOccupy(landingMediumOf(kin.species), kin.pos);
+      kin.activity = { id: canRest ? 'idle' : 'wander', ticks: 0, minTicks: 40 };
     }
   }
 }
