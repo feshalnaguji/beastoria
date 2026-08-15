@@ -5,7 +5,15 @@
  */
 import type { LifeStage, SpeciesId } from '../sim/state';
 
-export type ClipName = 'idle' | 'walk' | 'sleep' | 'eat' | 'social';
+/** Clips every rig must define. */
+export type CoreClipName = 'idle' | 'walk' | 'sleep' | 'eat' | 'social';
+/**
+ * Presentation-only locomotion clips a few species add on top (M9 task 4):
+ * 'flap' for the three air-medium fliers (robin/owl/phoenix), 'swim' for the
+ * amphibious duck. Optional per rig — most species never define these.
+ */
+export type ExtraClipName = 'flap' | 'swim';
+export type ClipName = CoreClipName | ExtraClipName;
 
 /** t is 0..1 across the clip; values interpolate smoothly and loop. */
 export interface Keyframe {
@@ -49,6 +57,13 @@ export interface RigPart {
   /** Draw order among siblings (zIndex). */
   z: number;
   shapes: VectorShape[];
+  /**
+   * Clip names during which this part is hidden entirely (e.g. a duck's
+   * legs while it swims) — honored by RigRenderer/Animator: the part's
+   * container is invisible whenever the currently playing clip is listed
+   * here, both for the live T2 rig and when T1 frames are baked off it.
+   */
+  hideInClips?: string[];
 }
 
 export interface StageStyle {
@@ -64,7 +79,8 @@ export interface CreatureRig {
   species: SpeciesId;
   parts: RigPart[];
   stages: Record<LifeStage, StageStyle>;
-  clips: Record<ClipName, AnimClip>;
+  /** Core clips are required; flap/swim are opt-in per species (see ExtraClipName). */
+  clips: Record<CoreClipName, AnimClip> & Partial<Record<ExtraClipName, AnimClip>>;
   /** World px traveled per full walk-cycle (ground truth for gait cadence).
    * Defaults to 30 when omitted. */
   strideLength?: number;

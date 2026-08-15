@@ -92,5 +92,15 @@ export const owlRig: CreatureRig = {
         { partId: 'wing', rot: [{ t: 0, v: 0 }, { t: 0.5, v: -0.35 }, { t: 1, v: 0 }] },
       ],
     },
+    flap: {
+      // Silent-wing owl flight — slower and steadier than the robin's hop-flap (M9 task 4).
+      durationMs: 520,
+      tracks: [
+        { partId: 'wing', rot: [{ t: 0, v: -0.9 }, { t: 0.5, v: 0.25 }, { t: 1, v: -0.9 }] },
+        { partId: 'legF', rot: [{ t: 0, v: -0.7 }, { t: 1, v: -0.7 }] },
+        { partId: 'legB', rot: [{ t: 0, v: -0.7 }, { t: 1, v: -0.7 }] },
+        { partId: 'body', py: [{ t: 0, v: 0 }, { t: 0.5, v: -2 }, { t: 1, v: 0 }] },
+      ],
+    },
   },
 };

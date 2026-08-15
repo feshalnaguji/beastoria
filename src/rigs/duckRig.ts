@@ -22,9 +22,9 @@ export const duckRig: CreatureRig = {
       ] },
     // Parented to body (was root-level); offset = old root offset minus
     // body's base offset (0, -16), so the resting pose is unchanged.
-    { id: 'legB', parent: 'body', x: -4, y: 16, z: -2,
+    { id: 'legB', parent: 'body', x: -4, y: 16, z: -2, hideInClips: ['swim'],
       shapes: [{ kind: 'line', x1: 0, y1: 0, x2: -1, y2: -9, width: 2.6, fill: { color: BILL } }] },
-    { id: 'legF', parent: 'body', x: 3, y: 16, z: -1,
+    { id: 'legF', parent: 'body', x: 3, y: 16, z: -1, hideInClips: ['swim'],
       shapes: [{ kind: 'line', x1: 0, y1: 0, x2: 1, y2: -9, width: 2.6, fill: { color: BILL } }] },
     { id: 'tail', parent: 'body', x: -16, y: -4, z: -1,
       shapes: [{ kind: 'path', d: 'M 0 2 Q -9 -1 -11 -7 Q -6 -3 -1 -3 Z', fill: { color: BROWN_DARK } }] },
@@ -91,6 +91,15 @@ export const duckRig: CreatureRig = {
       tracks: [
         { partId: 'wing', rot: [{ t: 0, v: 0 }, { t: 0.2, v: -0.5 }, { t: 0.4, v: 0 }, { t: 0.6, v: -0.5 }, { t: 0.8, v: 0 }, { t: 1, v: 0 }] },
         { partId: 'head', py: [{ t: 0, v: 0 }, { t: 0.25, v: -2 }, { t: 0.5, v: 0 }, { t: 0.75, v: -2 }, { t: 1, v: 0 }] },
+      ],
+    },
+    swim: {
+      // Floating and paddling, not walking — legs vanish (hideInClips) since
+      // they're doing their work underwater, out of sight (M9 task 4).
+      durationMs: 900,
+      tracks: [
+        { partId: 'body', py: [{ t: 0, v: 0 }, { t: 0.5, v: 2 }, { t: 1, v: 0 }] },
+        { partId: 'tail', rot: [{ t: 0, v: -0.3 }, { t: 0.5, v: 0.3 }, { t: 1, v: -0.3 }] },
       ],
     },
   },

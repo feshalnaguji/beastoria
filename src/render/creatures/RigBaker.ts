@@ -31,8 +31,10 @@ export function bakedFrame(
   const inst = buildRig(rig, stage);
   inst.animator.play(pose);
   // Advance to the requested normalized time (breathing uses wall-clock, but
-  // a single bake frame doesn't care).
-  inst.animator.update(rig.clips[pose].durationMs * poseT);
+  // a single bake frame doesn't care). Non-null: callers only bake 'flap'/
+  // 'swim' off rigs that define them (Renderer.bakeFrames gates on
+  // rig.clips.flap / rig.clips.swim before calling).
+  inst.animator.update(rig.clips[pose]!.durationMs * poseT);
   // Bake the stage's own tint (chick fluff, elder silvering) into the texture;
   // day/night grading is applied live on the sprite instead.
   for (const g of inst.tintables) g.tint = inst.stageTint;

@@ -15,6 +15,15 @@ export interface RigInstance {
   tintables: Graphics[];
   /** The stage's own tint, multiplied with grading each frame. */
   stageTint: number;
+  /**
+   * The rig's 'shadow' part — container and its drawn ellipse, looked up by
+   * id once at build time (M9 task 4: the flight-lift illusion scales/shifts
+   * this container, and a swimming duck hides the ellipse for a ripple
+   * sprite instead). Undefined only if a rig omits a 'shadow' part (none do
+   * today).
+   */
+  shadow?: Container | undefined;
+  shadowGraphic?: Graphics | undefined;
 }
 
 export function buildRig(rig: CreatureRig, stage: LifeStage): RigInstance {
@@ -25,6 +34,8 @@ export function buildRig(rig: CreatureRig, stage: LifeStage): RigInstance {
 
   const containers = new Map<string, Container>();
   const tintables: Graphics[] = [];
+  let shadow: Container | undefined;
+  let shadowGraphic: Graphics | undefined;
 
   for (const part of rig.parts) {
     const node = new Container();
@@ -40,6 +51,10 @@ export function buildRig(rig: CreatureRig, stage: LifeStage): RigInstance {
     drawShapes(g, part.shapes);
     node.addChild(g);
     tintables.push(g);
+    if (part.id === 'shadow') {
+      shadow = node;
+      shadowGraphic = g;
+    }
 
     containers.set(part.id, node);
     const parent = part.parent ? containers.get(part.parent) : undefined;
@@ -51,6 +66,8 @@ export function buildRig(rig: CreatureRig, stage: LifeStage): RigInstance {
     animator: new Animator(rig, containers),
     tintables,
     stageTint: style.tint ?? 0xffffff,
+    shadow,
+    shadowGraphic,
   };
 }
 

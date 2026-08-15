@@ -255,5 +255,41 @@ export const robinRig: CreatureRig = {
         },
       ],
     },
+    flap: {
+      // Calm wing-beat locomotion (M9 task 4) — not a frantic flutter.
+      durationMs: 420,
+      tracks: [
+        {
+          partId: 'wing',
+          rot: [
+            { t: 0, v: -0.9 },
+            { t: 0.5, v: 0.25 },
+            { t: 1, v: -0.9 },
+          ],
+        },
+        {
+          partId: 'legF',
+          rot: [
+            { t: 0, v: -0.7 },
+            { t: 1, v: -0.7 },
+          ],
+        },
+        {
+          partId: 'legB',
+          rot: [
+            { t: 0, v: -0.7 },
+            { t: 1, v: -0.7 },
+          ],
+        },
+        {
+          partId: 'body',
+          py: [
+            { t: 0, v: 0 },
+            { t: 0.5, v: -2 },
+            { t: 1, v: 0 },
+          ],
+        },
+      ],
+    },
   },
 };

@@ -32,9 +32,25 @@ export class Animator {
   play(name: ClipName): void {
     if (name === this.clipName) return;
     this.clipName = name;
-    this.clip = this.rig.clips[name];
+    // Non-null: callers only ever request 'flap'/'swim' for rigs that define
+    // them (Renderer's airborne/swimming inference is species-gated), so the
+    // optional extra-clip slots are always populated when actually reached.
+    this.clip = this.rig.clips[name]!;
     this.timeMs = 0;
     this.resetPose();
+    this.applyClipVisibility(name);
+  }
+
+  /** Parts with `hideInClips` (e.g. a duck's legs while it swims) vanish for
+   * exactly the clips that list them — set once per clip switch, not per
+   * frame, and honored equally by the live T2 rig and T1's baked frames
+   * (bakedFrame() calls play() before sampling a pose). */
+  private applyClipVisibility(name: ClipName): void {
+    for (const part of this.rig.parts) {
+      if (!part.hideInClips) continue;
+      const node = this.parts.get(part.id);
+      if (node) node.visible = !part.hideInClips.includes(name);
+    }
   }
 
   update(dtMs: number): void {

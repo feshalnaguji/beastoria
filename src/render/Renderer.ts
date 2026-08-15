@@ -3,8 +3,9 @@
  * M3: the rig pipeline — live skeletal rigs at close zoom (T2), baked sprite
  * frames at mid/world zoom (T1/T0), life-stage proportions, day/night grading.
  */
-import { Application, Container, Graphics, Sprite, Text } from 'pixi.js';
+import { Application, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
 import { getClock, TICKS_PER_DAY, type Clock } from '../sim/clock';
+import { SPECIES, speedFor } from '../sim/species';
 import {
   WORLD_HEIGHT,
   WORLD_WIDTH,
@@ -14,6 +15,7 @@ import {
   type Vec2,
   type WorldState,
 } from '../sim/state';
+import { isWater } from '../sim/valley';
 import type { ClipName, CreatureRig } from '../rigs/format';
 import { ALL_RIGS } from '../rigs/allRigs';
 import { Camera } from './Camera';
@@ -45,7 +47,7 @@ interface CreatureView {
   rig: RigInstance;
   spriteWrap: Container;
   sprite: Sprite;
-  frames: { idle: BakedFrame; walk: BakedFrame[] };
+  frames: { idle: BakedFrame; walk: BakedFrame[]; flap?: BakedFrame[]; swim?: BakedFrame[] };
   label: Text;
   species: SpeciesId;
   stage: LifeStage;
@@ -62,14 +64,43 @@ interface CreatureView {
    * displacement into the odometer above. */
   lastX: number;
   lastY: number;
+  /** Eased 0 (grounded) .. 1 (airborne) progress toward the flight-lift pose
+   * (M9 task 4). Stays at 0 for every non-air-medium species — only
+   * mutated when this view's species can fly. */
+  liftT: number;
+  /** The rig's 'shadow' part's authored local y-offset (constant across
+   * stages), cached once so the lift illusion doesn't re-scan rig.parts
+   * every frame. */
+  shadowBaseY: number;
+  /** Duck-only: a baked ripple sprite nested in the rig's shadow container,
+   * shown instead of the shadow ellipse while swimming. Undefined for every
+   * other species. */
+  rippleSprite?: Sprite | undefined;
 }
 
 /** Baked walk frames per species (Step 1: symmetric 3-key clips sample
  * identically at t=0.25/0.75, so two "alternating" frames were pixel-twins
  * for 7 of 8 species — sampling off the symmetry points fixes it). */
 const N_WALK_FRAMES = 6;
+/** T1 flap frames baked at poseT 0 and 0.5 (Step 1 of the brief). */
+const N_FLAP_FRAMES = 2;
 /** Fallback world px per walk cycle when a rig omits strideLength. */
 const DEFAULT_STRIDE_LENGTH = 30;
+
+/** Render-only inference (no sim field): an air-medium species reads as
+ * "airborne" once it's covering ground at a real clip — this fraction of
+ * its own top speed — filtering out the tiny idle/breathing sway so a
+ * standing robin never flickers into a wing-beat. */
+const AIRBORNE_SPEED_FRACTION = 0.6;
+/** Takeoff/landing ease: the body lift and shadow scale/offset ramp over
+ * this many ms in both directions, so neither ever pops. */
+const LIFT_EASE_MS = 400;
+const LIFT_MAX_PX = 12;
+const SHADOW_AIRBORNE_OFFSET_PX = 8;
+const SHADOW_AIRBORNE_SCALE = 0.6;
+/** Duck swim ripple: gentle scale pulse period. */
+const RIPPLE_PULSE_MS = 2400;
+const RIPPLE_PULSE_AMPLITUDE = 0.15;
 
 function clamp(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
@@ -125,6 +156,11 @@ export class Renderer {
   private views = new Map<number, CreatureView>();
   private clock: Clock = getClock(0);
   private lastFrameTime = 0;
+  /** Baked once (Ambient's bake-once pattern): a duck's swim ripple. */
+  private rippleTexture!: Texture;
+  /** Reused every frame's swimming check — avoids allocating a Vec2 literal
+   * per creature per frame just to call isWater(). */
+  private readonly scratchPos: Vec2 = { x: 0, y: 0 };
 
   /** Show per-creature activity labels (toggled from the DevPanel). */
   debugLabels = true;
@@ -181,6 +217,7 @@ export class Renderer {
       this.homeLabelLayer,
     );
     this.ambient.build(this.app.renderer);
+    this.rippleTexture = this.bakeRippleTexture();
 
     // Screen-space ambience: warm additive glow (dawn/dusk) + night wash.
     this.glowOverlay = new Graphics();
@@ -442,8 +479,33 @@ export class Renderer {
     for (const view of this.views.values()) {
       const x = view.prev.x + (view.curr.x - view.prev.x) * alpha;
       const y = view.prev.y + (view.curr.y - view.prev.y) * alpha;
-      const moving = Math.hypot(view.curr.x - view.prev.x, view.curr.y - view.prev.y) > 0.5;
-      view.node.position.set(x, y);
+      const tickDisp = Math.hypot(view.curr.x - view.prev.x, view.curr.y - view.prev.y);
+      const moving = tickDisp > 0.5;
+
+      // Render-only presentation inference (no sim field — M9 task 4): an
+      // air-medium species reads as "airborne" once its per-tick
+      // displacement is a real fraction of its own top speed (filters out
+      // idle sway); an amphibious species reads as "swimming" straight off
+      // the interpolated position via the sim's own isWater geometry.
+      const speciesParams = SPECIES[view.species];
+      const airborneNow =
+        speciesParams.medium === 'air' &&
+        moving &&
+        tickDisp >= AIRBORNE_SPEED_FRACTION * speedFor(view.species, view.stage);
+      this.scratchPos.x = x;
+      this.scratchPos.y = y;
+      const swimming = speciesParams.medium === 'amphibious' && isWater(this.scratchPos);
+
+      // Ease the flight lift toward its target over LIFT_EASE_MS, both ways,
+      // so takeoff/landing never pop. Stays pinned at 0 for every species
+      // that never goes airborne (liftTarget is always 0 for them).
+      const liftTarget = airborneNow ? 1 : 0;
+      if (view.liftT < liftTarget) view.liftT = Math.min(liftTarget, view.liftT + dtMs / LIFT_EASE_MS);
+      else if (view.liftT > liftTarget) view.liftT = Math.max(liftTarget, view.liftT - dtMs / LIFT_EASE_MS);
+      const liftEase = view.liftT * view.liftT * (3 - 2 * view.liftT); // smoothstep, matches Animator's sample()
+      const liftPx = tier === 2 ? -LIFT_MAX_PX * liftEase : 0; // only the live T2 rig actually lifts
+
+      view.node.position.set(x, y + liftPx);
       const facingLeft = Math.cos(view.heading) < 0;
       view.node.scale.x = facingLeft ? -1 : 1;
       // A passing elder softens — the gentlest farewell.
@@ -464,7 +526,7 @@ export class Renderer {
       if (tier === 2) {
         view.rig.root.visible = true;
         view.spriteWrap.visible = false;
-        const clip = clipFor(view.activityId, moving);
+        const clip = clipFor(view.activityId, moving, airborneNow, swimming);
         view.rig.animator.play(clip);
         let rate = 1;
         if (clip === 'walk' && dtMs > 0) {
@@ -474,12 +536,42 @@ export class Renderer {
         view.rig.animator.update(dtMs * rate);
         const tint = multiplyTints(view.rig.stageTint, grade);
         for (const g of view.rig.tintables) g.tint = tint;
+
+        // Flight-lift shadow illusion: the same eased progress that lifted
+        // the body above scales/drops the shadow, so it visibly detaches
+        // and reattaches with the body instead of snapping.
+        if (view.rig.shadow) {
+          view.rig.shadow.scale.set(1 - (1 - SHADOW_AIRBORNE_SCALE) * liftEase);
+          view.rig.shadow.position.y = view.shadowBaseY + SHADOW_AIRBORNE_OFFSET_PX * liftEase;
+        }
+
+        // Duck swim: the shadow ellipse hands off to a baked ripple sprite
+        // (already nested in the same container) with a gentle scale pulse.
+        if (view.rippleSprite) {
+          view.rippleSprite.visible = swimming;
+          if (view.rig.shadowGraphic) view.rig.shadowGraphic.visible = !swimming;
+          if (swimming) {
+            const pulse = 1 + RIPPLE_PULSE_AMPLITUDE * Math.sin((now / RIPPLE_PULSE_MS) * Math.PI * 2);
+            view.rippleSprite.scale.set(pulse);
+          }
+        }
       } else {
         view.rig.root.visible = false;
         view.spriteWrap.visible = true;
-        // T1 flipbook: distance-driven frame pick while moving; T0 stays static.
-        const frameIndex = Math.floor((view.odometer / stride) * N_WALK_FRAMES) % N_WALK_FRAMES;
-        const frame = moving && tier === 1 ? view.frames.walk[frameIndex]! : view.frames.idle;
+        // T1 flipbook: distance-driven frame pick, same airborne/swimming
+        // inference as T2. T0 (tier 0) always stays on the static idle bake.
+        let frame = view.frames.idle;
+        if (tier === 1) {
+          if (airborneNow && view.frames.flap) {
+            const flapIdx = Math.floor((view.odometer / stride) * N_FLAP_FRAMES) % N_FLAP_FRAMES;
+            frame = view.frames.flap[flapIdx] ?? view.frames.idle;
+          } else if (swimming && view.frames.swim) {
+            frame = view.frames.swim[0] ?? view.frames.idle;
+          } else if (moving) {
+            const frameIndex = Math.floor((view.odometer / stride) * N_WALK_FRAMES) % N_WALK_FRAMES;
+            frame = view.frames.walk[frameIndex] ?? view.frames.idle;
+          }
+        }
         view.sprite.texture = frame.texture;
         view.sprite.position.set(frame.bx, frame.by);
         view.sprite.tint = grade;
@@ -530,6 +622,16 @@ export class Renderer {
     spriteWrap.addChild(sprite);
     node.addChild(rig.root, spriteWrap);
 
+    // Duck-only: a ripple sprite nested in the shadow container, hidden
+    // until this duck is swimming (M9 task 4).
+    let rippleSprite: Sprite | undefined;
+    if (c.species === 'duck') {
+      rippleSprite = new Sprite(this.rippleTexture);
+      rippleSprite.anchor.set(0.5);
+      rippleSprite.visible = false;
+      rig.shadow?.addChild(rippleSprite);
+    }
+
     const label = new Text({
       text: '',
       style: {
@@ -559,6 +661,9 @@ export class Renderer {
       odometer: 0,
       lastX: c.pos.x,
       lastY: c.pos.y,
+      liftT: 0,
+      shadowBaseY: rigFor(c.species).parts.find((p) => p.id === 'shadow')?.y ?? 0,
+      rippleSprite,
     };
     this.positionLabel(view);
     return view;
@@ -567,9 +672,14 @@ export class Renderer {
   /** Swap rig + baked frames when a creature grows into its next stage. */
   private applyStage(view: CreatureView, stage: LifeStage): void {
     view.stage = stage;
+    // Detach the persistent ripple sprite before the old rig tree is
+    // destroyed (destroy({children:true}) would take it down too), then
+    // reattach to the freshly built shadow container.
+    if (view.rippleSprite) view.rig.shadow?.removeChild(view.rippleSprite);
     view.rig.root.destroy({ children: true });
     view.rig = buildRig(rigFor(view.species), stage);
     view.node.addChildAt(view.rig.root, 0);
+    if (view.rippleSprite) view.rig.shadow?.addChild(view.rippleSprite);
     view.frames = this.bakeFrames(view.species, stage);
     this.positionLabel(view);
   }
@@ -585,10 +695,32 @@ export class Renderer {
     for (let k = 0; k < N_WALK_FRAMES; k++) {
       walk.push(bakedFrame(this.app.renderer, rig, stage, 'walk', k / N_WALK_FRAMES));
     }
-    return {
+    const frames: CreatureView['frames'] = {
       idle: bakedFrame(this.app.renderer, rig, stage, 'idle', 0),
       walk,
     };
+    // Only rigs that define 'flap'/'swim' get the extra bakes (M9 task 4) —
+    // rig.clips.flap/.swim is undefined for every other species/clip pair.
+    if (rig.clips.flap) {
+      frames.flap = [0, 0.5].map((t) => bakedFrame(this.app.renderer, rig, stage, 'flap', t));
+    }
+    if (rig.clips.swim) {
+      frames.swim = [bakedFrame(this.app.renderer, rig, stage, 'swim', 0)];
+    }
+    return frames;
+  }
+
+  /** One 24×10 ripple ellipse, baked once and reused by every swimming duck
+   * (Ambient's bake-once pattern) — replaces the shadow while afloat. */
+  private bakeRippleTexture(): Texture {
+    const g = new Graphics().ellipse(12, 5, 12, 5).fill({ color: 0xdff3f5, alpha: 0.25 });
+    const texture = this.app.renderer.generateTexture({
+      target: g,
+      frame: new Rectangle(0, 0, 24, 10),
+      resolution: 1,
+    });
+    g.destroy(true);
+    return texture;
   }
 
   private positionLabel(view: CreatureView): void {
@@ -626,9 +758,16 @@ export class Renderer {
   }
 }
 
-/** Choose an animation clip from sim activity + motion. */
-function clipFor(activityId: string, moving: boolean): ClipName {
-  if (activityId === 'nap' || activityId === 'brood' || activityId === 'pass') return 'sleep';
+/** Choose an animation clip from sim activity + motion + the render-only
+ * airborne/swimming presentation inference (M9 task 4). `pass` wins over
+ * everything else — a passing elder is always at rest, per Task 3's
+ * nearestRestable() landing guarantee — airborne/swimming come next, then
+ * the pre-existing activity-driven branches, unchanged. */
+function clipFor(activityId: string, moving: boolean, airborne: boolean, swimming: boolean): ClipName {
+  if (activityId === 'pass') return 'sleep';
+  if (airborne) return 'flap';
+  if (swimming) return 'swim';
+  if (activityId === 'nap' || activityId === 'brood') return 'sleep';
   if (moving) return 'walk';
   if (activityId === 'forage' || activityId === 'feedYoung') return 'eat';
   if (activityId === 'socialize' || activityId === 'court') return 'social';

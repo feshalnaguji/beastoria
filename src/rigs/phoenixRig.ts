@@ -107,5 +107,15 @@ export const phoenixRig: CreatureRig = {
         { partId: 'head', py: [{ t: 0, v: 0 }, { t: 0.3, v: -2 }, { t: 0.6, v: 0 }, { t: 1, v: 0 }] },
       ],
     },
+    flap: {
+      // Statelier still than the owl — a slow, gliding beat (M9 task 4).
+      durationMs: 640,
+      tracks: [
+        { partId: 'wing', rot: [{ t: 0, v: -0.9 }, { t: 0.5, v: 0.25 }, { t: 1, v: -0.9 }] },
+        { partId: 'legF', rot: [{ t: 0, v: -0.7 }, { t: 1, v: -0.7 }] },
+        { partId: 'legB', rot: [{ t: 0, v: -0.7 }, { t: 1, v: -0.7 }] },
+        { partId: 'body', py: [{ t: 0, v: 0 }, { t: 0.5, v: -2 }, { t: 1, v: 0 }] },
+      ],
+    },
   },
 };
