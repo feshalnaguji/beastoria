@@ -40,6 +40,7 @@ function rigFor(species: SpeciesId): CreatureRig {
 }
 
 interface CreatureView {
+  id: number;
   node: Container; // world-positioned, flip container
   rig: RigInstance;
   spriteWrap: Container;
@@ -53,6 +54,11 @@ interface CreatureView {
   heading: number;
   activityId: string;
 }
+
+/** Activity labels this close to a home carrying a family label are hidden
+ * (at zoom < 1.5) — the family label wins, per M5 declutter carry-forward. */
+const HOME_LABEL_HIDE_RADIUS = 55;
+const HOME_LABEL_HIDE_ZOOM = 1.5;
 
 /** Roughly the crown of each species' rig, for label placement. */
 const LABEL_HEIGHT: Record<SpeciesId, number> = {
@@ -90,6 +96,9 @@ export class Renderer {
   private memorialLayer!: Graphics;
   private homeLabelLayer!: Container;
   private homeLabels = new Map<number, Text>();
+  /** Home positions (not label positions) for homes with an active family
+   * label, kept alongside homeLabels for the activity-label declutter check. */
+  private homeLabelPos = new Map<number, Vec2>();
   private nightOverlay!: Graphics;
   private glowOverlay!: Graphics;
   private ambient!: AmbientEffects;
@@ -347,11 +356,13 @@ export class Renderer {
       }
       label.text = `The ${familyName(fam.id)} family`;
       label.position.set(home.pos.x, home.pos.y - 34);
+      this.homeLabelPos.set(home.id, home.pos);
     }
     for (const [homeId, label] of this.homeLabels) {
       if (!claimed.has(homeId)) {
         label.destroy();
         this.homeLabels.delete(homeId);
+        this.homeLabelPos.delete(homeId);
       }
     }
   }
@@ -397,7 +408,8 @@ export class Renderer {
     const dtMs = this.lastFrameTime === 0 ? 16 : Math.min(now - this.lastFrameTime, 100);
     this.lastFrameTime = now;
 
-    const tier = lodTier(this.camera.getZoom());
+    const zoom = this.camera.getZoom();
+    const tier = lodTier(zoom);
     const grade = rampColor(TINT_RAMP, this.clock.dayT);
 
     for (const view of this.views.values()) {
@@ -433,6 +445,15 @@ export class Renderer {
       }
 
       view.label.visible = this.debugLabels && tier === 2;
+      if (view.label.visible && zoom < HOME_LABEL_HIDE_ZOOM) {
+        // Family label wins: don't stack an activity label on top of it.
+        for (const pos of this.homeLabelPos.values()) {
+          if (Math.hypot(view.curr.x - pos.x, view.curr.y - pos.y) < HOME_LABEL_HIDE_RADIUS) {
+            view.label.visible = false;
+            break;
+          }
+        }
+      }
       if (view.label.visible) {
         view.label.text = view.activityId === 'nap' ? 'nap 💤' : view.activityId;
         view.label.scale.x = facingLeft ? -1 : 1;
@@ -474,6 +495,7 @@ export class Renderer {
     node.addChild(label);
 
     const view: CreatureView = {
+      id: c.id,
       node,
       rig,
       spriteWrap,
@@ -512,7 +534,10 @@ export class Renderer {
 
   private positionLabel(view: CreatureView): void {
     const scale = rigFor(view.species).stages[view.stage].scale;
-    view.label.position.set(0, LABEL_HEIGHT[view.species] * scale);
+    // Stagger by id so clustered creatures' activity labels (T2 only —
+    // label.visible gates on tier === 2) don't stack on the same line.
+    const stagger = ((view.id % 3) - 1) * 13;
+    view.label.position.set(0, LABEL_HEIGHT[view.species] * scale + stagger);
   }
 
   /** Golden-hour glow + deep-night wash (screen space). */
