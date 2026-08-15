@@ -80,10 +80,19 @@ v1 (two open tabs overwrite each other's timeline harmlessly).
   scheduler, HUD sound chip, LICENSES.md provenance gate), M7 (persistence: versioned
   idb saves + migration chain + frozen fixture, autosave 30s/hidden/pagehide,
   quarter-speed catch-up capped 2 game-days under overlay, welcome-back card, dev
-  reset)
-- **Next: M8 — polish** (grass sway/water shimmer/fireflies/dappled light, HUD clock,
-  DPR cap, real-device perf pass, M5 review carry-forwards in
-  docs/superpowers/reviews/2026-08-14-m5-visual-review.md, final deploy; spec §6).
+  reset), M8 (polish: de-clump steering narrowed to nest-gather ring, memorial
+  lifecycle — 2-day prune + age fade, ambient effects — grass sway/water
+  shimmer/dappled light/fireflies, HUD clock + sound-chip a11y + dynamic min-zoom
+  world edge, label declutter, DPR/bundle verification — bundle delta +39.29 kB,
+  under the 50 kB target)
+- **Status: v1 COMPLETE — Pure Living Terrarium shipped.** Next: v2 Caretaker World
+  (only after the user decides to proceed; feeding, care, unlocking families).
+- **Awaiting user review:** real-browser FPS check (automated environment was
+  software-rendered — untrustworthy), ambient-effects subtlety glance, the parked
+  socialize/court de-clump ring (recoverable at commit 8835c73), and the open
+  CC-BY-SA audio licensing decision (5 sources are CC-BY-SA vs. this file's
+  "CC0/CC-BY/PD" letter — user chooses: bless CC-BY-SA in the constraint text, or
+  swap those sources).
 - Live: https://feshalnaguji.github.io/beastoria/ · repo: feshalnaguji/beastoria
   (GitHub Pages auto-deploys main; CI runs tests+build)
 
