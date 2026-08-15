@@ -52,7 +52,7 @@ async function start(): Promise<void> {
   const scheduler = new CallScheduler(audio);
   void audio.preload();
   window.addEventListener('pointerdown', () => audio.unlock(), { once: true });
-  new Hud(audio);
+  const hud = new Hud(audio);
 
   // Offline catch-up (spec §4.6): drain owed ticks under a dawn overlay before
   // the live loop starts, so vocalizations from unobserved ticks stay unheard
@@ -89,11 +89,13 @@ async function start(): Promise<void> {
     () => {
       const out = tick(state, []);
       renderer.sync(state);
-      const mix = computeMix(getClock(state.tick), renderer.viewInfo(), state);
+      const clock = getClock(state.tick);
+      const mix = computeMix(clock, renderer.viewInfo(), state);
       for (const [bed, gain] of Object.entries(mix.beds) as [BedName, number][]) {
         audio.setBedTarget(bed, gain);
       }
       scheduler.onTick(out.vocalizations, mix, performance.now());
+      hud.setClock(clock);
 
       ticksSinceSave++;
       if (ticksSinceSave >= AUTOSAVE_INTERVAL_TICKS) {

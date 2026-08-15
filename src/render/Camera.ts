@@ -5,7 +5,9 @@
 import type { Container } from 'pixi.js';
 import { WORLD_HEIGHT, WORLD_WIDTH } from '../sim/state';
 
-const MIN_ZOOM = 0.15;
+// Fallback only, used before the canvas has laid out (clientWidth/Height == 0).
+// The real floor is computed dynamically per frame from the viewport — see minZoom().
+const MIN_ZOOM_FALLBACK = 0.15;
 const MAX_ZOOM = 3.0;
 const DAMPING = 0.18; // fraction of remaining distance per frame
 
@@ -35,7 +37,20 @@ export class Camera {
   centerOn(x: number, y: number, zoom?: number): void {
     this.targetX = x;
     this.targetY = y;
-    if (zoom !== undefined) this.targetZoom = clamp(zoom, MIN_ZOOM, MAX_ZOOM);
+    if (zoom !== undefined) this.targetZoom = clamp(zoom, this.minZoom(), MAX_ZOOM);
+  }
+
+  /**
+   * Lowest zoom that still keeps the world covering the full viewport (no
+   * background exposed past the world edge). Recomputed from the canvas's
+   * current size, so it tracks window resizes and device rotation without a
+   * separate resize listener — update() runs every rendered frame anyway.
+   */
+  private minZoom(): number {
+    const cw = this.canvas.clientWidth;
+    const ch = this.canvas.clientHeight;
+    if (cw <= 0 || ch <= 0) return MIN_ZOOM_FALLBACK;
+    return Math.max(cw / WORLD_WIDTH, ch / WORLD_HEIGHT);
   }
 
   /** Convert screen (client) coordinates to world coordinates. */
@@ -69,6 +84,9 @@ export class Camera {
     const margin = 200;
     this.targetX = clamp(this.targetX, -margin, WORLD_WIDTH + margin);
     this.targetY = clamp(this.targetY, -margin, WORLD_HEIGHT + margin);
+    // Re-clamp zoom every frame too: a resize/rotation can raise the min-zoom
+    // floor above whatever zoom was previously in effect.
+    this.targetZoom = clamp(this.targetZoom, this.minZoom(), MAX_ZOOM);
   }
 
   private onPointerDown = (e: PointerEvent): void => {
@@ -96,7 +114,7 @@ export class Camera {
       if (!a || !b) return;
       const dist = Math.hypot(a.x - b.x, a.y - b.y);
       if (this.lastPinchDist !== null && this.lastPinchDist > 0) {
-        this.targetZoom = clamp(this.targetZoom * (dist / this.lastPinchDist), MIN_ZOOM, MAX_ZOOM);
+        this.targetZoom = clamp(this.targetZoom * (dist / this.lastPinchDist), this.minZoom(), MAX_ZOOM);
       }
       this.lastPinchDist = dist;
     }
@@ -110,7 +128,7 @@ export class Camera {
   private onWheel = (e: WheelEvent): void => {
     e.preventDefault();
     const factor = Math.exp(-e.deltaY * 0.0015);
-    const newZoom = clamp(this.targetZoom * factor, MIN_ZOOM, MAX_ZOOM);
+    const newZoom = clamp(this.targetZoom * factor, this.minZoom(), MAX_ZOOM);
 
     // Zoom toward the cursor: keep the world point under it stationary.
     const rect = this.canvas.getBoundingClientRect();
