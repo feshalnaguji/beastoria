@@ -7,6 +7,7 @@
  * back to 'idle' when the duty ends.
  */
 import { idOffsetAngle } from './behaviors';
+import { TICKS_PER_DAY } from './clock';
 import { emit } from './events';
 import { nextRange } from './rng';
 import { SPECIES } from './species';
@@ -27,12 +28,14 @@ const FEED_TRIGGER_HUNGER = 0.5;
 const BABY_LEASH = 140;
 const PASS_GATHER_TICKS = 200;
 const PASS_GATHER_RANGE = 700;
+const MEMORIAL_TICKS = 2 * TICKS_PER_DAY;
 
 export function familySystem(state: WorldState): void {
   handlePassings(state);
   formPairs(state);
   for (const fam of state.families) stepFamily(state, fam);
   cleanupFamilies(state);
+  state.memorials = state.memorials.filter((m) => state.tick - m.tick < MEMORIAL_TICKS);
 }
 
 /* ------------------------------ passing ------------------------------ */

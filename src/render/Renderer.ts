@@ -4,7 +4,7 @@
  * frames at mid/world zoom (T1/T0), life-stage proportions, day/night grading.
  */
 import { Application, Container, Graphics, Sprite, Text } from 'pixi.js';
-import { getClock, type Clock } from '../sim/clock';
+import { getClock, TICKS_PER_DAY, type Clock } from '../sim/clock';
 import {
   WORLD_HEIGHT,
   WORLD_WIDTH,
@@ -28,6 +28,8 @@ const RIGS: Partial<Record<SpeciesId, CreatureRig>> = Object.fromEntries(
 );
 
 const FALLBACK_RIG = ALL_RIGS[0] as CreatureRig;
+/** Matches src/sim/family.ts MEMORIAL_TICKS — memorials linger two game-days. */
+const MEMORIAL_TICKS = 2 * TICKS_PER_DAY;
 
 function rigFor(species: SpeciesId): CreatureRig {
   return RIGS[species] ?? FALLBACK_RIG;
@@ -346,6 +348,9 @@ export class Renderer {
   private syncMemorials(state: WorldState): void {
     const g = this.memorialLayer.clear();
     for (const m of state.memorials) {
+      // Bloom fresh, linger, then fade back into the meadow as they age.
+      const age = state.tick - m.tick;
+      const fade = Math.max(0.15, 1 - age / MEMORIAL_TICKS);
       if (m.species === 'phoenix') {
         // Soft embers, not flowers — the site of a rebirth.
         for (let i = 0; i < 6; i++) {
@@ -353,10 +358,10 @@ export class Renderer {
           const r = 5 + ((m.tick + i * 29) % 10);
           g.circle(m.pos.x + Math.cos(a) * r, m.pos.y + Math.sin(a) * r * 0.7, 2.4).fill({
             color: i % 2 === 0 ? 0xf4d03f : 0xd96b35,
-            alpha: 0.85,
+            alpha: 0.85 * fade,
           });
         }
-        g.circle(m.pos.x, m.pos.y, 3).fill({ color: 0xffdda6, alpha: 0.9 });
+        g.circle(m.pos.x, m.pos.y, 3).fill({ color: 0xffdda6, alpha: 0.9 * fade });
         continue;
       }
       const petals = [0xf2d8e4, 0xfdf6b8, 0xe8eef5, 0xf4cddd];
@@ -367,10 +372,10 @@ export class Renderer {
         const color = petals[(m.tick + i) % petals.length] ?? 0xf2d8e4;
         g.circle(m.pos.x + Math.cos(a) * r, m.pos.y + Math.sin(a) * r * 0.7, 3.2).fill({
           color,
-          alpha: 0.95,
+          alpha: 0.95 * fade,
         });
       }
-      g.circle(m.pos.x, m.pos.y, 2.6).fill({ color: 0xfdf6b8, alpha: 0.9 });
+      g.circle(m.pos.x, m.pos.y, 2.6).fill({ color: 0xfdf6b8, alpha: 0.9 * fade });
     }
   }
 
