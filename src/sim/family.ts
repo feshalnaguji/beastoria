@@ -292,6 +292,8 @@ function stepFamily(state: WorldState, fam: Family): void {
     }
 
     case 'rearing': {
+      const rep = SPECIES[fam.species].reproduction;
+      const feedMode = rep.feedMode;
       const home = homeOf(state, fam);
       const children = fam.childIds
         .map((id) => state.creatures.find((c) => c.id === id))
@@ -304,19 +306,28 @@ function stepFamily(state: WorldState, fam: Family): void {
         break;
       }
 
-      // Babies stay near the home.
-      if (home) {
+      // Babies stay near the home — EXCEPT while a nurse hold is active
+      // (mother in feedYoung step 1), when the leash's anchor becomes her
+      // position instead: same leash mechanism (distance check + gather
+      // target), just a different point, so babies visibly gather to nurse
+      // rather than merely tolerating her being elsewhere in the yard.
+      const nurseHolder =
+        feedMode === 'nurse'
+          ? parents.find((p) => p.activity.id === 'feedYoung' && p.activity.step === 1)
+          : undefined;
+      const leashAnchor = nurseHolder?.pos ?? home?.pos;
+      if (leashAnchor) {
         for (const child of children) {
           if (child.stage !== 'baby') continue;
-          const d = Math.hypot(child.pos.x - home.pos.x, child.pos.y - home.pos.y);
+          const d = Math.hypot(child.pos.x - leashAnchor.x, child.pos.y - leashAnchor.y);
           if (d > BABY_LEASH && child.activity.id !== 'gather') {
             child.activity = {
               id: 'gather',
               ticks: 0,
               minTicks: 30,
               targetPos: {
-                x: home.pos.x + nextRange(state.rng, -40, 40),
-                y: home.pos.y + nextRange(state.rng, -30, 30),
+                x: leashAnchor.x + nextRange(state.rng, -40, 40),
+                y: leashAnchor.y + nextRange(state.rng, -30, 30),
               },
             };
           }
@@ -326,7 +337,6 @@ function stepFamily(state: WorldState, fam: Family): void {
       // Feeding: when a baby is hungry, the duty parent fetches food — except
       // 'self' species (koi fry etc.), which are never fed by a parent at
       // all; they graze passively instead (decayNeeds, behaviors.ts).
-      const feedMode = SPECIES[fam.species].reproduction.feedMode;
       if (feedMode !== 'self') {
         const hungryBaby = children.some(
           (c) => c.stage === 'baby' && c.needs.hunger > FEED_TRIGGER_HUNGER,
@@ -334,12 +344,17 @@ function stepFamily(state: WorldState, fam: Family): void {
         const feeding = parents.some((p) => p.activity.id === 'feedYoung');
         if (home && hungryBaby && !feeding) {
           let feeder: Creature | undefined;
-          if (feedMode === 'nurse') {
-            // The mother always nurses — no duty rotation to hand off.
-            feeder = parents.find((p) => p.sex === 'f') ?? parents[0];
-          } else {
-            fam.dutyParent = (fam.dutyParent + 1) % Math.max(1, parents.length);
-            feeder = parents[fam.dutyParent % parents.length];
+          switch (feedMode) {
+            case 'nurse':
+              // The mother always nurses — no duty rotation to hand off.
+              feeder = parents.find((p) => p.sex === 'f') ?? parents[0];
+              break;
+            case 'carry':
+              fam.dutyParent = (fam.dutyParent + 1) % Math.max(1, parents.length);
+              feeder = parents[fam.dutyParent % parents.length];
+              break;
+            default:
+              assertNever(feedMode);
           }
           if (feeder) {
             overrideActivity(feeder, {
@@ -435,6 +450,15 @@ function headroom(state: WorldState, species: Creature['species']): number {
 }
 
 /* ------------------------------ helpers ------------------------------ */
+
+/**
+ * Exhaustiveness guard for feedMode dispatch (mirrors behaviors.ts's): a
+ * compile error here means a new feedMode value needs a case above; a
+ * runtime throw means some invariant broke.
+ */
+function assertNever(x: never): never {
+  throw new Error(`unreachable feedMode: ${JSON.stringify(x)}`);
+}
 
 /** Override unless the creature is passing (nothing interrupts that). */
 function overrideActivity(c: Creature, activity: Creature['activity']): void {

@@ -35,7 +35,7 @@ const PROGRESS_CHECK_TICKS = 100;
 /** A stall checkpoint counts as "no progress" below this much net movement. */
 const PROGRESS_MIN_DIST = 1;
 /** How close a baby must be to a nursing mother to feed during her hold. */
-const NURSE_RANGE = 60;
+const NURSE_RANGE = 90;
 /** Hunger relief per tick per baby in reach during a nursing hold (M10). */
 const NURSE_HUNGER_RATE = 0.006;
 /** Passive-graze hunger relief per tick for self-feeding babies (koi fry). */
@@ -303,79 +303,98 @@ export function applyActivity(state: WorldState, c: Creature, _clock: Clock): vo
     }
 
     case 'feedYoung': {
-      if (SPECIES[c.species].reproduction.feedMode === 'nurse') {
-        if (c.activity.step === 1) {
-          // Stationary nursing hold: no travel, just a per-tick hunger
-          // decay for every family baby within reach (deterministic
-          // arithmetic, zero RNG draws). `targetId` is repurposed here as
-          // the hold-start tick marker — the home lookup it held during
-          // step 0 is no longer needed once she's arrived.
-          const holdStart = c.activity.targetId ?? c.activity.ticks;
-          c.activity.targetId = holdStart;
-          for (const other of state.creatures) {
-            if (
-              other.familyId === c.familyId &&
-              other.stage === 'baby' &&
-              Math.hypot(other.pos.x - c.pos.x, other.pos.y - c.pos.y) <= NURSE_RANGE
-            ) {
-              other.needs.hunger = clamp01(other.needs.hunger - NURSE_HUNGER_RATE);
+      const feedMode = p.reproduction.feedMode; // reuse the in-scope species params
+      switch (feedMode) {
+        case 'nurse': {
+          if (c.activity.step === 1) {
+            // Stationary nursing hold: no travel, just a per-tick hunger
+            // decay for every family baby within reach (deterministic
+            // arithmetic, zero RNG draws). `activity.ticks` was reset to 0
+            // on arrival below, so it now counts the hold itself directly;
+            // `targetId` is never repurposed and keeps meaning "home id"
+            // for the whole activity — a pre-M10 save landing mid-hold on
+            // load must not be misread as a tick count (it isn't one).
+            for (const other of state.creatures) {
+              if (
+                other.familyId !== null &&
+                other.familyId === c.familyId &&
+                other.stage === 'baby' &&
+                Math.hypot(other.pos.x - c.pos.x, other.pos.y - c.pos.y) <= NURSE_RANGE
+              ) {
+                other.needs.hunger = clamp01(other.needs.hunger - NURSE_HUNGER_RATE);
+              }
             }
+            if (c.activity.ticks >= c.activity.minTicks) {
+              startActivity(state, c, 'idle');
+            }
+            break;
           }
-          if (c.activity.ticks - holdStart >= c.activity.minTicks) {
-            startActivity(state, c, 'idle');
-          }
-          break;
-        }
-        // Step 0: go straight home — a nursing mother doesn't fetch food
-        // afield first (no fetch trek, no RNG draws).
-        const home = state.homes.find((h) => h.id === c.activity.targetId);
-        if (!home) {
-          startActivity(state, c, 'idle');
-          break;
-        }
-        const remaining = moveToward(c, home.pos, speedFor(c.species, c.stage), medium, landing);
-        if (remaining >= 0 && remaining <= ARRIVE_DIST) {
-          c.activity.step = 1;
-          c.activity.targetId = c.activity.ticks; // mark the hold's start
-        }
-        break;
-      }
-
-      // carry (birds, exactly today's flow): fetch food nearby (step 0),
-      // carry it home (step 1).
-      if (c.activity.step === 0 && !c.activity.targetPos) {
-        const angle = nextRange(state.rng, 0, Math.PI * 2);
-        const dist = nextRange(state.rng, 140, 280);
-        const candidate = {
-          x: Math.max(40, Math.min(WORLD_WIDTH - 40, c.pos.x + Math.cos(angle) * dist)),
-          y: Math.max(40, Math.min(WORLD_HEIGHT - 40, c.pos.y + Math.sin(angle) * dist)),
-        };
-        c.activity.targetPos = canOccupy(landing, candidate)
-          ? candidate
-          : { x: c.pos.x, y: c.pos.y };
-      }
-      const target = c.activity.targetPos;
-      if (!target) break;
-      const remaining = moveToward(c, target, speedFor(c.species, c.stage), medium, landing);
-      if (remaining >= 0 && remaining <= ARRIVE_DIST) {
-        if (c.activity.step === 0) {
-          // Food gathered — head home.
+          // Step 0: go straight home — a nursing mother doesn't fetch food
+          // afield first (no fetch trek, no RNG draws).
           const home = state.homes.find((h) => h.id === c.activity.targetId);
           if (!home) {
             startActivity(state, c, 'idle');
             break;
           }
-          c.activity.step = 1;
-          c.activity.targetPos = { ...home.pos };
-        } else {
-          // Deliver: feed every hungry baby in the family.
-          for (const other of state.creatures) {
-            if (other.familyId === c.familyId && other.stage === 'baby') {
-              other.needs.hunger = clamp01(other.needs.hunger - 0.35);
+          const remaining = moveToward(c, home.pos, speedFor(c.species, c.stage), medium, landing);
+          if (remaining >= 0 && remaining <= ARRIVE_DIST) {
+            c.activity.step = 1;
+            c.activity.ticks = 0; // the hold starts fresh; targetId still means home id
+          }
+          break;
+        }
+
+        case 'carry': {
+          // Birds, exactly today's flow: fetch food nearby (step 0), carry
+          // it home (step 1).
+          if (c.activity.step === 0 && !c.activity.targetPos) {
+            const angle = nextRange(state.rng, 0, Math.PI * 2);
+            const dist = nextRange(state.rng, 140, 280);
+            const candidate = {
+              x: Math.max(40, Math.min(WORLD_WIDTH - 40, c.pos.x + Math.cos(angle) * dist)),
+              y: Math.max(40, Math.min(WORLD_HEIGHT - 40, c.pos.y + Math.sin(angle) * dist)),
+            };
+            c.activity.targetPos = canOccupy(landing, candidate)
+              ? candidate
+              : { x: c.pos.x, y: c.pos.y };
+          }
+          const target = c.activity.targetPos;
+          if (!target) break;
+          const remaining = moveToward(c, target, speedFor(c.species, c.stage), medium, landing);
+          if (remaining >= 0 && remaining <= ARRIVE_DIST) {
+            if (c.activity.step === 0) {
+              // Food gathered — head home.
+              const home = state.homes.find((h) => h.id === c.activity.targetId);
+              if (!home) {
+                startActivity(state, c, 'idle');
+                break;
+              }
+              c.activity.step = 1;
+              c.activity.targetPos = { ...home.pos };
+            } else {
+              // Deliver: feed every hungry baby in the family.
+              for (const other of state.creatures) {
+                if (other.familyId === c.familyId && other.stage === 'baby') {
+                  other.needs.hunger = clamp01(other.needs.hunger - 0.35);
+                }
+              }
+              startActivity(state, c, 'idle');
             }
           }
-          startActivity(state, c, 'idle');
+          break;
         }
+
+        case 'self':
+          // family.ts never triggers feedYoung for a 'self' species (the
+          // whole feed-trigger block is skipped for it) — reaching this
+          // means that guarantee broke somewhere upstream. Fail loudly
+          // rather than silently idling.
+          throw new Error(`feedYoung reached for a 'self'-mode species: ${c.species}`);
+        default:
+          // Exhaustiveness net: every known feedMode is cased above, so
+          // this only fires if a future mode is added to species.ts
+          // without a matching case here.
+          assertNever(feedMode);
       }
       break;
     }
@@ -598,6 +617,17 @@ function nearestOther(state: WorldState, c: Creature): Creature | undefined {
 
 function clamp01(v: number): number {
   return Math.max(0, Math.min(1, v));
+}
+
+/**
+ * Exhaustiveness guard for feedMode dispatch: a compile error here means a
+ * new `reproduction.feedMode` value was added to species.ts without a
+ * matching case in the feedYoung switch; a runtime throw here means some
+ * upstream guarantee (e.g. family.ts never triggering feedYoung for a
+ * 'self' species) broke.
+ */
+function assertNever(x: never): never {
+  throw new Error(`unreachable feedMode: ${JSON.stringify(x)}`);
 }
 
 /** Deterministic per-creature angle (same trick as voice.ts's roll): id-hash → [0, 2π). */
