@@ -6,6 +6,7 @@
  * for creatures with family duties. Family-directed activities are released
  * back to 'idle' when the duty ends.
  */
+import { idOffsetAngle } from './behaviors';
 import { emit } from './events';
 import { nextRange } from './rng';
 import { SPECIES } from './species';
@@ -186,10 +187,21 @@ function stepFamily(state: WorldState, fam: Family): void {
       }
       const home = homeOf(state, fam);
       if (!home) break;
-      // Both parents work on the home.
-      for (const p of parents) {
-        setIfFree(p, { id: 'gather', ticks: 0, minTicks: 30, targetPos: { ...home.pos } });
-      }
+      // Both parents work on the home, spread onto opposite sides of the
+      // nest so they don't stack on one point (id-hash base angle, plus a
+      // half-turn per parent slot so the pair never lands close together).
+      parents.forEach((p, i) => {
+        const ringAngle = idOffsetAngle(p.id) + i * Math.PI;
+        setIfFree(p, {
+          id: 'gather',
+          ticks: 0,
+          minTicks: 30,
+          targetPos: {
+            x: home.pos.x + Math.cos(ringAngle) * 26,
+            y: home.pos.y + Math.sin(ringAngle) * 26,
+          },
+        });
+      });
       if (fam.phaseTicks >= NEST_TICKS) {
         const rep = SPECIES[fam.species].reproduction;
         const count = rollClutchSize(state, fam.species);

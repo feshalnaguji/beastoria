@@ -138,7 +138,11 @@ export function applyActivity(state: WorldState, c: Creature, _clock: Clock): vo
       }
       const dist = Math.hypot(partner.pos.x - c.pos.x, partner.pos.y - c.pos.y);
       if (dist > SOCIAL_RANGE * 0.7) {
-        moveToward(c, partner.pos, speedFor(c.species, c.stage), medium);
+        const ring = {
+          x: partner.pos.x + Math.cos(idOffsetAngle(c.id)) * SOCIAL_RANGE * 0.45,
+          y: partner.pos.y + Math.sin(idOffsetAngle(c.id)) * SOCIAL_RANGE * 0.45,
+        };
+        moveToward(c, ring, speedFor(c.species, c.stage), medium);
       } else {
         c.needs.social = clamp01(c.needs.social - p.socialRate);
         if (c.activity.id === 'socialize' && c.needs.social <= SATISFIED) {
@@ -309,4 +313,13 @@ function nearestOther(state: WorldState, c: Creature): Creature | undefined {
 
 function clamp01(v: number): number {
   return Math.max(0, Math.min(1, v));
+}
+
+/** Deterministic per-creature angle (same trick as voice.ts's roll): id-hash → [0, 2π). */
+export function idOffsetAngle(id: number): number {
+  let h = Math.imul(id, 0x85ebca6b) >>> 0;
+  h ^= h >>> 15;
+  h = Math.imul(h, 0x735a2d97) >>> 0;
+  h ^= h >>> 13;
+  return ((h >>> 0) / 4294967296) * Math.PI * 2;
 }
