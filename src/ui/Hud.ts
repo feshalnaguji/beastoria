@@ -1,5 +1,5 @@
 /**
- * HUD: two fixed pills.
+ * HUD: three fixed pills.
  * - Sound chip (top-right): before unlock "🔈 sound on" (pulsing, inviting the
  *   first tap/click); after unlock, a mute toggle showing 🔊/🔇 reflecting
  *   audio.muted. A click (or Enter/Space) on the chip unlocks audio on first
@@ -7,6 +7,12 @@
  * - Clock pill (top-left): "Day {n} · {phase icon}" — 🌅 dawn / ☀️ day / 🌇 dusk /
  *   🌙 night. Fed from main's tick loop via setClock(); re-renders only when the
  *   day or phase actually changes, not every tick.
+ * - Fullscreen chip (top-right, below the sound chip): "⛶" toggles
+ *   document.documentElement's fullscreen state (F11 already does this at the
+ *   OS/browser level — this is the in-app affordance). Self-contained: reads
+ *   document.fullscreenElement directly rather than needing state pushed in,
+ *   since (unlike audio/clock) fullscreen has no sim or engine dependency.
+ *   Hidden entirely when the browser doesn't support the Fullscreen API.
  */
 import type { AudioEngine } from '../audio/AudioEngine';
 import type { Clock } from '../sim/clock';
@@ -30,6 +36,7 @@ const PHASE_ICON: Record<Clock['phase'], string> = {
 export class Hud {
   private chip: HTMLDivElement;
   private clockPill: HTMLDivElement;
+  private fullscreenChip: HTMLDivElement;
   private lastDay: number | null = null;
   private lastPhase: Clock['phase'] | null = null;
 
@@ -63,8 +70,40 @@ export class Hud {
     this.clockPill.setAttribute('aria-hidden', 'false');
     document.body.appendChild(this.clockPill);
 
+    this.fullscreenChip = document.createElement('div');
+    this.fullscreenChip.style.cssText = [...PILL_CSS, 'top:54px', 'right:12px', 'cursor:pointer'].join(';');
+    this.fullscreenChip.setAttribute('role', 'button');
+    this.fullscreenChip.setAttribute('tabindex', '0');
+    this.fullscreenChip.setAttribute('data-testid', 'fullscreen-chip');
+    this.fullscreenChip.textContent = '⛶';
+    this.fullscreenChip.addEventListener('click', () => this.toggleFullscreen());
+    this.fullscreenChip.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        this.toggleFullscreen();
+      }
+    });
+    document.body.appendChild(this.fullscreenChip);
+    if (!document.fullscreenEnabled) this.fullscreenChip.style.display = 'none';
+    document.addEventListener('fullscreenchange', () => this.renderFullscreenChip());
+    this.renderFullscreenChip();
+
     this.audio.onUnlock = () => this.renderChip();
     this.renderChip();
+  }
+
+  private toggleFullscreen(): void {
+    if (document.fullscreenElement) {
+      void document.exitFullscreen();
+    } else {
+      void document.documentElement.requestFullscreen();
+    }
+  }
+
+  private renderFullscreenChip(): void {
+    const isFull = document.fullscreenElement !== null;
+    this.fullscreenChip.title = isFull ? 'exit fullscreen' : 'fullscreen';
+    this.fullscreenChip.setAttribute('aria-label', isFull ? 'exit fullscreen' : 'enter fullscreen');
   }
 
   /** Update the clock pill from a fresh sim tick. Re-renders only on day/phase change. */

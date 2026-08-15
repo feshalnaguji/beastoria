@@ -120,6 +120,13 @@ export class Renderer {
       antialias: true,
       resolution: Math.min(window.devicePixelRatio, 2),
       autoDensity: true,
+      // Single render loop: GameLoop drives one requestAnimationFrame and
+      // calls renderFrame() explicitly after camera/ambient updates. Without
+      // this, Pixi's own ticker renders on its own rAF registration — which
+      // (registered during init(), before GameLoop.start()) fires BEFORE
+      // GameLoop's callback each frame, drawing the camera's *previous*
+      // frame position and adding a full frame of input latency.
+      autoStart: false,
     });
     mount.appendChild(this.app.canvas);
 
@@ -466,12 +473,19 @@ export class Renderer {
     if (followed) this.camera.centerOn(followed.curr.x, followed.curr.y);
 
     this.applyOverlays();
-    this.camera.update();
+    this.camera.update(dtMs);
     // Zoom is the only view value AmbientEffects consumes — pass it directly
     // (no-alloc) rather than round-tripping through viewInfo(), which builds
     // two object literals and calls getBoundingClientRect() per call and was
     // designed for the 10Hz audio mixer, not this 60Hz render loop.
     this.ambient.update(dtMs, this.clock, this.camera.getZoom());
+  }
+
+  /** Draw the current stage to the canvas. Call once per rendered frame,
+   * after render(alpha) (and anything else that mutates Pixi objects this
+   * frame) — see GameLoop's render callback in main.ts. */
+  renderFrame(): void {
+    this.app.render();
   }
 
   private createView(c: Creature): CreatureView {

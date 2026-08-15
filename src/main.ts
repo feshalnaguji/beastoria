@@ -107,6 +107,7 @@ async function start(): Promise<void> {
     (alpha) => {
       renderer.render(alpha);
       devPanel.update();
+      renderer.renderFrame(); // single render loop — draw last, after camera/ambient updates
     },
   );
   const devPanel = new DevPanel(state, loop, renderer);
