@@ -21,7 +21,11 @@ import { lodTier } from './Lod';
 import { bakedFrame, type BakedFrame } from './creatures/RigBaker';
 import { buildRig, multiplyTints, type RigInstance } from './creatures/RigRenderer';
 import { buildValley } from './terrain/ValleyPainter';
+import { AmbientEffects } from './effects/Ambient';
 import { Rectangle } from 'pixi.js';
+
+/** Cosmetic-only seed for ambient effect placement — never the sim's RNG. */
+const AMBIENT_SEED = 20260815;
 
 const RIGS: Partial<Record<SpeciesId, CreatureRig>> = Object.fromEntries(
   ALL_RIGS.map((r) => [r.species, r]),
@@ -88,6 +92,7 @@ export class Renderer {
   private homeLabels = new Map<number, Text>();
   private nightOverlay!: Graphics;
   private glowOverlay!: Graphics;
+  private ambient!: AmbientEffects;
   private views = new Map<number, CreatureView>();
   private clock: Clock = getClock(0);
   private lastFrameTime = 0;
@@ -126,14 +131,20 @@ export class Renderer {
     this.memorialLayer = new Graphics();
     this.homeLabelLayer = new Container();
     this.creatureLayer = new Container();
+    this.ambient = new AmbientEffects(this.world, AMBIENT_SEED);
     this.world.addChild(
       this.groundSprite,
+      this.ambient.shimmerLayer, // above ground, below memorials
       this.memorialLayer,
       this.homeLayer,
       this.detailLayer,
+      this.ambient.grassLayer, // above terrain detail
+      this.ambient.dappleLayer,
       this.creatureLayer,
+      this.ambient.fireflyLayer, // above creatures
       this.homeLabelLayer,
     );
+    this.ambient.build(this.app.renderer);
 
     // Screen-space ambience: warm additive glow (dawn/dusk) + night wash.
     this.glowOverlay = new Graphics();
@@ -219,6 +230,7 @@ export class Renderer {
     }
     this.syncHomes(state);
     this.syncMemorials(state);
+    this.ambient.setMemorialAnchors(state.memorials.map((m) => m.pos));
   }
 
   /** Burrows, nests (with eggs while expecting), and family name labels. */
@@ -434,6 +446,7 @@ export class Renderer {
 
     this.applyOverlays();
     this.camera.update();
+    this.ambient.update(dtMs, this.clock, this.viewInfo());
   }
 
   private createView(c: Creature): CreatureView {
