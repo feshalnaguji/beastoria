@@ -138,11 +138,7 @@ export function applyActivity(state: WorldState, c: Creature, _clock: Clock): vo
       }
       const dist = Math.hypot(partner.pos.x - c.pos.x, partner.pos.y - c.pos.y);
       if (dist > SOCIAL_RANGE * 0.7) {
-        const ring = {
-          x: partner.pos.x + Math.cos(idOffsetAngle(c.id)) * SOCIAL_RANGE * 0.45,
-          y: partner.pos.y + Math.sin(idOffsetAngle(c.id)) * SOCIAL_RANGE * 0.45,
-        };
-        moveToward(c, ring, speedFor(c.species, c.stage), medium);
+        moveToward(c, partner.pos, speedFor(c.species, c.stage), medium);
       } else {
         c.needs.social = clamp01(c.needs.social - p.socialRate);
         if (c.activity.id === 'socialize' && c.needs.social <= SATISFIED) {
