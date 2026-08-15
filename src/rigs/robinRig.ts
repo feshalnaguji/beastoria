@@ -11,6 +11,7 @@ const BEAK = 0xe8a53c;
 
 export const robinRig: CreatureRig = {
   species: 'robin',
+  strideLength: 16, // robins hop
   parts: [
     {
       id: 'shadow',
@@ -19,22 +20,6 @@ export const robinRig: CreatureRig = {
       y: 2,
       z: -10,
       shapes: [{ kind: 'ellipse', x: 0, y: 0, rx: 16, ry: 5, fill: { color: 0x3d5a2e, alpha: 0.25 } }],
-    },
-    {
-      id: 'legB',
-      parent: null,
-      x: -4,
-      y: 0,
-      z: -2,
-      shapes: [{ kind: 'line', x1: 0, y1: 0, x2: -1, y2: -10, width: 2.2, fill: { color: 0x8a6f4d } }],
-    },
-    {
-      id: 'legF',
-      parent: null,
-      x: 3,
-      y: 0,
-      z: -1,
-      shapes: [{ kind: 'line', x1: 0, y1: 0, x2: 1, y2: -10, width: 2.2, fill: { color: 0x8a6f4d } }],
     },
     {
       id: 'body',
@@ -46,6 +31,26 @@ export const robinRig: CreatureRig = {
         { kind: 'ellipse', x: 0, y: 0, rx: 16, ry: 13, fill: { color: BACK } },
         { kind: 'ellipse', x: 6, y: 4, rx: 10, ry: 9, fill: { color: BREAST } },
       ],
+    },
+    {
+      // Parented to body (was root-level) so the legs actually follow the
+      // hop instead of sitting dead-still on the ground (M9 task 2). Base
+      // offset = old root offset minus body's own base offset (0, -18), so
+      // the resting pose is pixel-identical to before the re-parent.
+      id: 'legB',
+      parent: 'body',
+      x: -4,
+      y: 18,
+      z: -2,
+      shapes: [{ kind: 'line', x1: 0, y1: 0, x2: -1, y2: -10, width: 2.2, fill: { color: 0x8a6f4d } }],
+    },
+    {
+      id: 'legF',
+      parent: 'body',
+      x: 3,
+      y: 18,
+      z: -1,
+      shapes: [{ kind: 'line', x1: 0, y1: 0, x2: 1, y2: -10, width: 2.2, fill: { color: 0x8a6f4d } }],
     },
     {
       id: 'tail',
@@ -150,6 +155,24 @@ export const robinRig: CreatureRig = {
             { t: 0, v: 0.1 },
             { t: 0.5, v: -0.1 },
             { t: 1, v: 0.1 },
+          ],
+        },
+        {
+          // A hop, not a stride: both legs tuck together at the bob apex
+          // (t=0.5, matching body's py apex above), then extend for landing.
+          partId: 'legF',
+          rot: [
+            { t: 0, v: 0.15 },
+            { t: 0.5, v: -0.6 },
+            { t: 1, v: 0.15 },
+          ],
+        },
+        {
+          partId: 'legB',
+          rot: [
+            { t: 0, v: 0.15 },
+            { t: 0.5, v: -0.6 },
+            { t: 1, v: 0.15 },
           ],
         },
       ],

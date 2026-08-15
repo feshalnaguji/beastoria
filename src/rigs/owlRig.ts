@@ -10,13 +10,10 @@ const DISC = 0xefe4cc;
 
 export const owlRig: CreatureRig = {
   species: 'owl',
+  strideLength: 20,
   parts: [
     { id: 'shadow', parent: null, x: 0, y: 2, z: -10,
       shapes: [{ kind: 'ellipse', x: 0, y: 0, rx: 16, ry: 5, fill: { color: 0x3d5a2e, alpha: 0.25 } }] },
-    { id: 'legB', parent: null, x: -4, y: 0, z: -2,
-      shapes: [{ kind: 'line', x1: 0, y1: 0, x2: -1, y2: -7, width: 2.4, fill: { color: 0xc9a86a } }] },
-    { id: 'legF', parent: null, x: 3, y: 0, z: -1,
-      shapes: [{ kind: 'line', x1: 0, y1: 0, x2: 1, y2: -7, width: 2.4, fill: { color: 0xc9a86a } }] },
     { id: 'body', parent: null, x: 0, y: -22, z: 0,
       shapes: [
         { kind: 'ellipse', x: 0, y: 0, rx: 15, ry: 17, fill: { color: TAWNY } },
@@ -24,6 +21,12 @@ export const owlRig: CreatureRig = {
         { kind: 'ellipse', x: 3, y: 2, rx: 6, ry: 3, fill: { color: TAWNY_DARK, alpha: 0.4 } }, // breast bars
         { kind: 'ellipse', x: 3, y: 8, rx: 6, ry: 3, fill: { color: TAWNY_DARK, alpha: 0.35 } },
       ] },
+    // Parented to body (was root-level); offset = old root offset minus
+    // body's base offset (0, -22), so the resting pose is unchanged.
+    { id: 'legB', parent: 'body', x: -4, y: 22, z: -2,
+      shapes: [{ kind: 'line', x1: 0, y1: 0, x2: -1, y2: -7, width: 2.4, fill: { color: 0xc9a86a } }] },
+    { id: 'legF', parent: 'body', x: 3, y: 22, z: -1,
+      shapes: [{ kind: 'line', x1: 0, y1: 0, x2: 1, y2: -7, width: 2.4, fill: { color: 0xc9a86a } }] },
     { id: 'tail', parent: 'body', x: -9, y: 13, z: -1,
       shapes: [{ kind: 'ellipse', x: -3, y: 3, rx: 6, ry: 9, fill: { color: TAWNY_DARK } }] },
     { id: 'wing', parent: 'body', x: -7, y: -2, z: 1,
@@ -64,6 +67,8 @@ export const owlRig: CreatureRig = {
       tracks: [
         { partId: 'body', py: [{ t: 0, v: 0 }, { t: 0.5, v: -4 }, { t: 1, v: 0 }], rot: [{ t: 0, v: 0.06 }, { t: 0.5, v: -0.06 }, { t: 1, v: 0.06 }] },
         { partId: 'wing', rot: [{ t: 0, v: 0 }, { t: 0.5, v: -0.15 }, { t: 1, v: 0 }] },
+        { partId: 'legF', rot: [{ t: 0, v: 0.25 }, { t: 0.5, v: -0.25 }, { t: 1, v: 0.25 }] },
+        { partId: 'legB', rot: [{ t: 0, v: -0.25 }, { t: 0.5, v: 0.25 }, { t: 1, v: -0.25 }] },
       ],
     },
     sleep: {

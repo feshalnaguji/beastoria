@@ -12,18 +12,21 @@ const EMBER = 0xf4d03f;
 
 export const phoenixRig: CreatureRig = {
   species: 'phoenix',
+  strideLength: 30,
   parts: [
     { id: 'shadow', parent: null, x: 0, y: 2, z: -10,
       shapes: [{ kind: 'ellipse', x: 0, y: 0, rx: 26, ry: 8, fill: { color: 0xffb36b, alpha: 0.3 } }] }, // warm glow, not shade
-    { id: 'legB', parent: null, x: -4, y: 0, z: -2,
-      shapes: [{ kind: 'line', x1: 0, y1: 0, x2: -2, y2: -16, width: 2.2, fill: { color: 0xc98a3c } }] },
-    { id: 'legF', parent: null, x: 4, y: 0, z: -1,
-      shapes: [{ kind: 'line', x1: 0, y1: 0, x2: 2, y2: -16, width: 2.2, fill: { color: 0xc98a3c } }] },
     { id: 'body', parent: null, x: 0, y: -34, z: 0,
       shapes: [
         { kind: 'ellipse', x: 0, y: 0, rx: 17, ry: 12, fill: { color: GOLD } },
         { kind: 'ellipse', x: 6, y: 4, rx: 10, ry: 7, fill: { color: GOLD_LIGHT } },
       ] },
+    // Parented to body (was root-level); offset = old root offset minus
+    // body's base offset (0, -34), so the resting pose is unchanged.
+    { id: 'legB', parent: 'body', x: -4, y: 34, z: -2,
+      shapes: [{ kind: 'line', x1: 0, y1: 0, x2: -2, y2: -16, width: 2.2, fill: { color: 0xc98a3c } }] },
+    { id: 'legF', parent: 'body', x: 4, y: 34, z: -1,
+      shapes: [{ kind: 'line', x1: 0, y1: 0, x2: 2, y2: -16, width: 2.2, fill: { color: 0xc98a3c } }] },
     { id: 'plumeFar', parent: 'body', x: -15, y: 2, z: -2,
       shapes: [
         { kind: 'path', d: 'M 0 0 Q -28 10 -46 4 Q -32 14 -14 10 Z', fill: { color: FLAME, alpha: 0.8 } },
@@ -77,6 +80,8 @@ export const phoenixRig: CreatureRig = {
         { partId: 'plumeFar', rot: [{ t: 0, v: 0.1 }, { t: 0.5, v: -0.12 }, { t: 1, v: 0.1 }] },
         { partId: 'plumeNear', rot: [{ t: 0, v: -0.08 }, { t: 0.5, v: 0.1 }, { t: 1, v: -0.08 }] },
         { partId: 'neck', rot: [{ t: 0, v: 0.04 }, { t: 0.5, v: -0.04 }, { t: 1, v: 0.04 }] },
+        { partId: 'legF', rot: [{ t: 0, v: 0.2 }, { t: 0.5, v: -0.2 }, { t: 1, v: 0.2 }] },
+        { partId: 'legB', rot: [{ t: 0, v: -0.2 }, { t: 0.5, v: 0.2 }, { t: 1, v: -0.2 }] },
       ],
     },
     sleep: {

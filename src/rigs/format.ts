@@ -65,4 +65,7 @@ export interface CreatureRig {
   parts: RigPart[];
   stages: Record<LifeStage, StageStyle>;
   clips: Record<ClipName, AnimClip>;
+  /** World px traveled per full walk-cycle (ground truth for gait cadence).
+   * Defaults to 30 when omitted. */
+  strideLength?: number;
 }

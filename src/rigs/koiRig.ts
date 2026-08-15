@@ -11,6 +11,7 @@ const FIN = 0xf5c9a5;
 
 export const koiRig: CreatureRig = {
   species: 'koi',
+  strideLength: 40,
   parts: [
     { id: 'shadow', parent: null, x: 0, y: 7, z: -10,
       shapes: [{ kind: 'ellipse', x: 0, y: 0, rx: 18, ry: 6, fill: { color: 0x2f6a78, alpha: 0.35 } }] },

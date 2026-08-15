@@ -11,18 +11,21 @@ const BILL = 0xe8a53c;
 
 export const duckRig: CreatureRig = {
   species: 'duck',
+  strideLength: 22,
   parts: [
     { id: 'shadow', parent: null, x: 0, y: 2, z: -10,
       shapes: [{ kind: 'ellipse', x: 0, y: 0, rx: 19, ry: 5.5, fill: { color: 0x3d5a2e, alpha: 0.25 } }] },
-    { id: 'legB', parent: null, x: -4, y: 0, z: -2,
-      shapes: [{ kind: 'line', x1: 0, y1: 0, x2: -1, y2: -9, width: 2.6, fill: { color: BILL } }] },
-    { id: 'legF', parent: null, x: 3, y: 0, z: -1,
-      shapes: [{ kind: 'line', x1: 0, y1: 0, x2: 1, y2: -9, width: 2.6, fill: { color: BILL } }] },
     { id: 'body', parent: null, x: 0, y: -16, z: 0,
       shapes: [
         { kind: 'ellipse', x: 0, y: 0, rx: 19, ry: 12, fill: { color: BROWN } },
         { kind: 'ellipse', x: 7, y: 4, rx: 11, ry: 8, fill: { color: CREAM } },
       ] },
+    // Parented to body (was root-level); offset = old root offset minus
+    // body's base offset (0, -16), so the resting pose is unchanged.
+    { id: 'legB', parent: 'body', x: -4, y: 16, z: -2,
+      shapes: [{ kind: 'line', x1: 0, y1: 0, x2: -1, y2: -9, width: 2.6, fill: { color: BILL } }] },
+    { id: 'legF', parent: 'body', x: 3, y: 16, z: -1,
+      shapes: [{ kind: 'line', x1: 0, y1: 0, x2: 1, y2: -9, width: 2.6, fill: { color: BILL } }] },
     { id: 'tail', parent: 'body', x: -16, y: -4, z: -1,
       shapes: [{ kind: 'path', d: 'M 0 2 Q -9 -1 -11 -7 Q -6 -3 -1 -3 Z', fill: { color: BROWN_DARK } }] },
     { id: 'wing', parent: 'body', x: -4, y: -2, z: 1,
@@ -63,6 +66,8 @@ export const duckRig: CreatureRig = {
         { partId: 'body', rot: [{ t: 0, v: 0.12 }, { t: 0.5, v: -0.12 }, { t: 1, v: 0.12 }],
           py: [{ t: 0, v: 0 }, { t: 0.25, v: -1.5 }, { t: 0.5, v: 0 }, { t: 0.75, v: -1.5 }, { t: 1, v: 0 }] },
         { partId: 'tail', rot: [{ t: 0, v: -0.2 }, { t: 0.5, v: 0.2 }, { t: 1, v: -0.2 }] },
+        { partId: 'legF', rot: [{ t: 0, v: 0.4 }, { t: 0.5, v: -0.4 }, { t: 1, v: 0.4 }] },
+        { partId: 'legB', rot: [{ t: 0, v: -0.4 }, { t: 0.5, v: 0.4 }, { t: 1, v: -0.4 }] },
       ],
     },
     sleep: {

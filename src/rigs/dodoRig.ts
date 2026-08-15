@@ -11,18 +11,21 @@ const BEAK = 0xc9b06a;
 
 export const dodoRig: CreatureRig = {
   species: 'dodo',
+  strideLength: 26,
   parts: [
     { id: 'shadow', parent: null, x: 0, y: 2, z: -10,
       shapes: [{ kind: 'ellipse', x: 0, y: 0, rx: 22, ry: 6.5, fill: { color: 0x3d5a2e, alpha: 0.25 } }] },
-    { id: 'legB', parent: null, x: -5, y: 0, z: -2,
-      shapes: [{ kind: 'line', x1: 0, y1: 0, x2: -2, y2: -11, width: 3.6, fill: { color: 0xd9b13f } }] },
-    { id: 'legF', parent: null, x: 4, y: 0, z: -1,
-      shapes: [{ kind: 'line', x1: 0, y1: 0, x2: 2, y2: -11, width: 3.6, fill: { color: 0xd9b13f } }] },
     { id: 'body', parent: null, x: 0, y: -24, z: 0,
       shapes: [
         { kind: 'ellipse', x: 0, y: 0, rx: 20, ry: 15, fill: { color: GREY } },
         { kind: 'ellipse', x: 5, y: 5, rx: 12, ry: 9, fill: { color: GREY_LIGHT } },
       ] },
+    // Parented to body (was root-level); offset = old root offset minus
+    // body's base offset (0, -24), so the resting pose is unchanged.
+    { id: 'legB', parent: 'body', x: -5, y: 24, z: -2,
+      shapes: [{ kind: 'line', x1: 0, y1: 0, x2: -2, y2: -11, width: 3.6, fill: { color: 0xd9b13f } }] },
+    { id: 'legF', parent: 'body', x: 4, y: 24, z: -1,
+      shapes: [{ kind: 'line', x1: 0, y1: 0, x2: 2, y2: -11, width: 3.6, fill: { color: 0xd9b13f } }] },
     { id: 'tailPlume', parent: 'body', x: -17, y: -7, z: -1,
       shapes: [
         { kind: 'circle', x: -3, y: -2, r: 5, fill: { color: 0xd8d3c4 } },
@@ -64,6 +67,8 @@ export const dodoRig: CreatureRig = {
           py: [{ t: 0, v: 0 }, { t: 0.25, v: -2 }, { t: 0.5, v: 0 }, { t: 0.75, v: -2 }, { t: 1, v: 0 }] },
         { partId: 'head', rot: [{ t: 0, v: -0.08 }, { t: 0.5, v: 0.08 }, { t: 1, v: -0.08 }] },
         { partId: 'tailPlume', rot: [{ t: 0, v: -0.15 }, { t: 0.5, v: 0.15 }, { t: 1, v: -0.15 }] },
+        { partId: 'legF', rot: [{ t: 0, v: 0.4 }, { t: 0.5, v: -0.4 }, { t: 1, v: 0.4 }] },
+        { partId: 'legB', rot: [{ t: 0, v: -0.4 }, { t: 0.5, v: 0.4 }, { t: 1, v: -0.4 }] },
       ],
     },
     sleep: {

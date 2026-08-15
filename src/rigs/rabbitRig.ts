@@ -11,6 +11,7 @@ const BLUSH = 0xf2d8e4;
 
 export const rabbitRig: CreatureRig = {
   species: 'rabbit',
+  strideLength: 26,
   parts: [
     {
       id: 'shadow',

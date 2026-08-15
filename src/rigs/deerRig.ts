@@ -10,6 +10,7 @@ const CREAM = 0xf1e5d2;
 
 export const deerRig: CreatureRig = {
   species: 'deer',
+  strideLength: 48,
   parts: [
     { id: 'shadow', parent: null, x: 0, y: 2, z: -10,
       shapes: [{ kind: 'ellipse', x: 0, y: 0, rx: 46, ry: 12, fill: { color: 0x3d5a2e, alpha: 0.25 } }] },

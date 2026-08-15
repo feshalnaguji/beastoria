@@ -45,7 +45,7 @@ interface CreatureView {
   rig: RigInstance;
   spriteWrap: Container;
   sprite: Sprite;
-  frames: { idle: BakedFrame; walkA: BakedFrame; walkB: BakedFrame };
+  frames: { idle: BakedFrame; walk: BakedFrame[] };
   label: Text;
   species: SpeciesId;
   stage: LifeStage;
@@ -53,6 +53,26 @@ interface CreatureView {
   curr: Vec2;
   heading: number;
   activityId: string;
+  /** Ground distance traveled (world px), wrapped at the rig's strideLength —
+   * drives T1 flipbook frame selection off actual displacement, not the
+   * wall clock (M9 task 2: cadence must track speed, not glide at a fixed
+   * blink rate). */
+  odometer: number;
+  /** Last frame's rendered (interpolated) position, for computing per-frame
+   * displacement into the odometer above. */
+  lastX: number;
+  lastY: number;
+}
+
+/** Baked walk frames per species (Step 1: symmetric 3-key clips sample
+ * identically at t=0.25/0.75, so two "alternating" frames were pixel-twins
+ * for 7 of 8 species — sampling off the symmetry points fixes it). */
+const N_WALK_FRAMES = 6;
+/** Fallback world px per walk cycle when a rig omits strideLength. */
+const DEFAULT_STRIDE_LENGTH = 30;
+
+function clamp(v: number, lo: number, hi: number): number {
+  return v < lo ? lo : v > hi ? hi : v;
 }
 
 /** Activity labels this close to a home carrying a family label are hidden
@@ -429,23 +449,37 @@ export class Renderer {
       // A passing elder softens — the gentlest farewell.
       view.node.alpha = view.activityId === 'pass' ? 0.75 : 1;
 
+      // Ground-truth stride: accumulate actual rendered displacement (not
+      // wall-clock) and wrap at the rig's stride length, so gait cadence
+      // tracks speed exactly at any sim rate (1x, 8x, 64x) with free
+      // per-creature desync (no shared clock). One float add + one mod per
+      // view — no allocations.
+      const speciesRig = rigFor(view.species);
+      const stride = speciesRig.strideLength ?? DEFAULT_STRIDE_LENGTH;
+      const dispPx = Math.hypot(x - view.lastX, y - view.lastY);
+      view.lastX = x;
+      view.lastY = y;
+      view.odometer = (view.odometer + dispPx) % stride;
+
       if (tier === 2) {
         view.rig.root.visible = true;
         view.spriteWrap.visible = false;
-        view.rig.animator.play(clipFor(view.activityId, moving));
-        view.rig.animator.update(dtMs);
+        const clip = clipFor(view.activityId, moving);
+        view.rig.animator.play(clip);
+        let rate = 1;
+        if (clip === 'walk' && dtMs > 0) {
+          const walkDurMs = speciesRig.clips.walk.durationMs;
+          rate = clamp(((dispPx / dtMs) * walkDurMs) / stride, 0, 2.5);
+        }
+        view.rig.animator.update(dtMs * rate);
         const tint = multiplyTints(view.rig.stageTint, grade);
         for (const g of view.rig.tintables) g.tint = tint;
       } else {
         view.rig.root.visible = false;
         view.spriteWrap.visible = true;
-        // T1 flipbook: alternate walk frames while moving; T0 stays static.
-        const frame =
-          moving && tier === 1
-            ? Math.floor(now / 140) % 2 === 0
-              ? view.frames.walkA
-              : view.frames.walkB
-            : view.frames.idle;
+        // T1 flipbook: distance-driven frame pick while moving; T0 stays static.
+        const frameIndex = Math.floor((view.odometer / stride) * N_WALK_FRAMES) % N_WALK_FRAMES;
+        const frame = moving && tier === 1 ? view.frames.walk[frameIndex]! : view.frames.idle;
         view.sprite.texture = frame.texture;
         view.sprite.position.set(frame.bx, frame.by);
         view.sprite.tint = grade;
@@ -522,6 +556,9 @@ export class Renderer {
       curr: { x: c.pos.x, y: c.pos.y },
       heading: c.heading,
       activityId: c.activity.id,
+      odometer: 0,
+      lastX: c.pos.x,
+      lastY: c.pos.y,
     };
     this.positionLabel(view);
     return view;
@@ -539,10 +576,18 @@ export class Renderer {
 
   private bakeFrames(species: SpeciesId, stage: LifeStage): CreatureView['frames'] {
     const rig = rigFor(species);
+    // Bake off the symmetry points (k/6), not the old 0.25/0.75 pair: every
+    // walk clip here is a symmetric 3-key track (t=0, 0.5, 1 mirrored), so
+    // sampling at its own midpoints (0.25/0.75) always lands on identical
+    // interpolated values — walkA and walkB were pixel-twins for 7 of 8
+    // species. k/6 never lands on that symmetry, so all 6 frames differ.
+    const walk: BakedFrame[] = [];
+    for (let k = 0; k < N_WALK_FRAMES; k++) {
+      walk.push(bakedFrame(this.app.renderer, rig, stage, 'walk', k / N_WALK_FRAMES));
+    }
     return {
       idle: bakedFrame(this.app.renderer, rig, stage, 'idle', 0),
-      walkA: bakedFrame(this.app.renderer, rig, stage, 'walk', 0.25),
-      walkB: bakedFrame(this.app.renderer, rig, stage, 'walk', 0.75),
+      walk,
     };
   }
 
