@@ -69,8 +69,10 @@ export function wanderStep(rng: RngState, c: Creature, speed: number, medium: Me
 function advance(c: Creature, speed: number, medium: Medium): void {
   // Stranded in the wrong medium (a hand-placed spawn inside the pond, say):
   // strike out for the nearest legal ground. Every candidate step is
-  // checked, mirroring the legal branch below (full step, then a turned-back
-  // half-step retry) — never a blind step. A step "counts" if it reaches
+  // checked, mirroring the legal branch below's two-attempt shape (a full
+  // step, then a shorter retry along the SAME heading — unlike the legal
+  // branch's retry, which turns onto a different heading first) — never a
+  // blind step. A step "counts" if it reaches
   // legal ground outright, or if it is at least strictly nearer the escape
   // point than staying put: literal canOccupy is too strict a gate here on
   // its own (a creature more than one step's distance from shore would never

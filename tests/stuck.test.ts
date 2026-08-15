@@ -25,7 +25,8 @@
  *     sibling foraging tests.
  */
 import { describe, expect, it } from 'vitest';
-import { idOffsetAngle, socializeRing } from '../src/sim/behaviors';
+import { applyActivity, idOffsetAngle, socializeRing } from '../src/sim/behaviors';
+import { getClock } from '../src/sim/clock';
 import { moveToward, wanderStep } from '../src/sim/movement';
 import { speedFor } from '../src/sim/species';
 import { createWorld, type Creature, type SpeciesId, type Vec2, type WorldState } from '../src/sim/state';
@@ -102,6 +103,160 @@ describe('no creature freezes mid-socialize', () => {
     expect(isWater(rawRing)).toBe(true);
 
     expect(isWater(socializeRing(bPos, aId, 'land'))).toBe(false);
+  });
+
+  it('a) the socialize call site actually targets the clamped ring, not the raw one', () => {
+    // Same illegal-ring geometry as the test above, but this time driven
+    // through the real call site (applyActivity) rather than the exported
+    // helper in isolation — kills a mutant that keeps socializeRing correct
+    // but stops calling it from the case block (e.g. reverts to an inline,
+    // unclamped ring computation).
+    const bPos: Vec2 = { x: POND.x, y: POND.y - POND.ry * 1.08 };
+    let aId = -1;
+    for (let id = 1; id < 20000; id++) {
+      if (Math.abs(idOffsetAngle(id) - Math.PI / 2) < 0.05) {
+        aId = id;
+        break;
+      }
+    }
+    expect(aId).toBeGreaterThan(0);
+
+    const startPos: Vec2 = { x: bPos.x, y: bPos.y - 150 };
+    const clampedRing = socializeRing(bPos, aId, 'land');
+    const speed = speedFor('rabbit', 'adult');
+    // Twelve ticks of real approach, well short of the ~17 it takes this
+    // geometry to reach social relief (where the call site stops moving) —
+    // a single tick isn't enough to discriminate: MAX_TURN caps how far the
+    // heading turns per tick, so a raw vs. clamped target (close together,
+    // same general direction) can still produce an identical FIRST step.
+    const TICKS = 12;
+
+    // What TICKS real approach ticks, driven through the actual call site,
+    // produce:
+    const state = bareWorld(1);
+    const clock = getClock(0);
+    const b = makeCreature(900, 'rabbit', bPos);
+    const a = makeCreature(aId, 'rabbit', startPos);
+    a.activity = { id: 'socialize', ticks: 0, minTicks: 60, targetId: b.id };
+    state.creatures.push(a, b);
+    for (let t = 0; t < TICKS; t++) applyActivity(state, a, clock);
+
+    // What moveToward independently produces, over the same number of ticks,
+    // aimed at the CLAMPED ring from the same starting position: if the call
+    // site ever stopped using the clamp (e.g. reverted to an inline,
+    // unclamped ring computation), the heading would diverge tick over tick
+    // and the landed position after TICKS ticks would differ from this.
+    const expected = makeCreature(aId, 'rabbit', startPos);
+    for (let t = 0; t < TICKS; t++) moveToward(expected, clampedRing, speed, 'land', 'land');
+
+    expect(a.pos).toEqual(expected.pos);
+  });
+
+  it('a) moveToward still snaps cleanly onto a legal nearby target', () => {
+    // Kills a mutant that makes moveToward return -1 unconditionally: only
+    // the illegal case should refuse the snap.
+    const c = makeCreature(1, 'rabbit', { x: 100, y: 100 });
+    const legalTarget = { x: 103, y: 100 }; // 3 units away, well within speed, far from any water
+    const speed = speedFor('rabbit', 'adult');
+
+    const remaining = moveToward(c, legalTarget, speed, 'land', 'land');
+
+    expect(remaining).toBe(0);
+    expect(c.pos).toEqual(legalTarget);
+  });
+});
+
+describe('the socialize progress bail', () => {
+  it('flips a stalled socialize approach to wander once a stall window shows no progress', () => {
+    const clock = getClock(0);
+    const bPos: Vec2 = { x: 2048, y: 1536 };
+    const startPos: Vec2 = { x: bPos.x + 200, y: bPos.y }; // > SOCIAL_RANGE * 0.7 away
+
+    // Learn exactly where one real approach tick lands, so the fabricated
+    // checkpoint below matches it precisely (net progress ~0 for *this*
+    // tick) — this exercises the bail's own displacement check directly,
+    // without depending on ~200 real ticks of organic stalling, which (per
+    // the note atop this file) the ring clamp makes essentially
+    // unreproducible against a stationary partner.
+    const dryState = bareWorld(1);
+    const dryB = makeCreature(900, 'rabbit', bPos);
+    const dryA = makeCreature(1, 'rabbit', startPos);
+    dryA.activity = { id: 'socialize', ticks: 1, minTicks: 60, targetId: dryB.id };
+    dryState.creatures.push(dryA, dryB);
+    applyActivity(dryState, dryA, clock);
+    const landedAt = { ...dryA.pos };
+
+    const state = bareWorld(1);
+    const b = makeCreature(900, 'rabbit', bPos);
+    const a = makeCreature(1, 'rabbit', startPos);
+    a.activity = {
+      id: 'socialize',
+      ticks: 99, // -> 100 after applyActivity's increment: trips the checkpoint window
+      minTicks: 60,
+      targetId: b.id,
+      targetPos: landedAt, // fabricated: exactly where this tick's move lands
+    };
+    state.creatures.push(a, b);
+
+    applyActivity(state, a, clock);
+
+    expect(a.activity.id).toBe('wander');
+  });
+
+  it('clears the approach checkpoint on relief, so a stale checkpoint never causes a false bail', () => {
+    const clock = getClock(0);
+    const state = bareWorld(1);
+    const b = makeCreature(900, 'rabbit', { x: 2048, y: 1536 });
+    const a = makeCreature(1, 'rabbit', { x: 2048 + 40, y: 1536 }); // well inside relief range (40 < 63)
+    a.needs.social = 0.9;
+    // A stale checkpoint sitting right on top of a's current position, as if
+    // left over from an earlier approach: if the relief branch failed to
+    // clear it, the very next 100-tick boundary reached during a LATER
+    // approach would see "no progress" against this leftover value and bail
+    // incorrectly.
+    a.activity = {
+      id: 'socialize',
+      ticks: 99,
+      minTicks: 60,
+      targetId: b.id,
+      targetPos: { x: a.pos.x, y: a.pos.y },
+    };
+    state.creatures.push(a, b);
+
+    applyActivity(state, a, clock); // relief branch: dist (40) <= SOCIAL_RANGE * 0.7 (63)
+
+    expect(a.activity.id).toBe('socialize'); // no bail — relief never even consults the checkpoint
+    expect(a.activity.targetPos).toBeUndefined(); // and it's cleared, not left stale
+  });
+
+  it('does not apply to court — familySystem re-imposes court the same tick, so COURT_TICKS governs', () => {
+    const clock = getClock(0);
+    const bPos: Vec2 = { x: 2048, y: 1536 };
+    const startPos: Vec2 = { x: bPos.x + 200, y: bPos.y };
+
+    const dryState = bareWorld(1);
+    const dryB = makeCreature(900, 'rabbit', bPos);
+    const dryA = makeCreature(1, 'rabbit', startPos);
+    dryA.activity = { id: 'court', ticks: 1, minTicks: 60, targetId: dryB.id };
+    dryState.creatures.push(dryA, dryB);
+    applyActivity(dryState, dryA, clock);
+    const landedAt = { ...dryA.pos };
+
+    const state = bareWorld(1);
+    const b = makeCreature(900, 'rabbit', bPos);
+    const a = makeCreature(1, 'rabbit', startPos);
+    a.activity = {
+      id: 'court',
+      ticks: 99,
+      minTicks: 60,
+      targetId: b.id,
+      targetPos: landedAt, // same fabricated "no progress" setup as the socialize test above
+    };
+    state.creatures.push(a, b);
+
+    applyActivity(state, a, clock);
+
+    expect(a.activity.id).toBe('court'); // the id-gated bail never fires for court
   });
 });
 

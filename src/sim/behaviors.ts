@@ -242,12 +242,22 @@ export function applyActivity(state: WorldState, c: Creature, _clock: Clock): vo
           break;
         }
 
-        // Progress bail: a stateless stall check reusing the activity's own
-        // `targetPos` (otherwise unused here) as a checkpoint of this
-        // creature's position, taken every PROGRESS_CHECK_TICKS ticks. If a
-        // full window passes with less than a world unit of net movement,
-        // stop chasing and wander instead of holding forever.
-        if (c.activity.ticks % PROGRESS_CHECK_TICKS === 0) {
+        // Progress bail: socialize ONLY. A stateless stall check reusing the
+        // activity's own `targetPos` (otherwise unused here) as a checkpoint
+        // of this creature's position, taken every PROGRESS_CHECK_TICKS
+        // ticks; a full window with less than a world unit of net movement
+        // drops the approach to 'wander' instead of holding forever.
+        //
+        // Court cannot use this: familySystem runs before applyActivity each
+        // tick (Sim.ts's pipeline order) and re-imposes 'court' via
+        // setIfFree the very same tick a bail would fire, so `startActivity`
+        // here would be silently overwritten before a single wander step
+        // ever executes — the bail would be pure dead code for court (plus a
+        // wasted RNG draw on `startActivity`'s wander minTicks roll). Court's
+        // own timeout is `family.ts`'s `COURT_TICKS` (300) instead; the ring
+        // clamp above already means the illegal-target freeze this bail
+        // exists for cannot occur during court either.
+        if (c.activity.id === 'socialize' && c.activity.ticks % PROGRESS_CHECK_TICKS === 0) {
           const checkpoint = c.activity.targetPos;
           if (
             checkpoint &&
@@ -477,6 +487,10 @@ function nearestFoodSpots(
   n: number,
   medium: Medium,
 ): FoodSpot[] {
+  // Deliberately `medium`, not `landingMediumOf`: robin/owl/phoenix land on
+  // 'land' too, but they fly in — they never walk the feathered sand band to
+  // get there, so the visual ambiguity this filter exists for doesn't apply
+  // to them, and they keep the reed spots as candidates.
   const pool = medium === 'land' ? larder.filter((s) => s.zone !== 'pond') : larder;
   return [...pool]
     .sort((a, b) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(b.x - p.x, b.y - p.y))
