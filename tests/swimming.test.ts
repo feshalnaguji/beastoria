@@ -13,6 +13,9 @@ function runTicks(state: WorldState, n: number): void {
   for (let i = 0; i < n; i++) tick(state, []);
 }
 
+/** Activities in which a creature holds still — it must be standing on something. */
+const STOPPED = new Set(['idle', 'nap']);
+
 /** Empty world (keeps homes) ready for hand-placed casts. */
 function bareWorld(seed = 3): WorldState {
   const state = createWorld(seed);
@@ -38,18 +41,24 @@ describe('movement media', () => {
     }
   });
 
-  it('land creatures never end up in the water', () => {
+  it('land creatures never end up in the water; fliers only ever cross it', () => {
     const state = bareWorld();
     spawnCreature(state, 'rabbit', { x: 2500, y: 2000 }, 0.4); // near the shore
     spawnCreature(state, 'deer', { x: 2600, y: 1900 }, 0.4);
     // bareWorld() empties every species, so the population regulator (M5)
     // may wander in creatures of other species (including amphibious ducks,
-    // which may legitimately enter the pond); restrict the invariant to
-    // land-medium creatures.
+    // which may legitimately enter the pond).
     for (let s = 0; s < 60; s++) {
       runTicks(state, 50);
-      for (const c of state.creatures.filter((c) => SPECIES[c.species].medium === 'land')) {
-        expect(isWater(c.pos)).toBe(false);
+      for (const c of state.creatures) {
+        const p = SPECIES[c.species];
+        if (p.medium === 'land') {
+          expect(isWater(c.pos)).toBe(false);
+        } else if (p.medium === 'air') {
+          // M9: robins/owls/phoenixes fly over the pond, but they may never
+          // come to rest on it — a stopped flier is always over dry land.
+          if (STOPPED.has(c.activity.id)) expect(isWater(c.pos)).toBe(false);
+        }
       }
     }
   });

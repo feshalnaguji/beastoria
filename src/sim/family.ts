@@ -10,7 +10,7 @@ import { idOffsetAngle } from './behaviors';
 import { TICKS_PER_DAY } from './clock';
 import { emit } from './events';
 import { nextRange } from './rng';
-import { SPECIES } from './species';
+import { landingMediumOf, SPECIES } from './species';
 import {
   type Creature,
   type Family,
@@ -18,7 +18,7 @@ import {
   type WorldState,
 } from './state';
 import { spawnCreature } from './state';
-import { GROVE_NEST } from './valley';
+import { GROVE_NEST, nearestRestable } from './valley';
 
 const PAIR_RANGE = 200;
 const COURT_TICKS = 300;
@@ -44,7 +44,9 @@ function handlePassings(state: WorldState): void {
   for (const c of state.creatures) {
     if (c.activity.id === 'pass') continue;
     if (c.ageTicks > c.lifespanTicks) {
-      // The elder settles where it stands; family will gather.
+      // The elder settles where it stands — or, if it was on the wing over
+      // the water, glides down to the nearest shore (draw-free).
+      c.pos = nearestRestable(landingMediumOf(c.species), c.pos);
       c.activity = { id: 'pass', ticks: 0, minTicks: PASS_GATHER_TICKS };
       // Nearby family members come to sit with them.
       if (c.familyId !== null) {
@@ -57,10 +59,10 @@ function handlePassings(state: WorldState): void {
               id: 'gather',
               ticks: 0,
               minTicks: PASS_GATHER_TICKS,
-              targetPos: {
+              targetPos: nearestRestable(landingMediumOf(kin.species), {
                 x: c.pos.x + nextRange(state.rng, -55, 55),
                 y: c.pos.y + nextRange(state.rng, -40, 40),
-              },
+              }),
             };
           }
         }
@@ -208,6 +210,12 @@ function stepFamily(state: WorldState, fam: Family): void {
       if (fam.phaseTicks >= NEST_TICKS) {
         const rep = SPECIES[fam.species].reproduction;
         const count = rollClutchSize(state, fam.species);
+        if (count === 0) {
+          // A full valley: this pair simply doesn't raise a clutch this
+          // season. They keep the nest and wait out the cooldown.
+          enterPhase(fam, 'emptyNest');
+          break;
+        }
         fam.clutch = { count, broodTicksLeft: rep.broodTicks };
         if (rep.mode === 'egg') {
           const home2 = homeOf(state, fam);
@@ -250,8 +258,10 @@ function stepFamily(state: WorldState, fam: Family): void {
       }
 
       if (fam.clutch.broodTicksLeft <= 0) {
-        // Babies arrive!
-        for (let i = 0; i < fam.clutch.count; i++) {
+        // Babies arrive — but never more than the valley still has room for
+        // (the population can have grown during incubation).
+        const born = Math.min(fam.clutch.count, headroom(state, fam.species));
+        for (let i = 0; i < born; i++) {
           const baby = spawnCreature(state, fam.species, {
             x: home.pos.x + nextRange(state.rng, -25, 25),
             y: home.pos.y + nextRange(state.rng, -18, 18),
@@ -259,15 +269,19 @@ function stepFamily(state: WorldState, fam: Family): void {
           baby.familyId = fam.id;
           fam.childIds.push(baby.id);
         }
+        fam.clutch = undefined;
+        if (born === 0) {
+          enterPhase(fam, 'emptyNest');
+          break;
+        }
         emit(state, {
           kind: rep.mode === 'egg' ? 'hatched' : 'born',
           tick: state.tick,
           species: fam.species,
           familyId: fam.id,
-          count: fam.clutch.count,
+          count: born,
           pos: { ...home.pos },
         });
-        fam.clutch = undefined;
         enterPhase(fam, 'rearing');
       }
       break;
@@ -278,6 +292,13 @@ function stepFamily(state: WorldState, fam: Family): void {
       const children = fam.childIds
         .map((id) => state.creatures.find((c) => c.id === id))
         .filter((c): c is Creature => c !== undefined);
+
+      // Nothing left to rear (every child gone) — back to the quiet nest.
+      if (children.length === 0) {
+        fam.childIds = [];
+        enterPhase(fam, 'emptyNest');
+        break;
+      }
 
       // Babies stay near the home.
       if (home) {
@@ -369,18 +390,33 @@ function claimHome(state: WorldState, fam: Family): Home | undefined {
 const WORLD_WIDTH_HALF = 2048;
 const WORLD_HEIGHT_HALF = 1536;
 
-/** Clutch size scales down as population nears the soft cap (spec §4.3). */
+/**
+ * Clutch size scales down as population nears the soft cap (spec §4.3), and
+ * is then capped by the room actually left under the hard cap — so the cap is
+ * an honest guarantee, not a probabilistic tendency. `headroom` clamps again
+ * at hatching time, since the population can still grow during incubation.
+ */
 function rollClutchSize(state: WorldState, species: Creature['species']): number {
   const p = SPECIES[species];
-  const count = state.creatures.filter((c) => c.species === species).length;
+  const count = countOf(state, species);
   const fullness = Math.min(1, count / p.population.softCap);
   const max = Math.round(
     p.reproduction.clutchMax - (p.reproduction.clutchMax - p.reproduction.clutchMin) * fullness,
   );
-  return Math.max(
+  const rolled = Math.max(
     p.reproduction.clutchMin,
     Math.min(max, Math.floor(nextRange(state.rng, p.reproduction.clutchMin, max + 1))),
   );
+  return Math.min(rolled, headroom(state, species));
+}
+
+function countOf(state: WorldState, species: Creature['species']): number {
+  return state.creatures.filter((c) => c.species === species).length;
+}
+
+/** How many more of this species the valley can hold. */
+function headroom(state: WorldState, species: Creature['species']): number {
+  return Math.max(0, SPECIES[species].population.hardCap - countOf(state, species));
 }
 
 /* ------------------------------ helpers ------------------------------ */

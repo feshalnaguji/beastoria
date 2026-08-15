@@ -32,8 +32,13 @@ export interface SpeciesParams {
     cooldownTicks: number;
   };
   population: { floor: number; softCap: number; hardCap: number };
-  /** How the species relates to water: koi water-only, ducks amphibious. */
+  /** How the species MOVES: koi water-only, ducks amphibious, birds by air. */
   medium: Medium;
+  /**
+   * Where the species may come to REST (targets, spawns, landings). Defaults
+   * to `medium`; fliers move through 'air' but always land on 'land'.
+   */
+  landingMedium?: Medium;
   /** Below-floor / missing-sex arrivals from the map edge (spec §4.3 layer 2). */
   wandersIn: boolean;
   /** Herd species drift back toward their herd's centroid while wandering. */
@@ -95,7 +100,8 @@ export const SPECIES: Record<SpeciesId, SpeciesParams> = {
       cooldownTicks: 2100,
     },
     population: { floor: 3, softCap: 7, hardCap: 12 },
-    medium: 'land',
+    medium: 'air', // flies: crosses the pond in a straight line
+    landingMedium: 'land',
     wandersIn: true,
     voice: { rate: 1 / 700, dawnMult: 6 },
   },
@@ -160,7 +166,8 @@ export const SPECIES: Record<SpeciesId, SpeciesParams> = {
     homeKind: 'treeHollow',
     reproduction: { mode: 'egg', clutchMin: 1, clutchMax: 3, broodTicks: 800, cooldownTicks: 2200 },
     population: { floor: 2, softCap: 6, hardCap: 9 },
-    medium: 'land',
+    medium: 'air', // flies: crosses the pond in a straight line
+    landingMedium: 'land',
     wandersIn: true,
     voice: { rate: 1 / 800 },
   },
@@ -192,7 +199,8 @@ export const SPECIES: Record<SpeciesId, SpeciesParams> = {
     homeKind: 'groveNest',
     reproduction: { mode: 'egg', clutchMin: 1, clutchMax: 1, broodTicks: 700, cooldownTicks: 4000 },
     population: { floor: 1, softCap: 3, hardCap: 4 }, // softCap 3 lets the lone pair re-nest
-    medium: 'land',
+    medium: 'air', // flies: crosses the pond in a straight line
+    landingMedium: 'land',
     wandersIn: false, // never wanders in — rebirth is the phoenix's failsafe
     singleFamily: true,
     rebirth: true,
@@ -210,4 +218,13 @@ const STAGE_SPEED: Record<LifeStage, number> = {
 
 export function speedFor(species: SpeciesId, stage: LifeStage): number {
   return SPECIES[species].speed * STAGE_SPEED[stage];
+}
+
+/**
+ * Where this species may come to rest. Every target/spawn/landing check uses
+ * this; only in-flight legality uses `medium`.
+ */
+export function landingMediumOf(species: SpeciesId): Medium {
+  const p = SPECIES[species];
+  return p.landingMedium ?? p.medium;
 }

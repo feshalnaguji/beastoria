@@ -24,13 +24,17 @@ describe('valley zones', () => {
 
   it('land creatures never enter water over a long run', () => {
     const state = createWorld(99);
+    const stopped = new Set(['idle', 'nap']);
     for (let i = 0; i < 8000; i++) {
       tick(state, []);
       for (const c of state.creatures) {
-        // Water/amphibious species (koi, duck) are expected in the pond; this
-        // check is only about creatures whose medium is strictly 'land'.
-        if (SPECIES[c.species].medium !== 'land') continue;
-        expect(isWater(c.pos)).toBe(false);
+        // Water/amphibious species (koi, duck) are expected in the pond.
+        const medium = SPECIES[c.species].medium;
+        if (medium === 'land') expect(isWater(c.pos)).toBe(false);
+        // Fliers (M9) cross the pond freely but never come to rest on it.
+        if (medium === 'air' && stopped.has(c.activity.id)) {
+          expect(isWater(c.pos)).toBe(false);
+        }
       }
     }
   });

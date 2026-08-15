@@ -7,7 +7,7 @@
 import type { Clock } from './clock';
 import { moveToward, turnToward, wanderStep } from './movement';
 import { nextRange } from './rng';
-import { SPECIES, speedFor } from './species';
+import { landingMediumOf, SPECIES, speedFor } from './species';
 import {
   WORLD_HEIGHT,
   WORLD_WIDTH,
@@ -16,7 +16,7 @@ import {
   type Vec2,
   type WorldState,
 } from './state';
-import { canOccupy } from './valley';
+import { canOccupy, FOOD_SPOTS, GROVE_NEST, type FoodSpot } from './valley';
 
 const HYSTERESIS_BONUS = 0.15;
 /** A challenger this much stronger overrides min-duration (urgency). */
@@ -27,6 +27,16 @@ const SOCIAL_RANGE = 90;
 const ARRIVE_DIST = 10;
 const HERD_RADIUS = 350;
 const HERD_TURN = 0.1;
+/** How many of the nearest food spots a forager chooses between. */
+const FORAGE_CHOICES = 3;
+/** Radius of the scatter around the chosen food spot. */
+const FORAGE_SPREAD = 24;
+/** Herds share one patch, so they need more elbow room on it. */
+const HERD_FORAGE_SPREAD = 60;
+/** How far an unattached phoenix may drift from the ancient tree. */
+const GROVE_LEASH = 420;
+/** Activities in which a creature holds still — it must be able to stand there. */
+const STOPPED_ACTIVITIES = new Set<ActivityId>(['idle', 'nap']);
 
 /** Centroid of same-species creatures other than `c` (herd species only call sites). */
 function herdCentroid(state: WorldState, c: Creature): Vec2 | undefined {
@@ -72,6 +82,13 @@ const FAMILY_ACTIVITIES = new Set<ActivityId>(['court', 'brood', 'feedYoung', 'g
 export function selectBehavior(state: WorldState, c: Creature, clock: Clock): void {
   if (FAMILY_ACTIVITIES.has(c.activity.id)) return;
 
+  // An unattached phoenix that has strayed out of the grove drops everything
+  // and turns for the ancient tree (the leash itself lives in 'wander').
+  if (strayedFromGrove(c)) {
+    if (c.activity.id !== 'wander') startActivity(state, c, 'wander');
+    return;
+  }
+
   const scores = scoreActivities(state, c, clock);
 
   let bestId: FreeActivityId = c.activity.id as FreeActivityId; // guarded above
@@ -85,6 +102,11 @@ export function selectBehavior(state: WorldState, c: Creature, clock: Clock): vo
   }
 
   if (bestId === c.activity.id) return;
+
+  // A flier over the pond may not stop there: idling and napping never move,
+  // so settling mid-water would strand it. It keeps travelling (every target
+  // is on landable ground) and rests once it's back over land.
+  if (STOPPED_ACTIVITIES.has(bestId) && !canOccupy(landingMediumOf(c.species), c.pos)) return;
 
   // Respect the soft minimum duration unless the challenger is urgent.
   const currentScore = scores[c.activity.id as FreeActivityId] + HYSTERESIS_BONUS;
@@ -100,15 +122,26 @@ export function applyActivity(state: WorldState, c: Creature, _clock: Clock): vo
   c.activity.ticks++;
   const p = SPECIES[c.species];
   const medium = p.medium;
+  const landing = landingMediumOf(c.species);
 
   switch (c.activity.id) {
     case 'idle':
       break;
 
-    case 'wander':
+    case 'wander': {
       if (p.herd) applyHerdPull(state, c);
-      wanderStep(state.rng, c, speedFor(c.species, c.stage), medium);
+      const leash = groveLeashTarget(state, c);
+      if (leash) {
+        if (moveToward(c, leash, speedFor(c.species, c.stage), medium, landing) <= ARRIVE_DIST) {
+          c.activity.targetPos = undefined; // home again; drift on as normal
+        }
+        break;
+      }
+      // Aimless drifting uses the landing medium even for fliers: a bird
+      // crosses the water on an errand, it doesn't hover over it for nothing.
+      wanderStep(state.rng, c, speedFor(c.species, c.stage), landing);
       break;
+    }
 
     case 'forage': {
       const target = c.activity.targetPos;
@@ -116,7 +149,7 @@ export function applyActivity(state: WorldState, c: Creature, _clock: Clock): vo
         startActivity(state, c, 'idle');
         break;
       }
-      const remaining = moveToward(c, target, speedFor(c.species, c.stage), medium);
+      const remaining = moveToward(c, target, speedFor(c.species, c.stage), medium, landing);
       if (remaining <= ARRIVE_DIST) {
         c.needs.hunger = clamp01(c.needs.hunger - p.eatRate);
         if (c.needs.hunger <= SATISFIED) startActivity(state, c, 'idle');
@@ -138,12 +171,14 @@ export function applyActivity(state: WorldState, c: Creature, _clock: Clock): vo
       }
       const dist = Math.hypot(partner.pos.x - c.pos.x, partner.pos.y - c.pos.y);
       if (dist > SOCIAL_RANGE * 0.7) {
-        // A ring-offset approach (idOffsetAngle-based, same trick as the
-        // family.ts nest ring below) was tried here to de-clump socializing
-        // groups, but it shifted arrival timing enough to regress two
-        // seeded long-run tests via the shared RNG stream. Parked, not
-        // rejected — recoverable at commit 8835c73, pending a user decision.
-        moveToward(c, partner.pos, speedFor(c.species, c.stage), medium);
+        // Approach a point on a ring around the partner (deterministic per-id
+        // angle, no RNG draws) so a group settles into a loose circle instead
+        // of a conga line down one bearing.
+        const ring = {
+          x: partner.pos.x + Math.cos(idOffsetAngle(c.id)) * SOCIAL_RANGE * 0.45,
+          y: partner.pos.y + Math.sin(idOffsetAngle(c.id)) * SOCIAL_RANGE * 0.45,
+        };
+        moveToward(c, ring, speedFor(c.species, c.stage), medium, landing);
       } else {
         c.needs.social = clamp01(c.needs.social - p.socialRate);
         if (c.activity.id === 'socialize' && c.needs.social <= SATISFIED) {
@@ -157,7 +192,7 @@ export function applyActivity(state: WorldState, c: Creature, _clock: Clock): vo
       // Walk to the clutch, then sit; brooding is restful.
       const target = c.activity.targetPos;
       if (target) {
-        const remaining = moveToward(c, target, speedFor(c.species, c.stage), medium);
+        const remaining = moveToward(c, target, speedFor(c.species, c.stage), medium, landing);
         if (remaining <= ARRIVE_DIST) {
           c.needs.rest = clamp01(c.needs.rest - p.sleepRate * 0.5);
         }
@@ -174,11 +209,13 @@ export function applyActivity(state: WorldState, c: Creature, _clock: Clock): vo
           x: Math.max(40, Math.min(WORLD_WIDTH - 40, c.pos.x + Math.cos(angle) * dist)),
           y: Math.max(40, Math.min(WORLD_HEIGHT - 40, c.pos.y + Math.sin(angle) * dist)),
         };
-        c.activity.targetPos = canOccupy(medium, candidate) ? candidate : { x: c.pos.x, y: c.pos.y };
+        c.activity.targetPos = canOccupy(landing, candidate)
+          ? candidate
+          : { x: c.pos.x, y: c.pos.y };
       }
       const target = c.activity.targetPos;
       if (!target) break;
-      const remaining = moveToward(c, target, speedFor(c.species, c.stage), medium);
+      const remaining = moveToward(c, target, speedFor(c.species, c.stage), medium, landing);
       if (remaining <= ARRIVE_DIST) {
         if (c.activity.step === 0) {
           // Food gathered — head home.
@@ -206,7 +243,7 @@ export function applyActivity(state: WorldState, c: Creature, _clock: Clock): vo
       // Go to a point and settle there (nest-building, mourning, baby leash).
       const target = c.activity.targetPos;
       if (!target) break;
-      moveToward(c, target, speedFor(c.species, c.stage), medium);
+      moveToward(c, target, speedFor(c.species, c.stage), medium, landing);
       break;
     }
 
@@ -237,7 +274,14 @@ function scoreActivities(
   };
 }
 
-function startActivity(state: WorldState, c: Creature, id: ActivityId): void {
+function startActivity(state: WorldState, c: Creature, requested: ActivityId): void {
+  // Safety net for the internal "…and then go idle" paths: a creature that
+  // cannot rest where it stands (a flier caught over the pond) drifts on
+  // instead of settling on the water. One RNG draw either way.
+  const id =
+    STOPPED_ACTIVITIES.has(requested) && !canOccupy(landingMediumOf(c.species), c.pos)
+      ? 'wander'
+      : requested;
   const rng = state.rng;
   const activity = c.activity;
   activity.id = id;
@@ -254,35 +298,7 @@ function startActivity(state: WorldState, c: Creature, id: ActivityId): void {
       break;
     case 'forage': {
       activity.minTicks = 40;
-      // Pick a target the species can occupy; after a few tries, graze right here.
-      let target = { x: c.pos.x, y: c.pos.y };
-      const species = SPECIES[c.species];
-      const medium = species.medium;
-      // Herd species beyond the herd's edge bias candidate sampling toward the
-      // herd centroid instead of sampling the full circle.
-      let angleCenter: number | undefined;
-      if (species.herd) {
-        const centroid = herdCentroid(state, c);
-        if (centroid && Math.hypot(centroid.x - c.pos.x, centroid.y - c.pos.y) > HERD_RADIUS) {
-          angleCenter = Math.atan2(centroid.y - c.pos.y, centroid.x - c.pos.x);
-        }
-      }
-      for (let attempt = 0; attempt < 8; attempt++) {
-        const angle =
-          angleCenter !== undefined
-            ? angleCenter + nextRange(rng, -1.2, 1.2)
-            : nextRange(rng, 0, Math.PI * 2);
-        const dist = nextRange(rng, 150, 400);
-        const candidate = {
-          x: Math.max(40, Math.min(WORLD_WIDTH - 40, c.pos.x + Math.cos(angle) * dist)),
-          y: Math.max(40, Math.min(WORLD_HEIGHT - 40, c.pos.y + Math.sin(angle) * dist)),
-        };
-        if (canOccupy(medium, candidate)) {
-          target = candidate;
-          break;
-        }
-      }
-      activity.targetPos = target;
+      activity.targetPos = forageTarget(state, c);
       break;
     }
     case 'nap':
@@ -296,6 +312,102 @@ function startActivity(state: WorldState, c: Creature, id: ActivityId): void {
       break;
     }
   }
+}
+
+/**
+ * Where a forager goes to eat. Land-, air- and amphibious-landing creatures
+ * head for the valley's larder (FOOD_SPOTS): a seeded pick among the three
+ * nearest, plus a small scatter so a crowd spreads over the patch instead of
+ * stacking on its centre. Three RNG draws (pick, scatter angle, scatter
+ * distance).
+ *
+ * Water species are the exception: every food spot is dry land by definition,
+ * so koi keep grazing open water sampled around themselves, exactly as before.
+ */
+function forageTarget(state: WorldState, c: Creature): Vec2 {
+  const rng = state.rng;
+  const species = SPECIES[c.species];
+  const landing = landingMediumOf(c.species);
+
+  if (landing === 'water') {
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const angle = nextRange(rng, 0, Math.PI * 2);
+      const dist = nextRange(rng, 150, 400);
+      const candidate = clampToField(c.pos.x + Math.cos(angle) * dist, c.pos.y + Math.sin(angle) * dist);
+      if (canOccupy(landing, candidate)) return candidate;
+    }
+    return { x: c.pos.x, y: c.pos.y };
+  }
+
+  // A herd grazes together: every deer eats at the one patch nearest the
+  // herd's centre, spread wider so they share it rather than stack on it.
+  // The anchor deliberately INCLUDES the forager, so every member computes
+  // the same centre and the herd can't split between two patches.
+  // Solitary species choose among their own three nearest spots.
+  const centroid = species.herd ? speciesCentroid(state, c) : undefined;
+  const anchor = centroid ?? c.pos;
+  const choices = species.herd ? 1 : FORAGE_CHOICES;
+  const spread = species.herd ? HERD_FORAGE_SPREAD : FORAGE_SPREAD;
+
+  const near = nearestFoodSpots(anchor, choices);
+  const pick = near[Math.min(near.length - 1, Math.floor(nextRange(rng, 0, near.length)))];
+  if (!pick) return { x: c.pos.x, y: c.pos.y }; // unreachable: FOOD_SPOTS is non-empty
+  const angle = nextRange(rng, 0, Math.PI * 2);
+  const dist = nextRange(rng, 0, spread);
+  const candidate = clampToField(pick.x + Math.cos(angle) * dist, pick.y + Math.sin(angle) * dist);
+  return canOccupy(landing, candidate) ? candidate : { x: pick.x, y: pick.y };
+}
+
+/** Centroid of every creature of this species — the same value for each. */
+function speciesCentroid(state: WorldState, c: Creature): Vec2 | undefined {
+  let sx = 0;
+  let sy = 0;
+  let n = 0;
+  for (const other of state.creatures) {
+    if (other.species !== c.species) continue;
+    sx += other.pos.x;
+    sy += other.pos.y;
+    n++;
+  }
+  return n === 0 ? undefined : { x: sx / n, y: sy / n };
+}
+
+/** The `n` food spots closest to `p`, nearest first (stable, RNG-free). */
+function nearestFoodSpots(p: Vec2, n: number): FoodSpot[] {
+  return [...FOOD_SPOTS]
+    .sort(
+      (a, b) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(b.x - p.x, b.y - p.y),
+    )
+    .slice(0, n);
+}
+
+function clampToField(x: number, y: number): Vec2 {
+  return {
+    x: Math.max(40, Math.min(WORLD_WIDTH - 40, x)),
+    y: Math.max(40, Math.min(WORLD_HEIGHT - 40, y)),
+  };
+}
+
+/**
+ * The phoenix's tether to the ancient tree: an unattached bird (a rebirth
+ * chick whose family has dissolved, or a grown child) that drifts out of the
+ * grove turns for home rather than free-roaming the valley. Same draw pattern
+ * as family.ts's baby leash — two draws, once per outbound trip.
+ */
+function strayedFromGrove(c: Creature): boolean {
+  if (c.species !== 'phoenix' || c.familyId !== null) return false;
+  return Math.hypot(c.pos.x - GROVE_NEST.x, c.pos.y - GROVE_NEST.y) > GROVE_LEASH;
+}
+
+function groveLeashTarget(state: WorldState, c: Creature): Vec2 | undefined {
+  if (c.species !== 'phoenix' || c.familyId !== null) return undefined;
+  if (c.activity.targetPos) return c.activity.targetPos; // already heading home
+  if (!strayedFromGrove(c)) return undefined;
+  c.activity.targetPos = {
+    x: GROVE_NEST.x + nextRange(state.rng, -60, 60),
+    y: GROVE_NEST.y + nextRange(state.rng, -40, 40),
+  };
+  return c.activity.targetPos;
 }
 
 function nearestOther(state: WorldState, c: Creature): Creature | undefined {

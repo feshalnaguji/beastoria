@@ -177,6 +177,39 @@ describe('gentle passing', () => {
   });
 });
 
+/** Fill the valley with unattached adult rabbits up to `total`. */
+function fillRabbitsTo(state: WorldState, total: number): void {
+  let i = 0;
+  while (state.creatures.filter((c) => c.species === 'rabbit').length < total) {
+    spawnCreature(state, 'rabbit', { x: 600 + (i % 5) * 120, y: 600 + Math.floor(i / 5) * 120 }, 0.4);
+    i++;
+  }
+}
+
+describe('the hard cap is a guarantee, not a tendency', () => {
+  it('a valley that fills up while a pair is nest-building gets no clutch', () => {
+    const state = pairWorld();
+    runUntilPhase(state, 'nesting', 2000);
+    fillRabbitsTo(state, 12); // rabbit hardCap
+    runTicks(state, 600); // past NEST_TICKS: the clutch would be rolled here
+    expect(state.creatures.filter((c) => c.species === 'rabbit').length).toBe(12);
+    expect(state.families[0]?.phase).toBe('emptyNest');
+    expect(state.families[0]?.clutch).toBeUndefined();
+    expect(state.eventLog.some((e) => e.kind === 'born')).toBe(false);
+  });
+
+  it('a valley that fills up during gestation gets no birth', () => {
+    const state = pairWorld();
+    runUntilPhase(state, 'expecting', 3000);
+    expect(state.families[0]?.clutch?.count).toBeGreaterThan(0);
+    fillRabbitsTo(state, 12);
+    runTicks(state, 800); // past broodTicks: the babies would arrive here
+    expect(state.creatures.filter((c) => c.species === 'rabbit').length).toBe(12);
+    expect(state.families[0]?.phase).toBe('emptyNest');
+    expect(state.eventLog.some((e) => e.kind === 'born')).toBe(false);
+  });
+});
+
 describe('population', () => {
   it('rabbit population never exceeds the hard cap over a long run', () => {
     const state = createWorld(77);

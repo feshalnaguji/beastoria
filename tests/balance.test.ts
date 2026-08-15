@@ -3,7 +3,12 @@
  * game-days × 10 seeds; to keep CI under a couple of minutes we run
  * 30 game-days × 6 seeds plus one 100-day deep soak. Invariants:
  * counts never exceed hardCap, nothing is extinct at the end, and the
- * phoenix stays singular. Sampled every 60 ticks.
+ * phoenix stays singular.
+ *
+ * M9: the hard cap is now enforced in family.ts (clutch size is clamped to
+ * the room left, at laying AND at hatching), so it is checked EVERY tick as
+ * a strict invariant rather than sampled every 60. The remaining (cheaper,
+ * inherently slower-moving) properties stay on the 60-tick sample.
  */
 import { describe, expect, it } from 'vitest';
 import { TICKS_PER_DAY } from '../src/sim/clock';
@@ -25,13 +30,17 @@ function soak(seed: number, days: number): void {
   const totalTicks = days * TICKS_PER_DAY;
   for (let t = 0; t < totalTicks; t++) {
     tick(state, []);
-    if (t % 60 !== 0) continue;
     const c = counts(state);
     for (const id of ALL) {
-      expect(c[id], `${id} over hardCap at tick ${state.tick} (seed ${seed})`).toBeLessThanOrEqual(
-        SPECIES[id].population.hardCap,
-      );
+      // Asserted inside the guard so the hot path stays cheap; a violation
+      // still fails with the full message.
+      if ((c[id] ?? 0) > SPECIES[id].population.hardCap) {
+        expect(c[id], `${id} over hardCap at tick ${state.tick} (seed ${seed})`).toBeLessThanOrEqual(
+          SPECIES[id].population.hardCap,
+        );
+      }
     }
+    if (t % 60 !== 0) continue;
     const phoenixFams = state.families.filter((f) => f.species === 'phoenix').length;
     expect(phoenixFams, `phoenix families at tick ${state.tick}`).toBeLessThanOrEqual(1);
     expect(c.phoenix, `phoenix extinct at tick ${state.tick}`).toBeGreaterThanOrEqual(1);

@@ -97,10 +97,70 @@ export const GROUND_NESTS: Vec2[] = [
 /** The one nest at the ancient tree's roots — the phoenix's, always. */
 export const GROVE_NEST: Vec2 = { x: 2300, y: 430 };
 
-/** How a creature relates to water (spec §4.3 walkability). */
-export type Medium = 'land' | 'water' | 'amphibious';
+/**
+ * How a creature relates to water (spec §4.3 walkability).
+ * 'air' is the flying media: nowhere in the valley is off-limits in passing.
+ * Where a flier may come to REST is its species' `landingMedium` instead.
+ */
+export type Medium = 'land' | 'water' | 'amphibious' | 'air';
 
 export function canOccupy(medium: Medium, p: Vec2): boolean {
-  if (medium === 'amphibious') return true;
+  if (medium === 'amphibious' || medium === 'air') return true;
   return medium === 'water' ? isWater(p) : !isWater(p);
 }
+
+/**
+ * The nearest point `medium` can rest at — draw-free, so it never consumes or
+ * reorders RNG and can be used to fix up any authored/derived point. Projects
+ * radially (relative to the pond) out of, or into, the water.
+ */
+export function nearestRestable(medium: Medium, p: Vec2): Vec2 {
+  if (canOccupy(medium, p)) return { x: p.x, y: p.y };
+  const nx = (p.x - POND.x) / POND.rx;
+  const ny = (p.y - POND.y) / POND.ry;
+  const r = Math.hypot(nx, ny);
+  const targetR = medium === 'water' ? 0.85 : 1.08;
+  if (r === 0) {
+    // Only dry-resting media can hit this (the pond centre is always water).
+    return { x: POND.x, y: POND.y - POND.ry * targetR };
+  }
+  return {
+    x: POND.x + (nx / r) * targetR * POND.rx,
+    y: POND.y + (ny / r) * targetR * POND.ry,
+  };
+}
+
+/**
+ * The valley's larder. Foraging aims here instead of at random empty grass,
+ * so the painted berry thickets, forest-edge grasses and pond reeds are the
+ * places creatures are actually seen eating.
+ *
+ * Deterministic authored data (like POND itself): 12 grass/berry spots just
+ * inside the forest and grove edges (ellipse ×0.98) and 4 reed spots on the
+ * pond's dry shore (ellipse ×1.10). Every spot is dry land inside the world
+ * rect, so land, air and amphibious creatures can all reach one.
+ *
+ * `zone` names the spot's anchor zone — for reeds that is the pond they hug,
+ * even though the spot itself is (by construction) outside the water.
+ */
+export interface FoodSpot extends Vec2 {
+  zone: ZoneId;
+}
+
+function onEllipse(z: EllipseZone, zone: ZoneId, scale: number, deg: number): FoodSpot {
+  const a = (deg * Math.PI) / 180;
+  return {
+    x: Math.round(z.x + Math.cos(a) * z.rx * scale),
+    y: Math.round(z.y + Math.sin(a) * z.ry * scale),
+    zone,
+  };
+}
+
+export const FOOD_SPOTS: readonly FoodSpot[] = [
+  // Forest edge: berry thickets and shaded grass all round the canopy.
+  ...[0, 45, 90, 135, 180, 225, 270, 315].map((d) => onEllipse(FOREST, 'forest', 0.98, d)),
+  // Grove edge: the sunlit southern half (the northern rim runs off the map).
+  ...[0, 45, 90, 135].map((d) => onEllipse(GROVE, 'grove', 0.98, d)),
+  // Pond shore: reeds and waterweed, just clear of the water.
+  ...[0, 90, 180, 270].map((d) => onEllipse(POND, 'pond', 1.1, d)),
+];

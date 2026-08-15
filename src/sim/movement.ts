@@ -4,18 +4,29 @@
  */
 import { nextFloat, nextRange, type RngState } from './rng';
 import { WORLD_HEIGHT, WORLD_WIDTH, type Creature, type Vec2 } from './state';
-import { canOccupy, POND, type Medium } from './valley';
+import { canOccupy, nearestRestable, POND, type Medium } from './valley';
 
 const EDGE_MARGIN = 120;
 const MAX_TURN = 0.3;
 
-/** Steer toward `target` and advance; returns remaining distance. */
-export function moveToward(c: Creature, target: Vec2, speed: number, medium: Medium): number {
+/**
+ * Steer toward `target` and advance; returns remaining distance.
+ * `medium` governs what the creature may pass through; `landing` (default:
+ * the same) governs where it may come to rest — a flier crosses the pond on
+ * 'air' but only snaps onto a target its 'land' landing medium allows.
+ */
+export function moveToward(
+  c: Creature,
+  target: Vec2,
+  speed: number,
+  medium: Medium,
+  landing: Medium = medium,
+): number {
   const dx = target.x - c.pos.x;
   const dy = target.y - c.pos.y;
   const dist = Math.hypot(dx, dy);
   if (dist <= speed) {
-    if (canOccupy(medium, target)) {
+    if (canOccupy(landing, target)) {
       c.pos.x = target.x;
       c.pos.y = target.y;
     }
@@ -51,6 +62,22 @@ export function wanderStep(rng: RngState, c: Creature, speed: number, medium: Me
  * or stay put this tick.
  */
 function advance(c: Creature, speed: number, medium: Medium): void {
+  // Stranded in the wrong medium (a hand-placed spawn inside the pond, say):
+  // strike out for the nearest legal ground WITHOUT testing the intermediate
+  // step, or the creature would be pinned there forever — every short step
+  // out of the middle of the pond is still in the pond.
+  if (!canOccupy(medium, c.pos)) {
+    const escape = nearestRestable(medium, c.pos);
+    c.heading = turnToward(
+      c.heading,
+      Math.atan2(escape.y - c.pos.y, escape.x - c.pos.x),
+      MAX_TURN * 2,
+    );
+    c.pos.x += Math.cos(c.heading) * speed;
+    c.pos.y += Math.sin(c.heading) * speed;
+    clampToWorld(c);
+    return;
+  }
   const candidate = {
     x: c.pos.x + Math.cos(c.heading) * speed,
     y: c.pos.y + Math.sin(c.heading) * speed,
