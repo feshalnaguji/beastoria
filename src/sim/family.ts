@@ -25,6 +25,8 @@ const COURT_TICKS = 300;
 const NEST_TICKS = 400;
 const BROOD_SWAP_TICKS = 220;
 const FEED_TRIGGER_HUNGER = 0.5;
+/** How long a nursing mother holds still once she reaches home (behaviors.ts). */
+const NURSE_HOLD_TICKS = 80;
 const BABY_LEASH = 140;
 const PASS_GATHER_TICKS = 200;
 const PASS_GATHER_RANGE = 700;
@@ -321,22 +323,33 @@ function stepFamily(state: WorldState, fam: Family): void {
         }
       }
 
-      // Feeding: when a baby is hungry, the duty parent fetches food.
-      const hungryBaby = children.some(
-        (c) => c.stage === 'baby' && c.needs.hunger > FEED_TRIGGER_HUNGER,
-      );
-      const feeding = parents.some((p) => p.activity.id === 'feedYoung');
-      if (home && hungryBaby && !feeding) {
-        fam.dutyParent = (fam.dutyParent + 1) % Math.max(1, parents.length);
-        const feeder = parents[fam.dutyParent % parents.length];
-        if (feeder) {
-          overrideActivity(feeder, {
-            id: 'feedYoung',
-            ticks: 0,
-            minTicks: 30,
-            step: 0,
-            targetId: home.id,
-          });
+      // Feeding: when a baby is hungry, the duty parent fetches food — except
+      // 'self' species (koi fry etc.), which are never fed by a parent at
+      // all; they graze passively instead (decayNeeds, behaviors.ts).
+      const feedMode = SPECIES[fam.species].reproduction.feedMode;
+      if (feedMode !== 'self') {
+        const hungryBaby = children.some(
+          (c) => c.stage === 'baby' && c.needs.hunger > FEED_TRIGGER_HUNGER,
+        );
+        const feeding = parents.some((p) => p.activity.id === 'feedYoung');
+        if (home && hungryBaby && !feeding) {
+          let feeder: Creature | undefined;
+          if (feedMode === 'nurse') {
+            // The mother always nurses — no duty rotation to hand off.
+            feeder = parents.find((p) => p.sex === 'f') ?? parents[0];
+          } else {
+            fam.dutyParent = (fam.dutyParent + 1) % Math.max(1, parents.length);
+            feeder = parents[fam.dutyParent % parents.length];
+          }
+          if (feeder) {
+            overrideActivity(feeder, {
+              id: 'feedYoung',
+              ticks: 0,
+              minTicks: feedMode === 'nurse' ? NURSE_HOLD_TICKS : 30,
+              step: 0,
+              targetId: home.id,
+            });
+          }
         }
       }
 

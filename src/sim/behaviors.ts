@@ -34,6 +34,12 @@ const ARRIVE_DIST = 10;
 const PROGRESS_CHECK_TICKS = 100;
 /** A stall checkpoint counts as "no progress" below this much net movement. */
 const PROGRESS_MIN_DIST = 1;
+/** How close a baby must be to a nursing mother to feed during her hold. */
+const NURSE_RANGE = 60;
+/** Hunger relief per tick per baby in reach during a nursing hold (M10). */
+const NURSE_HUNGER_RATE = 0.006;
+/** Passive-graze hunger relief per tick for self-feeding babies (koi fry). */
+const PASSIVE_GRAZE_RATE = 0.0015;
 const HERD_RADIUS = 350;
 const HERD_TURN = 0.1;
 /** How many of the nearest food spots a forager chooses between. */
@@ -117,6 +123,12 @@ export function decayNeeds(state: WorldState): void {
   for (const c of state.creatures) {
     const p = SPECIES[c.species];
     c.needs.hunger = clamp01(c.needs.hunger + p.needRates.hunger);
+    // Self-feeding young (koi fry etc., M10): no parent ever feeds them, so
+    // they graze passively wherever they can legally rest — deterministic
+    // arithmetic, no RNG draws.
+    if (p.reproduction.feedMode === 'self' && c.stage === 'baby' && restingIsLegal(c)) {
+      c.needs.hunger = clamp01(c.needs.hunger - PASSIVE_GRAZE_RATE);
+    }
     if (c.activity.id !== 'nap') {
       c.needs.rest = clamp01(c.needs.rest + p.needRates.rest);
     }
@@ -291,7 +303,46 @@ export function applyActivity(state: WorldState, c: Creature, _clock: Clock): vo
     }
 
     case 'feedYoung': {
-      // Two legs: fetch food nearby (step 0), carry it home (step 1).
+      if (SPECIES[c.species].reproduction.feedMode === 'nurse') {
+        if (c.activity.step === 1) {
+          // Stationary nursing hold: no travel, just a per-tick hunger
+          // decay for every family baby within reach (deterministic
+          // arithmetic, zero RNG draws). `targetId` is repurposed here as
+          // the hold-start tick marker — the home lookup it held during
+          // step 0 is no longer needed once she's arrived.
+          const holdStart = c.activity.targetId ?? c.activity.ticks;
+          c.activity.targetId = holdStart;
+          for (const other of state.creatures) {
+            if (
+              other.familyId === c.familyId &&
+              other.stage === 'baby' &&
+              Math.hypot(other.pos.x - c.pos.x, other.pos.y - c.pos.y) <= NURSE_RANGE
+            ) {
+              other.needs.hunger = clamp01(other.needs.hunger - NURSE_HUNGER_RATE);
+            }
+          }
+          if (c.activity.ticks - holdStart >= c.activity.minTicks) {
+            startActivity(state, c, 'idle');
+          }
+          break;
+        }
+        // Step 0: go straight home — a nursing mother doesn't fetch food
+        // afield first (no fetch trek, no RNG draws).
+        const home = state.homes.find((h) => h.id === c.activity.targetId);
+        if (!home) {
+          startActivity(state, c, 'idle');
+          break;
+        }
+        const remaining = moveToward(c, home.pos, speedFor(c.species, c.stage), medium, landing);
+        if (remaining >= 0 && remaining <= ARRIVE_DIST) {
+          c.activity.step = 1;
+          c.activity.targetId = c.activity.ticks; // mark the hold's start
+        }
+        break;
+      }
+
+      // carry (birds, exactly today's flow): fetch food nearby (step 0),
+      // carry it home (step 1).
       if (c.activity.step === 0 && !c.activity.targetPos) {
         const angle = nextRange(state.rng, 0, Math.PI * 2);
         const dist = nextRange(state.rng, 140, 280);

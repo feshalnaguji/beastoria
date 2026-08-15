@@ -30,6 +30,17 @@ export interface SpeciesParams {
     broodTicks: number;
     /** Pause between clutches (emptyNest), in ticks. */
     cooldownTicks: number;
+    /**
+     * How this species feeds its young (M10 task 2):
+     * - 'nurse': mammals — the mother goes straight home and holds a
+     *   stationary nursing stance; babies gathered by the leash feed while
+     *   she holds.
+     * - 'carry': birds — a parent fetches food afield, then carries it home
+     *   to deliver in one lump (the original/only flow before this task).
+     * - 'self': fish/amphibians — young are never fed by a parent; they
+     *   graze passively instead.
+     */
+    feedMode: 'nurse' | 'carry' | 'self';
   };
   population: { floor: number; softCap: number; hardCap: number };
   /** How the species MOVES: koi water-only, ducks amphibious, birds by air. */
@@ -72,6 +83,7 @@ export const SPECIES: Record<SpeciesId, SpeciesParams> = {
       clutchMax: 3,
       broodTicks: 600, // gestation shown as mother resting in the burrow
       cooldownTicks: 1800,
+      feedMode: 'nurse',
     },
     population: { floor: 3, softCap: 7, hardCap: 12 },
     medium: 'land',
@@ -98,6 +110,7 @@ export const SPECIES: Record<SpeciesId, SpeciesParams> = {
       clutchMax: 3,
       broodTicks: 800, // eggs brooded in the nest, parents alternating
       cooldownTicks: 2100,
+      feedMode: 'carry',
     },
     population: { floor: 3, softCap: 7, hardCap: 12 },
     medium: 'air', // flies: crosses the pond in a straight line
@@ -115,7 +128,14 @@ export const SPECIES: Record<SpeciesId, SpeciesParams> = {
     sleepRate: 0.003,
     socialRate: 0.006,
     homeKind: 'glade',
-    reproduction: { mode: 'live', clutchMin: 1, clutchMax: 2, broodTicks: 700, cooldownTicks: 2400 },
+    reproduction: {
+      mode: 'live',
+      clutchMin: 1,
+      clutchMax: 2,
+      broodTicks: 700,
+      cooldownTicks: 2400,
+      feedMode: 'nurse',
+    },
     population: { floor: 3, softCap: 7, hardCap: 10 },
     medium: 'land',
     wandersIn: true,
@@ -132,7 +152,14 @@ export const SPECIES: Record<SpeciesId, SpeciesParams> = {
     sleepRate: 0.003,
     socialRate: 0.006,
     homeKind: 'reedNest',
-    reproduction: { mode: 'egg', clutchMin: 2, clutchMax: 2, broodTicks: 750, cooldownTicks: 2100 },
+    reproduction: {
+      mode: 'egg',
+      clutchMin: 2,
+      clutchMax: 2,
+      broodTicks: 750,
+      cooldownTicks: 2100,
+      feedMode: 'carry',
+    },
     population: { floor: 3, softCap: 7, hardCap: 12 },
     medium: 'amphibious',
     wandersIn: true,
@@ -148,7 +175,14 @@ export const SPECIES: Record<SpeciesId, SpeciesParams> = {
     sleepRate: 0.0025,
     socialRate: 0.005,
     homeKind: 'lilyPatch',
-    reproduction: { mode: 'egg', clutchMin: 2, clutchMax: 3, broodTicks: 600, cooldownTicks: 2400 },
+    reproduction: {
+      mode: 'egg',
+      clutchMin: 2,
+      clutchMax: 3,
+      broodTicks: 600,
+      cooldownTicks: 2400,
+      feedMode: 'self',
+    },
     population: { floor: 3, softCap: 7, hardCap: 13 },
     medium: 'water',
     wandersIn: true,
@@ -164,7 +198,14 @@ export const SPECIES: Record<SpeciesId, SpeciesParams> = {
     sleepRate: 0.003,
     socialRate: 0.005,
     homeKind: 'treeHollow',
-    reproduction: { mode: 'egg', clutchMin: 1, clutchMax: 3, broodTicks: 800, cooldownTicks: 2200 },
+    reproduction: {
+      mode: 'egg',
+      clutchMin: 1,
+      clutchMax: 3,
+      broodTicks: 800,
+      cooldownTicks: 2200,
+      feedMode: 'carry',
+    },
     population: { floor: 2, softCap: 6, hardCap: 9 },
     medium: 'air', // flies: crosses the pond in a straight line
     landingMedium: 'land',
@@ -181,7 +222,14 @@ export const SPECIES: Record<SpeciesId, SpeciesParams> = {
     sleepRate: 0.003,
     socialRate: 0.006,
     homeKind: 'groundNest',
-    reproduction: { mode: 'egg', clutchMin: 1, clutchMax: 2, broodTicks: 900, cooldownTicks: 2600 },
+    reproduction: {
+      mode: 'egg',
+      clutchMin: 1,
+      clutchMax: 2,
+      broodTicks: 900,
+      cooldownTicks: 2600,
+      feedMode: 'carry',
+    },
     population: { floor: 2, softCap: 5, hardCap: 8 },
     medium: 'land',
     wandersIn: true, // canonically: dodos wander into the valley from beyond
@@ -197,7 +245,14 @@ export const SPECIES: Record<SpeciesId, SpeciesParams> = {
     sleepRate: 0.003,
     socialRate: 0.005,
     homeKind: 'groveNest',
-    reproduction: { mode: 'egg', clutchMin: 1, clutchMax: 1, broodTicks: 700, cooldownTicks: 4000 },
+    reproduction: {
+      mode: 'egg',
+      clutchMin: 1,
+      clutchMax: 1,
+      broodTicks: 700,
+      cooldownTicks: 4000,
+      feedMode: 'carry',
+    },
     population: { floor: 1, softCap: 3, hardCap: 4 }, // softCap 3 lets the lone pair re-nest
     medium: 'air', // flies: crosses the pond in a straight line
     landingMedium: 'land',
