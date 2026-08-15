@@ -7,6 +7,7 @@ import type { CreatureRig } from './format';
 const COAT = 0xc99b6f;
 const COAT_DARK = 0xb0855c;
 const CREAM = 0xf1e5d2;
+const BERRY = 0xcf5f52;
 
 export const deerRig: CreatureRig = {
   species: 'deer',
@@ -46,6 +47,11 @@ export const deerRig: CreatureRig = {
         { kind: 'circle', x: 17, y: 4, r: 2.2, fill: { color: 0x3a3230 } }, // nose
         { kind: 'circle', x: 3, y: -3, r: 2.6, fill: { color: 0x3a3230 } }, // eye
       ] },
+    // A morsel carried home to the fawns (M9 task 5) — only ever visible
+    // during the 'carry' clip; every other clip hides it via hideInClips.
+    { id: 'food', parent: 'head', x: 19, y: 6, z: 3,
+      shapes: [{ kind: 'ellipse', x: 0, y: 0, rx: 3, ry: 2.5, fill: { color: BERRY } }],
+      hideInClips: ['idle', 'walk', 'sleep', 'eat', 'social', 'sit'] },
     { id: 'earL', parent: 'head', x: -8, y: -9, z: -1,
       shapes: [
         { kind: 'ellipse', x: -3, y: -8, rx: 5, ry: 10, fill: { color: COAT } },
@@ -110,6 +116,26 @@ export const deerRig: CreatureRig = {
         { partId: 'head', rot: [{ t: 0, v: 0 }, { t: 0.3, v: -0.25 }, { t: 0.6, v: 0.15 }, { t: 1, v: 0 }] },
         { partId: 'earL', rot: [{ t: 0, v: 0 }, { t: 0.5, v: 0.3 }, { t: 1, v: 0 }] },
         { partId: 'earR', rot: [{ t: 0, v: 0 }, { t: 0.5, v: -0.3 }, { t: 1, v: 0 }] },
+      ],
+    },
+    carry: {
+      // Fetching food home: head carried low the whole way (M9 task 5's
+      // "deer head-low carry"), legs still striding underneath.
+      durationMs: 640,
+      tracks: [
+        { partId: 'legBB', rot: [{ t: 0, v: 0.3 }, { t: 0.5, v: -0.3 }, { t: 1, v: 0.3 }] },
+        { partId: 'legBF', rot: [{ t: 0, v: -0.3 }, { t: 0.5, v: 0.3 }, { t: 1, v: -0.3 }] },
+        { partId: 'legFB', rot: [{ t: 0, v: -0.3 }, { t: 0.5, v: 0.3 }, { t: 1, v: -0.3 }] },
+        { partId: 'legFF', rot: [{ t: 0, v: 0.3 }, { t: 0.5, v: -0.3 }, { t: 1, v: 0.3 }] },
+        { partId: 'body', py: [{ t: 0, v: 0 }, { t: 0.25, v: -2 }, { t: 0.5, v: 0 }, { t: 0.75, v: -2 }, { t: 1, v: 0 }] },
+        { partId: 'neck', rot: [{ t: 0, v: 0.35 }, { t: 1, v: 0.35 }] },
+      ],
+    },
+    sit: {
+      // Settled to brood: a gentle squash (M9 task 5).
+      durationMs: 1000,
+      tracks: [
+        { partId: 'body', sy: [{ t: 0, v: 0.85 }, { t: 1, v: 0.85 }], py: [{ t: 0, v: 3 }, { t: 1, v: 3 }] },
       ],
     },
   },

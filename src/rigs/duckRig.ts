@@ -8,6 +8,7 @@ const BROWN = 0x9b8262;
 const BROWN_DARK = 0x846d4e;
 const CREAM = 0xe9dcc0;
 const BILL = 0xe8a53c;
+const WEED = 0x7da861;
 
 export const duckRig: CreatureRig = {
   species: 'duck',
@@ -41,6 +42,11 @@ export const duckRig: CreatureRig = {
       ] },
     { id: 'bill', parent: 'head', x: 7.5, y: 1, z: 1,
       shapes: [{ kind: 'path', d: 'M 0 -2.5 L 10 -1 Q 12 0.5 10 2 L 0 3.5 Z', fill: { color: BILL } }] },
+    // A sprig of pondweed carried home to the ducklings (M9 task 5) — only
+    // ever visible during the 'carry' clip; every other clip hides it.
+    { id: 'food', parent: 'bill', x: 9, y: 0.5, z: 2,
+      shapes: [{ kind: 'ellipse', x: 0, y: 0, rx: 2.5, ry: 2.2, fill: { color: WEED } }],
+      hideInClips: ['idle', 'walk', 'sleep', 'eat', 'social', 'swim', 'sit'] },
   ],
   stages: {
     baby: {
@@ -100,6 +106,25 @@ export const duckRig: CreatureRig = {
       tracks: [
         { partId: 'body', py: [{ t: 0, v: 0 }, { t: 0.5, v: 2 }, { t: 1, v: 0 }] },
         { partId: 'tail', rot: [{ t: 0, v: -0.3 }, { t: 0.5, v: 0.3 }, { t: 1, v: -0.3 }] },
+      ],
+    },
+    carry: {
+      // Fetching food home: the same waddle, bill held low and full (M9 task 5).
+      durationMs: 520,
+      tracks: [
+        { partId: 'body', rot: [{ t: 0, v: 0.12 }, { t: 0.5, v: -0.12 }, { t: 1, v: 0.12 }],
+          py: [{ t: 0, v: 0 }, { t: 0.25, v: -1.5 }, { t: 0.5, v: 0 }, { t: 0.75, v: -1.5 }, { t: 1, v: 0 }] },
+        { partId: 'tail', rot: [{ t: 0, v: -0.2 }, { t: 0.5, v: 0.2 }, { t: 1, v: -0.2 }] },
+        { partId: 'legF', rot: [{ t: 0, v: 0.4 }, { t: 0.5, v: -0.4 }, { t: 1, v: 0.4 }] },
+        { partId: 'legB', rot: [{ t: 0, v: -0.4 }, { t: 0.5, v: 0.4 }, { t: 1, v: -0.4 }] },
+        { partId: 'head', rot: [{ t: 0, v: 0.2 }, { t: 0.5, v: 0.3 }, { t: 1, v: 0.2 }] },
+      ],
+    },
+    sit: {
+      // Settled to brood: a gentle squash (M9 task 5).
+      durationMs: 1000,
+      tracks: [
+        { partId: 'body', sy: [{ t: 0, v: 0.85 }, { t: 1, v: 0.85 }], py: [{ t: 0, v: 3 }, { t: 1, v: 3 }] },
       ],
     },
   },

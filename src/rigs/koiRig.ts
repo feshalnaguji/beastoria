@@ -8,6 +8,7 @@ import type { CreatureRig } from './format';
 const BODY = 0xf2ede2;
 const ORANGE = 0xe07a3f;
 const FIN = 0xf5c9a5;
+const BERRY = 0xcf5f52;
 
 export const koiRig: CreatureRig = {
   species: 'koi',
@@ -29,6 +30,11 @@ export const koiRig: CreatureRig = {
       shapes: [{ kind: 'path', d: 'M -6 0 Q 0 -7 8 -1 Z', fill: { color: FIN, alpha: 0.85 } }] },
     { id: 'pectoral', parent: 'body', x: 4, y: 6, z: 1,
       shapes: [{ kind: 'ellipse', x: 0, y: 3, rx: 4, ry: 6, fill: { color: FIN, alpha: 0.7 } }] },
+    // A morsel carried home to the fry (M9 task 5) — only ever visible
+    // during the 'carry' clip; every other clip hides it via hideInClips.
+    { id: 'food', parent: 'body', x: 19, y: 1, z: 3,
+      shapes: [{ kind: 'ellipse', x: 0, y: 0, rx: 2.6, ry: 2.2, fill: { color: BERRY } }],
+      hideInClips: ['idle', 'walk', 'sleep', 'eat', 'social', 'sit'] },
     { id: 'tailFin', parent: 'body', x: -19, y: 0, z: -2,
       shapes: [{ kind: 'path', d: 'M 0 0 L -14 -9 L -9 0 L -14 9 Z', fill: { color: FIN, alpha: 0.9 } }] },
   ],
@@ -74,6 +80,23 @@ export const koiRig: CreatureRig = {
       tracks: [
         { partId: 'tailFin', rot: [{ t: 0, v: 0 }, { t: 0.2, v: 0.6 }, { t: 0.5, v: -0.6 }, { t: 0.8, v: 0.4 }, { t: 1, v: 0 }] },
         { partId: 'pectoral', rot: [{ t: 0, v: 0 }, { t: 0.5, v: 0.5 }, { t: 1, v: 0 }] },
+      ],
+    },
+    carry: {
+      // Ferrying a morsel home: the same swim, mouth held closed and full (M9 task 5).
+      durationMs: 700,
+      tracks: [
+        { partId: 'tailFin', rot: [{ t: 0, v: 0 }, { t: 0.25, v: 0.55 }, { t: 0.5, v: 0 }, { t: 0.75, v: -0.55 }, { t: 1, v: 0 }] },
+        { partId: 'body', sx: [{ t: 0, v: 1 }, { t: 0.25, v: 0.97 }, { t: 0.5, v: 1 }, { t: 0.75, v: 0.97 }, { t: 1, v: 1 }],
+          rot: [{ t: 0, v: 0.06 }, { t: 1, v: 0.06 }] },
+        { partId: 'dorsal', rot: [{ t: 0, v: 0 }, { t: 0.5, v: 0.12 }, { t: 1, v: 0 }] },
+      ],
+    },
+    sit: {
+      // Settled to brood: a gentle squash (M9 task 5).
+      durationMs: 1000,
+      tracks: [
+        { partId: 'body', sy: [{ t: 0, v: 0.85 }, { t: 1, v: 0.85 }], py: [{ t: 0, v: 3 }, { t: 1, v: 3 }] },
       ],
     },
   },

@@ -5,6 +5,7 @@
  */
 import { Application, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
 import { getClock, TICKS_PER_DAY, type Clock } from '../sim/clock';
+import type { SimEvent } from '../sim/events';
 import { SPECIES, speedFor } from '../sim/species';
 import {
   WORLD_HEIGHT,
@@ -47,7 +48,16 @@ interface CreatureView {
   rig: RigInstance;
   spriteWrap: Container;
   sprite: Sprite;
-  frames: { idle: BakedFrame; walk: BakedFrame[]; flap?: BakedFrame[]; swim?: BakedFrame[] };
+  frames: {
+    idle: BakedFrame;
+    walk: BakedFrame[];
+    flap?: BakedFrame[];
+    swim?: BakedFrame[];
+    eat: BakedFrame;
+    sleep: BakedFrame;
+    carry: BakedFrame;
+    sit: BakedFrame;
+  };
   label: Text;
   species: SpeciesId;
   stage: LifeStage;
@@ -55,6 +65,22 @@ interface CreatureView {
   curr: Vec2;
   heading: number;
   activityId: string;
+  /** Copied from `c.activity.step` each sync (M9 task 5) — distinguishes
+   * feedYoung's two legs (0 fetch, 1 carry home) for clipFor. */
+  step: number | undefined;
+  /** Copied from `c.activity.minTicks` each sync — the only render-visible
+   * signal that separates the mourning 'gather' from its two other reuses
+   * (see MOURNING_GATHER_MIN_TICKS). */
+  minTicks: number;
+  /** World-px nudge applied while brooding at a treeNest home, so the
+   * sitter renders in the drawn bowl rather than at the tree's own point
+   * (0,0 for every other home kind / non-brooding creature). */
+  broodOffsetX: number;
+  broodOffsetY: number;
+  /** The activity glyph currently showing (or fading out), and its eased
+   * alpha — see GLYPH_FADE_MS and glyphKindFor(). */
+  glyphKind: GlyphKind | undefined;
+  glyphAlpha: number;
   /** Ground distance traveled (world px), wrapped at the rig's strideLength —
    * drives T1 flipbook frame selection off actual displacement, not the
    * wall clock (M9 task 2: cadence must track speed, not glide at a fixed
@@ -102,6 +128,46 @@ const SHADOW_AIRBORNE_SCALE = 0.6;
 const RIPPLE_PULSE_MS = 2400;
 const RIPPLE_PULSE_AMPLITUDE = 0.15;
 
+/** M9 task 5: a passing elder's view lingers this long, easing out instead
+ * of vanishing on the same frame it leaves state.creatures. */
+const PASSING_FADE_MS = 1200;
+/** How long a glyph takes to fade in or out when its activity starts/ends. */
+const GLYPH_FADE_MS = 300;
+/** Glyph radius is screen-compensated (constant apparent size at any zoom),
+ * clamped to a sane range of world px. */
+const GLYPH_RADIUS_K = 3.5;
+const GLYPH_RADIUS_MIN = 4;
+const GLYPH_RADIUS_MAX = 14;
+/** World-px slack around the viewport a glyph may sit in before it's culled
+ * as off-screen — generous enough that a glyph never pops in/out at the edge. */
+const GLYPH_CULL_MARGIN = 60;
+/**
+ * Matches src/sim/family.ts PASS_GATHER_TICKS. The 'gather' activity is
+ * reused for three different family moments (mourning a passing elder,
+ * settling onto a new nest, herding a wandering baby home) that the sim
+ * doesn't otherwise distinguish; mourning is the only one with this long a
+ * minTicks (30 for the other two), so it cleanly separates the "mourning
+ * circle" glyph without any sim change.
+ */
+const MOURNING_GATHER_MIN_TICKS = 200;
+/** Matches the treeNest bowl's draw offset from home.pos (syncHomes, the
+ * 'treeNest' case below) — a brooding sitter renders here instead of at the
+ * home's own point, so it visibly sits IN the bowl. */
+const TREE_NEST_BOWL_OFFSET: Vec2 = { x: 38, y: 26 };
+/** Event kinds that spawn a moment sparkle (M9 task 5). */
+const SPARKLE_EVENT_KINDS = new Set<SimEvent['kind']>(['hatched', 'born', 'paired']);
+
+/** Small, gentle activity glyphs floating above a creature's crown — the
+ * valley's readable vocabulary for its richest loops (M9 task 5). */
+type GlyphKind = 'forage' | 'nap' | 'court' | 'carry' | 'brood' | 'mourning';
+
+/** A view mid-fade after leaving state.creatures (M9 task 5's gentle
+ * passing) — drained in the render loop rather than destroyed same-frame. */
+interface FadingView {
+  view: CreatureView;
+  remainingMs: number;
+}
+
 function clamp(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
 }
@@ -143,6 +209,9 @@ export class Renderer {
   private groundSprite!: Sprite;
   private detailLayer!: Container;
   private creatureLayer!: Container;
+  /** One Graphics redrawn every frame with the small activity glyphs — leaf
+   * dot, crescent, rose arcs, etc (M9 task 5). */
+  private glyphLayer!: Graphics;
   private homeLayer!: Graphics;
   private memorialLayer!: Graphics;
   private homeLabelLayer!: Container;
@@ -154,6 +223,17 @@ export class Renderer {
   private glowOverlay!: Graphics;
   private ambient!: AmbientEffects;
   private views = new Map<number, CreatureView>();
+  /** Views that have left state.creatures but are still easing out
+   * (M9 task 5's gentle passing) — drained each rendered frame. */
+  private fading: FadingView[] = [];
+  /** eventLog is a tick-stamped ring buffer, not an index-stable one (it
+   * shifts once past its cap) — tracking the last-seen TICK, not an index,
+   * is what makes moment-sparkle consumption exactly-once and safe across
+   * both live play (one sync per tick) and offline catch-up (one sync after
+   * many ticks). -1 until the first sync, which seeds it from state.tick
+   * without spawning anything for a save's entire history (M9 task 5). */
+  private lastSeenEventTick = -1;
+  private eventsInitialized = false;
   private clock: Clock = getClock(0);
   private lastFrameTime = 0;
   /** Baked once (Ambient's bake-once pattern): a duck's swim ripple. */
@@ -203,6 +283,7 @@ export class Renderer {
     this.memorialLayer = new Graphics();
     this.homeLabelLayer = new Container();
     this.creatureLayer = new Container();
+    this.glyphLayer = new Graphics();
     this.ambient = new AmbientEffects(this.world, AMBIENT_SEED);
     this.world.addChild(
       this.groundSprite,
@@ -213,6 +294,8 @@ export class Renderer {
       this.ambient.grassLayer, // above terrain detail
       this.ambient.dappleLayer,
       this.creatureLayer,
+      this.glyphLayer, // activity glyphs, above creature bodies
+      this.ambient.sparkleLayer, // moment sparkles
       this.ambient.fireflyLayer, // above creatures
       this.homeLabelLayer,
     );
@@ -292,18 +375,72 @@ export class Renderer {
       view.curr.y = c.pos.y;
       view.heading = c.heading;
       view.activityId = c.activity.id;
+      view.step = c.activity.step;
+      view.minTicks = c.activity.minTicks;
+      const offset = c.activity.id === 'brood' ? this.broodOffsetFor(state, c) : undefined;
+      view.broodOffsetX = offset?.x ?? 0;
+      view.broodOffsetY = offset?.y ?? 0;
     }
-    // Creatures who have passed fade from the world.
+    // Creatures who have passed ease out instead of vanishing same-frame —
+    // see this.fading, drained in render() (M9 task 5).
     for (const [id, view] of this.views) {
       if (!alive.has(id)) {
-        view.node.destroy({ children: true });
         this.views.delete(id);
         if (this.followId === id) this.followId = null;
+        this.fading.push({ view, remainingMs: PASSING_FADE_MS });
       }
     }
     this.syncHomes(state);
     this.syncMemorials(state);
     this.ambient.setMemorialAnchors(state.memorials.map((m) => m.pos));
+    this.consumeNewEvents(state);
+  }
+
+  /** A brooding sitter at a treeNest home renders offset into the drawn
+   * nest bowl (Renderer's own +38,+26 in syncHomes' 'treeNest' case) rather
+   * than at the home's own point — every other home kind draws its nest
+   * right at home.pos, so no offset applies. */
+  private broodOffsetFor(state: WorldState, c: Creature): Vec2 | undefined {
+    if (c.familyId === null) return undefined;
+    const fam = state.families.find((f) => f.id === c.familyId);
+    if (!fam || fam.homeId === null) return undefined;
+    const home = state.homes.find((h) => h.id === fam.homeId);
+    return home?.kind === 'treeNest' ? TREE_NEST_BOWL_OFFSET : undefined;
+  }
+
+  /**
+   * Spawns a moment sparkle for every hatch/birth/pairing event since the
+   * last sync. eventLog is tick-stamped, so filtering by
+   * `tick > lastSeenEventTick` (rather than tracking an array index) stays
+   * correct even though the log is a ring buffer that shifts once past its
+   * cap, and consumes each event exactly once whether sync runs once per
+   * tick (live play) or once after a whole offline catch-up drain (many
+   * ticks, one call) — see main.ts / CatchUp.ts.
+   */
+  private consumeNewEvents(state: WorldState): void {
+    if (!this.eventsInitialized) {
+      // First sync ever (boot, before any tick has run): a loaded save's
+      // entire event history is already "seen" — nothing sparkles retroactively.
+      this.eventsInitialized = true;
+      this.lastSeenEventTick = state.tick;
+      return;
+    }
+    const log = state.eventLog;
+    for (let i = log.length - 1; i >= 0; i--) {
+      const e = log[i];
+      if (!e || e.tick <= this.lastSeenEventTick) break;
+      this.spawnMomentSparkle(state, e);
+    }
+    this.lastSeenEventTick = state.tick;
+  }
+
+  private spawnMomentSparkle(state: WorldState, e: SimEvent): void {
+    if (!SPARKLE_EVENT_KINDS.has(e.kind)) return;
+    // 'paired' carries no pos (the pair hasn't claimed a home yet) — fall
+    // back to either member's current position, looked up by familyId.
+    const pos = e.pos ?? state.creatures.find((c) => c.familyId === e.familyId)?.pos;
+    if (!pos) return;
+    this.ambient.spawnSparkle(pos);
   }
 
   /** Burrows, nests (with eggs while expecting), and family name labels. */
@@ -472,9 +609,23 @@ export class Renderer {
     const dtMs = this.lastFrameTime === 0 ? 16 : Math.min(now - this.lastFrameTime, 100);
     this.lastFrameTime = now;
 
+    this.updateFading(dtMs);
+
     const zoom = this.camera.getZoom();
     const tier = lodTier(zoom);
     const grade = rampColor(TINT_RAMP, this.clock.dayT);
+
+    // Glyph culling bounds (world space), computed once per frame rather
+    // than per creature — see the on-screen check at the bottom of the
+    // per-view loop below (M9 task 5).
+    const camCX = this.camera.getCenterX();
+    const camCY = this.camera.getCenterY();
+    const cw = this.app.renderer.width / this.app.renderer.resolution;
+    const ch = this.app.renderer.height / this.app.renderer.resolution;
+    const glyphHalfW = cw / 2 / zoom + GLYPH_CULL_MARGIN;
+    const glyphHalfH = ch / 2 / zoom + GLYPH_CULL_MARGIN;
+    const glyphRadius = clamp(GLYPH_RADIUS_K / zoom, GLYPH_RADIUS_MIN, GLYPH_RADIUS_MAX);
+    this.glyphLayer.clear();
 
     for (const view of this.views.values()) {
       const x = view.prev.x + (view.curr.x - view.prev.x) * alpha;
@@ -505,7 +656,9 @@ export class Renderer {
       const liftEase = view.liftT * view.liftT * (3 - 2 * view.liftT); // smoothstep, matches Animator's sample()
       const liftPx = tier === 2 ? -LIFT_MAX_PX * liftEase : 0; // only the live T2 rig actually lifts
 
-      view.node.position.set(x, y + liftPx);
+      // A brooding sitter at a treeNest home nudges into the drawn bowl
+      // (broodOffsetX/Y, set in sync() — zero for every other case).
+      view.node.position.set(x + view.broodOffsetX, y + view.broodOffsetY + liftPx);
       const facingLeft = Math.cos(view.heading) < 0;
       view.node.scale.x = facingLeft ? -1 : 1;
       // A passing elder softens — the gentlest farewell.
@@ -523,10 +676,15 @@ export class Renderer {
       view.lastY = y;
       view.odometer = (view.odometer + dispPx) % stride;
 
+      // Single source of truth for which pose to show, shared by T2's live
+      // rig and T1's baked-frame cascade below (M9 task 5's clipFor fix —
+      // moving now outranks brood/nap, so a sitter still walking to the
+      // nest reads as walking, not asleep mid-stride).
+      const clip = clipFor(view.activityId, moving, airborneNow, swimming, view.step);
+
       if (tier === 2) {
         view.rig.root.visible = true;
         view.spriteWrap.visible = false;
-        const clip = clipFor(view.activityId, moving, airborneNow, swimming);
         view.rig.animator.play(clip);
         let rate = 1;
         if (clip === 'walk' && dtMs > 0) {
@@ -558,18 +716,28 @@ export class Renderer {
       } else {
         view.rig.root.visible = false;
         view.spriteWrap.visible = true;
-        // T1 flipbook: distance-driven frame pick, same airborne/swimming
-        // inference as T2. T0 (tier 0) always stays on the static idle bake.
+        // T1 flipbook: the same clip drives frame choice as T2 — flap/swim/
+        // walk stay distance-driven (multi-frame), carry/sit/sleep/eat show
+        // their single mid-pose bake (M9 task 5), and social/idle keep the
+        // pre-existing idle fallback. T0 (tier 0) always stays on idle.
         let frame = view.frames.idle;
         if (tier === 1) {
-          if (airborneNow && view.frames.flap) {
+          if (clip === 'flap' && view.frames.flap) {
             const flapIdx = Math.floor((view.odometer / stride) * N_FLAP_FRAMES) % N_FLAP_FRAMES;
             frame = view.frames.flap[flapIdx] ?? view.frames.idle;
-          } else if (swimming && view.frames.swim) {
+          } else if (clip === 'swim' && view.frames.swim) {
             frame = view.frames.swim[0] ?? view.frames.idle;
-          } else if (moving) {
+          } else if (clip === 'walk') {
             const frameIndex = Math.floor((view.odometer / stride) * N_WALK_FRAMES) % N_WALK_FRAMES;
             frame = view.frames.walk[frameIndex] ?? view.frames.idle;
+          } else if (clip === 'carry') {
+            frame = view.frames.carry;
+          } else if (clip === 'sit') {
+            frame = view.frames.sit;
+          } else if (clip === 'sleep') {
+            frame = view.frames.sleep;
+          } else if (clip === 'eat') {
+            frame = view.frames.eat;
           }
         }
         view.sprite.texture = frame.texture;
@@ -590,6 +758,28 @@ export class Renderer {
       if (view.label.visible) {
         view.label.text = view.activityId === 'nap' ? 'nap 💤' : view.activityId;
         view.label.scale.x = facingLeft ? -1 : 1;
+      }
+
+      // Activity glyph: ease alpha toward the desired kind (0 if none), and
+      // only ever swap kinds once fully faded out — see the field comment
+      // on CreatureView.glyphKind. Drawn only when visible and on-screen.
+      const desiredGlyph = glyphKindFor(view.activityId, view.step, view.minTicks);
+      if (desiredGlyph !== view.glyphKind && view.glyphAlpha <= 0) view.glyphKind = desiredGlyph;
+      const glyphTarget = desiredGlyph !== undefined && view.glyphKind === desiredGlyph ? 1 : 0;
+      if (view.glyphAlpha < glyphTarget) {
+        view.glyphAlpha = Math.min(glyphTarget, view.glyphAlpha + dtMs / GLYPH_FADE_MS);
+      } else if (view.glyphAlpha > glyphTarget) {
+        view.glyphAlpha = Math.max(glyphTarget, view.glyphAlpha - dtMs / GLYPH_FADE_MS);
+      }
+      if (view.glyphKind !== undefined && view.glyphAlpha > 0) {
+        const onscreen =
+          x > camCX - glyphHalfW && x < camCX + glyphHalfW && y > camCY - glyphHalfH && y < camCY + glyphHalfH;
+        if (onscreen) {
+          const stageScale = speciesRig.stages[view.stage].scale;
+          const crownX = x + view.broodOffsetX;
+          const crownY = y + view.broodOffsetY + LABEL_HEIGHT[view.species] * stageScale;
+          this.drawGlyph(view.glyphKind, crownX, crownY, glyphRadius, view.glyphAlpha);
+        }
       }
     }
 
@@ -612,6 +802,62 @@ export class Renderer {
    * frame) — see GameLoop's render callback in main.ts. */
   renderFrame(): void {
     this.app.render();
+  }
+
+  /**
+   * Eases each passed creature's view out over PASSING_FADE_MS and destroys
+   * it once fully faded, instead of the same-frame destroy sync() used to
+   * do — the gentlest farewell (M9 task 5). Iterates backward so mid-loop
+   * splices never skip an entry.
+   */
+  private updateFading(dtMs: number): void {
+    for (let i = this.fading.length - 1; i >= 0; i--) {
+      const f = this.fading[i];
+      if (!f) continue;
+      f.remainingMs -= dtMs;
+      if (f.remainingMs <= 0) {
+        f.view.node.destroy({ children: true });
+        this.fading.splice(i, 1);
+        continue;
+      }
+      // Fades from the settled 'pass' alpha (0.75, see render()'s per-view
+      // alpha line) down to fully transparent.
+      f.view.node.alpha = 0.75 * (f.remainingMs / PASSING_FADE_MS);
+    }
+  }
+
+  /**
+   * Draws one small, gentle activity glyph into glyphLayer — the valley's
+   * readable vocabulary for forage/nap/court/carry/brood/mourning (M9 task
+   * 5). Called only for on-screen, alpha>0 views; glyphLayer.clear() runs
+   * once per frame in render(), so every call here is additive within the
+   * frame. Shapes are deliberately simple (circle/ellipse/arc-stroke) —
+   * small and desaturated, never saturated or fussy.
+   */
+  private drawGlyph(kind: GlyphKind, cx: number, cy: number, r: number, alpha: number): void {
+    const g = this.glyphLayer;
+    switch (kind) {
+      case 'forage':
+        g.circle(cx, cy, r * 0.55).fill({ color: 0x8fae5c, alpha: 0.85 * alpha });
+        break;
+      case 'nap':
+        // A crescent moon, approximated as a short curved stroke.
+        strokeArc(g, cx, cy, r * 0.62, -Math.PI * 0.55, Math.PI * 0.55, 0xbcd6e8, r * 0.5, 0.8 * alpha);
+        break;
+      case 'court':
+        strokeArc(g, cx - r * 0.32, cy, r * 0.4, Math.PI * 0.15, Math.PI * 1.35, 0xdf9fb0, r * 0.28, 0.85 * alpha);
+        strokeArc(g, cx + r * 0.32, cy, r * 0.4, Math.PI * 1.65, Math.PI * 2.85, 0xdf9fb0, r * 0.28, 0.85 * alpha);
+        break;
+      case 'carry':
+        g.circle(cx, cy, r * 0.5).fill({ color: 0xe8a53c, alpha: 0.85 * alpha });
+        break;
+      case 'brood':
+        g.ellipse(cx, cy, r * 0.62, r * 0.44).fill({ color: 0xf3e9d2, alpha: 0.85 * alpha });
+        break;
+      case 'mourning':
+        g.ellipse(cx, cy, r * 0.4, r * 0.64).fill({ color: 0xb3aebd, alpha: 0.75 * alpha });
+        break;
+    }
   }
 
   private createView(c: Creature): CreatureView {
@@ -658,6 +904,12 @@ export class Renderer {
       curr: { x: c.pos.x, y: c.pos.y },
       heading: c.heading,
       activityId: c.activity.id,
+      step: c.activity.step,
+      minTicks: c.activity.minTicks,
+      broodOffsetX: 0,
+      broodOffsetY: 0,
+      glyphKind: undefined,
+      glyphAlpha: 0,
       odometer: 0,
       lastX: c.pos.x,
       lastY: c.pos.y,
@@ -698,6 +950,13 @@ export class Renderer {
     const frames: CreatureView['frames'] = {
       idle: bakedFrame(this.app.renderer, rig, stage, 'idle', 0),
       walk,
+      // Single mid-pose frames so mid-zoom (T1) reads eating, sleeping,
+      // carrying and sitting too, not just idle/walk (M9 task 5). Core
+      // clips, so every rig defines them — no existence guard needed.
+      eat: bakedFrame(this.app.renderer, rig, stage, 'eat', 0.5),
+      sleep: bakedFrame(this.app.renderer, rig, stage, 'sleep', 0.5),
+      carry: bakedFrame(this.app.renderer, rig, stage, 'carry', 0.5),
+      sit: bakedFrame(this.app.renderer, rig, stage, 'sit', 0.5),
     };
     // Only rigs that define 'flap'/'swim' get the extra bakes (M9 task 4) —
     // rig.clips.flap/.swim is undefined for every other species/clip pair.
@@ -758,20 +1017,63 @@ export class Renderer {
   }
 }
 
-/** Choose an animation clip from sim activity + motion + the render-only
- * airborne/swimming presentation inference (M9 task 4). `pass` wins over
+/**
+ * Choose an animation clip from sim activity + motion + the render-only
+ * airborne/swimming presentation inference (M9 task 4/5). `pass` wins over
  * everything else — a passing elder is always at rest, per Task 3's
- * nearestRestable() landing guarantee — airborne/swimming come next, then
- * the pre-existing activity-driven branches, unchanged. */
-function clipFor(activityId: string, moving: boolean, airborne: boolean, swimming: boolean): ClipName {
+ * nearestRestable() landing guarantee — airborne/swimming come next.
+ *
+ * M9 task 5 fixes an ordering bug: `moving` now outranks brood/nap. Both
+ * 'brood' and 'gather' walk to a target before settling (behaviors.ts:
+ * "Walk to the clutch, then sit"), so a sitter or napper still covering
+ * ground must read as walking, not as asleep mid-stride — only once they
+ * stop moving does the brood/nap pose take over. `feedYoung` splits on its
+ * `step` field while moving: step 1 (carrying food home) shows 'carry'
+ * instead of a plain 'walk'.
+ */
+function clipFor(
+  activityId: string,
+  moving: boolean,
+  airborne: boolean,
+  swimming: boolean,
+  feedYoungStep: number | undefined,
+): ClipName {
   if (activityId === 'pass') return 'sleep';
   if (airborne) return 'flap';
   if (swimming) return 'swim';
-  if (activityId === 'nap' || activityId === 'brood') return 'sleep';
-  if (moving) return 'walk';
+  if (moving) return activityId === 'feedYoung' && feedYoungStep === 1 ? 'carry' : 'walk';
+  if (activityId === 'brood') return 'sit';
+  if (activityId === 'nap') return 'sleep';
   if (activityId === 'forage' || activityId === 'feedYoung') return 'eat';
   if (activityId === 'socialize' || activityId === 'court') return 'social';
   return 'idle';
+}
+
+/**
+ * Which small activity glyph (if any) a creature's current activity earns
+ * (M9 task 5). `feedYoung` only glyphs on its carry-home leg (step 1) —
+ * fetching (step 0) reads as plain foraging/walking, no glyph. `gather` is
+ * reused for three different family moments the sim doesn't otherwise
+ * distinguish; only the long-minTicks mourning one glyphs (see
+ * MOURNING_GATHER_MIN_TICKS).
+ */
+function glyphKindFor(activityId: string, step: number | undefined, minTicks: number): GlyphKind | undefined {
+  switch (activityId) {
+    case 'forage':
+      return 'forage';
+    case 'nap':
+      return 'nap';
+    case 'court':
+      return 'court';
+    case 'brood':
+      return 'brood';
+    case 'feedYoung':
+      return step === 1 ? 'carry' : undefined;
+    case 'gather':
+      return minTicks >= MOURNING_GATHER_MIN_TICKS ? 'mourning' : undefined;
+    default:
+      return undefined;
+  }
 }
 
 const FAMILY_NAMES = [
@@ -791,6 +1093,37 @@ const FAMILY_NAMES = [
 
 function familyName(id: number): string {
   return FAMILY_NAMES[id % FAMILY_NAMES.length] ?? 'Meadow';
+}
+
+/**
+ * Strokes a short curved segment as an explicit moveTo/lineTo polyline —
+ * deliberately NOT Graphics.arc(), which (like canvas's arc()) implicitly
+ * draws a straight connecting line from wherever the shared Graphics
+ * object's path last left off to the arc's own start point. glyphLayer is
+ * one Graphics redrawn for every on-screen creature each frame, so an arc()
+ * chained after another creature's glyph would stitch a stray line clear
+ * across the world — this segmented approach always starts its own moveTo,
+ * matching how every other multi-shape drawing in this codebase (see
+ * ValleyPainter's drawReeds/drawTree) stays artifact-free.
+ */
+function strokeArc(
+  g: Graphics,
+  cx: number,
+  cy: number,
+  r: number,
+  startAngle: number,
+  endAngle: number,
+  color: number,
+  width: number,
+  alpha: number,
+): void {
+  const segments = 6;
+  g.moveTo(cx + r * Math.cos(startAngle), cy + r * Math.sin(startAngle));
+  for (let i = 1; i <= segments; i++) {
+    const a = startAngle + ((endAngle - startAngle) * i) / segments;
+    g.lineTo(cx + r * Math.cos(a), cy + r * Math.sin(a));
+  }
+  g.stroke({ color, width, alpha, cap: 'round' });
 }
 
 /** Piecewise-linear color ramp lookup. */

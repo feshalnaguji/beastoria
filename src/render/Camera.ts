@@ -72,6 +72,17 @@ export class Camera {
     return this.zoom;
   }
 
+  /** World-space camera center, split into two scalar getters (no object
+   * allocation) — the glyph layer's on-screen culling reads these every
+   * rendered frame (M9 task 5). */
+  getCenterX(): number {
+    return this.x;
+  }
+
+  getCenterY(): number {
+    return this.y;
+  }
+
   /**
    * Apply damping and write the transform. Call once per rendered frame.
    * @param dtMs milliseconds since the previous rendered frame, for

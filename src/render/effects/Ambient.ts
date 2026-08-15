@@ -24,6 +24,14 @@ const GRASS_COUNT = 140;
 const FIREFLY_COUNT = 40;
 const MEMORIAL_ANCHOR_COUNT = 8;
 const SHIMMER_SPEED = 0.006; // px/ms ≈ 6px/s
+/** Moment sparkles (M9 task 5): a hatch/birth/pairing spawns 10 particles;
+ * the pool is generously sized for several moments landing close together
+ * without particles cutting each other off, reused via a rolling cursor so
+ * spawning never allocates. */
+const SPARKLE_PER_MOMENT = 10;
+const SPARKLE_POOL_SIZE = 60;
+const SPARKLE_LIFE_MS = 1500;
+const SPARKLE_TINT = 0xfff6df; // soft cream
 
 // Meadow rejection zones — same padding as the ground painter's flower scatter.
 const POND_EDGE = { ...POND, rx: POND.rx * 1.15, ry: POND.ry * 1.15 };
@@ -49,17 +57,33 @@ interface Firefly {
   twinklePhase: number;
 }
 
+/** A single pooled moment-sparkle particle — rises and fades once spawned,
+ * then sits inert until `spawnSparkle` recycles it. */
+interface Sparkle {
+  particle: Particle;
+  active: boolean;
+  ageMs: number;
+  lifeMs: number;
+  baseX: number;
+  baseY: number;
+  vx: number; // px/ms
+  vy: number; // px/ms (negative = rising)
+}
+
 export class AmbientEffects {
   readonly shimmerLayer: Container;
   readonly grassLayer: Container;
   readonly dappleLayer: Container;
   readonly fireflyLayer: ParticleContainer;
+  readonly sparkleLayer: ParticleContainer;
 
   private readonly rng: RngState;
   private elapsedMs = 0;
   private readonly tufts: Tuft[] = [];
   private readonly blobs: DappleBlob[] = [];
   private readonly fireflies: Firefly[] = [];
+  private readonly sparkles: Sparkle[] = [];
+  private sparkleCursor = 0;
   private shimmerA!: TilingSprite;
   private shimmerB!: TilingSprite;
 
@@ -69,8 +93,9 @@ export class AmbientEffects {
     this.grassLayer = new Container();
     this.dappleLayer = new Container();
     this.fireflyLayer = new ParticleContainer({ dynamicProperties: { position: true, color: true } });
+    this.sparkleLayer = new ParticleContainer({ dynamicProperties: { position: true, color: true } });
     // Provisional order — Renderer re-inserts these at their final z-index spots.
-    world.addChild(this.shimmerLayer, this.grassLayer, this.dappleLayer, this.fireflyLayer);
+    world.addChild(this.shimmerLayer, this.grassLayer, this.dappleLayer, this.fireflyLayer, this.sparkleLayer);
   }
 
   build(renderer: PixiRenderer): void {
@@ -78,6 +103,7 @@ export class AmbientEffects {
     this.buildShimmer(renderer);
     this.buildDapple(renderer);
     this.buildFireflies(renderer);
+    this.buildSparkles(renderer);
   }
 
   /**
@@ -127,6 +153,49 @@ export class AmbientEffects {
         const twinkle = 0.55 + 0.45 * Math.sin(t * f.twinkleFreq + f.twinklePhase);
         f.particle.alpha = nightAmount * twinkle;
       }
+    }
+
+    // Moment sparkles: a slow rise-and-fade envelope (peaks mid-life), at
+    // any hour — a hatch or a pairing reads the same by day or by night.
+    for (const s of this.sparkles) {
+      if (!s.active) continue;
+      s.ageMs += dtMs;
+      if (s.ageMs >= s.lifeMs) {
+        s.active = false;
+        s.particle.alpha = 0;
+        continue;
+      }
+      const st = s.ageMs / s.lifeMs;
+      s.particle.x = s.baseX + s.vx * s.ageMs;
+      s.particle.y = s.baseY + s.vy * s.ageMs;
+      s.particle.alpha = Math.sin(Math.PI * st) * 0.9;
+    }
+  }
+
+  /**
+   * Spawns one moment's worth of soft cream sparkles at a world position —
+   * a hatch, a birth, a new pair (M9 task 5). Never allocates: particles are
+   * drawn from a fixed pool via a rolling cursor, so a burst of moments in
+   * quick succession simply recycles the oldest sparkles early rather than
+   * growing anything.
+   */
+  spawnSparkle(pos: Vec2): void {
+    for (let i = 0; i < SPARKLE_PER_MOMENT; i++) {
+      const s = this.sparkles[this.sparkleCursor];
+      this.sparkleCursor = (this.sparkleCursor + 1) % SPARKLE_POOL_SIZE;
+      if (!s) continue;
+      s.active = true;
+      s.ageMs = 0;
+      s.lifeMs = SPARKLE_LIFE_MS + nextRange(this.rng, -150, 150);
+      const angle = nextRange(this.rng, 0, Math.PI * 2);
+      const dist = nextRange(this.rng, 0, 14);
+      s.baseX = pos.x + Math.cos(angle) * dist;
+      s.baseY = pos.y + Math.sin(angle) * dist;
+      s.vx = nextRange(this.rng, -6, 6) / 1000;
+      s.vy = nextRange(this.rng, -22, -14) / 1000; // a slow rise
+      s.particle.x = s.baseX;
+      s.particle.y = s.baseY;
+      s.particle.alpha = 0;
     }
   }
 
@@ -259,6 +328,26 @@ export class AmbientEffects {
         twinkleFreq: nextRange(this.rng, 0.0016, 0.0031),
         twinklePhase: nextRange(this.rng, 0, Math.PI * 2),
       });
+    }
+  }
+
+  /** A pool of inert, off-screen (alpha 0) sparkle particles, baked once
+   * against a tiny 3px texture — `spawnSparkle` is the only thing that ever
+   * moves or reveals one. */
+  private buildSparkles(renderer: PixiRenderer): void {
+    const tex = this.bake(renderer, new Graphics().circle(1.5, 1.5, 1.5).fill(0xffffff), 3, 3);
+    for (let i = 0; i < SPARKLE_POOL_SIZE; i++) {
+      const particle = new Particle({
+        texture: tex,
+        x: 0,
+        y: 0,
+        anchorX: 0.5,
+        anchorY: 0.5,
+        tint: SPARKLE_TINT,
+        alpha: 0,
+      });
+      this.sparkleLayer.addParticle(particle);
+      this.sparkles.push({ particle, active: false, ageMs: 0, lifeMs: SPARKLE_LIFE_MS, baseX: 0, baseY: 0, vx: 0, vy: 0 });
     }
   }
 

@@ -8,6 +8,7 @@ const BACK = 0x5a5350;
 const BACK_DARK = 0x4a4441;
 const BREAST = 0xd2694a;
 const BEAK = 0xe8a53c;
+const BERRY = 0xcf5f52;
 
 export const robinRig: CreatureRig = {
   species: 'robin',
@@ -87,6 +88,17 @@ export const robinRig: CreatureRig = {
       y: 0,
       z: 1,
       shapes: [{ kind: 'path', d: 'M 0 -2 L 9 0.5 L 0 3 Z', fill: { color: BEAK } }],
+    },
+    {
+      // A morsel carried home to the chicks (M9 task 5) — only ever visible
+      // during the 'carry' clip; every other clip hides it via hideInClips.
+      id: 'food',
+      parent: 'beak',
+      x: 8,
+      y: 0.5,
+      z: 2,
+      shapes: [{ kind: 'ellipse', x: 0, y: 0, rx: 2.4, ry: 2, fill: { color: BERRY } }],
+      hideInClips: ['idle', 'walk', 'sleep', 'eat', 'social', 'flap', 'sit'],
     },
   ],
   stages: {
@@ -289,6 +301,25 @@ export const robinRig: CreatureRig = {
             { t: 1, v: 0 },
           ],
         },
+      ],
+    },
+    carry: {
+      // Fetching food home: the same hop, beak held low and full (M9 task 5).
+      durationMs: 380,
+      tracks: [
+        { partId: 'body', py: [{ t: 0, v: 0 }, { t: 0.5, v: -6 }, { t: 1, v: 0 }] },
+        { partId: 'wing', rot: [{ t: 0, v: 0 }, { t: 0.5, v: -0.2 }, { t: 1, v: 0 }] },
+        { partId: 'tail', rot: [{ t: 0, v: 0.1 }, { t: 0.5, v: -0.1 }, { t: 1, v: 0.1 }] },
+        { partId: 'legF', rot: [{ t: 0, v: 0.15 }, { t: 0.5, v: -0.6 }, { t: 1, v: 0.15 }] },
+        { partId: 'legB', rot: [{ t: 0, v: 0.15 }, { t: 0.5, v: -0.6 }, { t: 1, v: 0.15 }] },
+        { partId: 'head', rot: [{ t: 0, v: 0.15 }, { t: 0.5, v: 0.25 }, { t: 1, v: 0.15 }] },
+      ],
+    },
+    sit: {
+      // Settled to brood: a gentle squash (M9 task 5).
+      durationMs: 1000,
+      tracks: [
+        { partId: 'body', sy: [{ t: 0, v: 0.85 }, { t: 1, v: 0.85 }], py: [{ t: 0, v: 3 }, { t: 1, v: 3 }] },
       ],
     },
   },

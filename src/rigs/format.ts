@@ -5,8 +5,11 @@
  */
 import type { LifeStage, SpeciesId } from '../sim/state';
 
-/** Clips every rig must define. */
-export type CoreClipName = 'idle' | 'walk' | 'sleep' | 'eat' | 'social';
+/** Clips every rig must define. `carry` (fetching food home for young — a
+ * species-flavored head/beak dip, with a food part that only shows in this
+ * clip) and `sit` (brooding — a gentle body squash) join the M5 five as of
+ * M9 task 5, so TypeScript enforces every rig authors them. */
+export type CoreClipName = 'idle' | 'walk' | 'sleep' | 'eat' | 'social' | 'carry' | 'sit';
 /**
  * Presentation-only locomotion clips a few species add on top (M9 task 4):
  * 'flap' for the three air-medium fliers (robin/owl/phoenix), 'swim' for the

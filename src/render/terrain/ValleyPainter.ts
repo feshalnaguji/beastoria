@@ -12,6 +12,7 @@ import { Container, Graphics } from 'pixi.js';
 import { seedRng, nextRange, type RngState } from '../../sim/rng';
 import { WORLD_HEIGHT, WORLD_WIDTH } from '../../sim/state';
 import {
+  FOOD_SPOTS,
   FOREST,
   GROVE,
   LONE_TREES,
@@ -19,6 +20,7 @@ import {
   POND,
   inEllipse,
   type EllipseZone,
+  type FoodSpot,
 } from '../../sim/valley';
 
 const COSMETIC_SEED = 20260813;
@@ -148,6 +150,12 @@ function buildDetail(rng: RngState): Container {
     drawReeds(g, rng, x, y);
   }
 
+  // The valley's larder (M9 task 5): a small cluster at every FOOD_SPOT
+  // (sim/valley.ts) so foraging treks visibly aim somewhere real — what a
+  // creature forages at is what you see painted here. Pond-shore spots get
+  // an extra reed tuft instead, to match the surrounding shore art.
+  for (const spot of FOOD_SPOTS) drawFoodCluster(g, rng, spot);
+
   // Lily pads near the pond's edge.
   for (let i = 0; i < 10; i++) {
     const angle = nextRange(rng, 0, Math.PI * 2);
@@ -230,6 +238,25 @@ function drawReeds(g: Graphics, rng: RngState, x: number, y: number): void {
     if (nextRange(rng, 0, 1) > 0.5) {
       g.ellipse(rx + lean, y - h - 6, 4, 10).fill(0x8a6f4d); // cattail head
     }
+  }
+}
+
+/** A small berry/grass cluster marking a FOOD_SPOT, or (on the pond shore)
+ * an extra reed tuft to match the surrounding art (M9 task 5). */
+function drawFoodCluster(g: Graphics, rng: RngState, spot: FoodSpot): void {
+  if (spot.zone === 'pond') {
+    drawReeds(g, rng, spot.x, spot.y);
+    return;
+  }
+  // Forest/grove edges read as berries + a leaf; the open meadow leans
+  // clover-green with just a hint of berry.
+  const colors =
+    spot.zone === 'meadow' ? [0xd8e8c0, 0xeef0d8, 0xc9556a] : [0xc9556a, 0xb03f52, 0x8fae5c];
+  for (let i = 0; i < 3; i++) {
+    const dx = nextRange(rng, -6, 6);
+    const dy = nextRange(rng, -4, 4);
+    const color = colors[i % colors.length] ?? 0xc9556a;
+    g.circle(spot.x + dx, spot.y + dy, nextRange(rng, 2.5, 4)).fill({ color, alpha: 0.9 });
   }
 }
 

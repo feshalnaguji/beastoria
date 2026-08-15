@@ -53,6 +53,11 @@ export const phoenixRig: CreatureRig = {
       shapes: [{ kind: 'path', d: 'M -2 0 Q 0 -12 4 -4 Q 6 -14 9 -2 Z', fill: { color: FLAME } }] },
     { id: 'beak', parent: 'head', x: 7, y: 0.5, z: 1,
       shapes: [{ kind: 'path', d: 'M 0 -2 L 8 0.5 L 0 2.5 Z', fill: { color: 0xc9822f } }] },
+    // A little ember-fruit carried home to the chick (M9 task 5) — only ever
+    // visible during the 'carry' clip; every other clip hides it.
+    { id: 'food', parent: 'beak', x: 6, y: 0.5, z: 2,
+      shapes: [{ kind: 'ellipse', x: 0, y: 0, rx: 2.5, ry: 2.2, fill: { color: EMBER } }],
+      hideInClips: ['idle', 'walk', 'sleep', 'eat', 'social', 'flap', 'sit'] },
   ],
   stages: {
     baby: {
@@ -115,6 +120,26 @@ export const phoenixRig: CreatureRig = {
         { partId: 'legF', rot: [{ t: 0, v: -0.7 }, { t: 1, v: -0.7 }] },
         { partId: 'legB', rot: [{ t: 0, v: -0.7 }, { t: 1, v: -0.7 }] },
         { partId: 'body', py: [{ t: 0, v: 0 }, { t: 0.5, v: -2 }, { t: 1, v: 0 }] },
+      ],
+    },
+    carry: {
+      // Fetching food home: the same stately stride, neck bowed low the
+      // whole way with an ember-fruit held in the beak (M9 task 5).
+      durationMs: 700,
+      tracks: [
+        { partId: 'body', py: [{ t: 0, v: 0 }, { t: 0.5, v: -3 }, { t: 1, v: 0 }] },
+        { partId: 'plumeFar', rot: [{ t: 0, v: 0.1 }, { t: 0.5, v: -0.12 }, { t: 1, v: 0.1 }] },
+        { partId: 'plumeNear', rot: [{ t: 0, v: -0.08 }, { t: 0.5, v: 0.1 }, { t: 1, v: -0.08 }] },
+        { partId: 'neck', rot: [{ t: 0, v: 0.25 }, { t: 0.5, v: 0.35 }, { t: 1, v: 0.25 }] },
+        { partId: 'legF', rot: [{ t: 0, v: 0.2 }, { t: 0.5, v: -0.2 }, { t: 1, v: 0.2 }] },
+        { partId: 'legB', rot: [{ t: 0, v: -0.2 }, { t: 0.5, v: 0.2 }, { t: 1, v: -0.2 }] },
+      ],
+    },
+    sit: {
+      // Settled to brood: a gentle squash (M9 task 5).
+      durationMs: 1000,
+      tracks: [
+        { partId: 'body', sy: [{ t: 0, v: 0.85 }, { t: 1, v: 0.85 }], py: [{ t: 0, v: 3 }, { t: 1, v: 3 }] },
       ],
     },
   },

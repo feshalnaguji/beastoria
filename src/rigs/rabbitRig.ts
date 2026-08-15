@@ -8,6 +8,7 @@ const FUR = 0xe8dcc8;
 const FUR_DARK = 0xd9cbb2;
 const CREAM = 0xfaf6ee;
 const BLUSH = 0xf2d8e4;
+const BERRY = 0xcf5f52;
 
 export const rabbitRig: CreatureRig = {
   species: 'rabbit',
@@ -67,6 +68,17 @@ export const rabbitRig: CreatureRig = {
         { kind: 'circle', x: 5, y: -2, r: 2.6, fill: { color: 0x3a3230 } },
         { kind: 'ellipse', x: 16, y: 2, rx: 3.5, ry: 2.5, fill: { color: 0xd9a5b5 } },
       ],
+    },
+    {
+      // A morsel carried home to the young (M9 task 5) — only ever visible
+      // during the 'carry' clip; every other clip hides it via hideInClips.
+      id: 'food',
+      parent: 'head',
+      x: 17,
+      y: 4,
+      z: 3,
+      shapes: [{ kind: 'ellipse', x: 0, y: 0, rx: 3, ry: 2.5, fill: { color: BERRY } }],
+      hideInClips: ['idle', 'walk', 'sleep', 'eat', 'social', 'sit'],
     },
     {
       id: 'earL',
@@ -254,6 +266,65 @@ export const rabbitRig: CreatureRig = {
             { t: 0.75, v: 0.25 },
             { t: 1, v: 0 },
           ],
+        },
+      ],
+    },
+    carry: {
+      // Fetching food home: the same hop as 'walk', head tucked low with a
+      // berry held gently (M9 task 5).
+      durationMs: 480,
+      tracks: [
+        {
+          partId: 'legF',
+          rot: [
+            { t: 0, v: 0.5 },
+            { t: 0.5, v: -0.5 },
+            { t: 1, v: 0.5 },
+          ],
+        },
+        {
+          partId: 'legB',
+          rot: [
+            { t: 0, v: -0.5 },
+            { t: 0.5, v: 0.5 },
+            { t: 1, v: -0.5 },
+          ],
+        },
+        {
+          partId: 'body',
+          py: [
+            { t: 0, v: 0 },
+            { t: 0.25, v: -4 },
+            { t: 0.5, v: 0 },
+            { t: 0.75, v: -4 },
+            { t: 1, v: 0 },
+          ],
+        },
+        { partId: 'earL', rot: [{ t: 0, v: -0.12 }, { t: 1, v: -0.12 }] },
+        { partId: 'earR', rot: [{ t: 0, v: -0.15 }, { t: 1, v: -0.15 }] },
+        {
+          partId: 'head',
+          rot: [
+            { t: 0, v: 0.3 },
+            { t: 0.5, v: 0.4 },
+            { t: 1, v: 0.3 },
+          ],
+          py: [
+            { t: 0, v: 2 },
+            { t: 0.5, v: 3 },
+            { t: 1, v: 2 },
+          ],
+        },
+      ],
+    },
+    sit: {
+      // Settled to brood: a gentle squash (M9 task 5).
+      durationMs: 1000,
+      tracks: [
+        {
+          partId: 'body',
+          sy: [{ t: 0, v: 0.85 }, { t: 1, v: 0.85 }],
+          py: [{ t: 0, v: 3 }, { t: 1, v: 3 }],
         },
       ],
     },

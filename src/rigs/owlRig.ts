@@ -7,6 +7,7 @@ import type { CreatureRig } from './format';
 const TAWNY = 0xa08058;
 const TAWNY_DARK = 0x8a6c48;
 const DISC = 0xefe4cc;
+const BERRY = 0xcf5f52;
 
 export const owlRig: CreatureRig = {
   species: 'owl',
@@ -47,6 +48,11 @@ export const owlRig: CreatureRig = {
       shapes: [{ kind: 'path', d: 'M 0 2 Q 0 -6 4 -8 Q 5 -2 4 2 Z', fill: { color: TAWNY } }] },
     { id: 'beak', parent: 'head', x: 1.5, y: 2.5, z: 1,
       shapes: [{ kind: 'path', d: 'M -2 0 Q 0 5 2 0 Z', fill: { color: 0x6b5636 } }] },
+    // A morsel carried home to the owlets (M9 task 5) — only ever visible
+    // during the 'carry' clip; every other clip hides it via hideInClips.
+    { id: 'food', parent: 'beak', x: 0, y: 4, z: 2,
+      shapes: [{ kind: 'ellipse', x: 0, y: 0, rx: 2.6, ry: 2.2, fill: { color: BERRY } }],
+      hideInClips: ['idle', 'walk', 'sleep', 'eat', 'social', 'flap', 'sit'] },
   ],
   stages: {
     baby: { scale: 0.5, partScale: { head: { x: 1.25, y: 1.25 }, tuftL: { x: 0.4, y: 0.4 }, tuftR: { x: 0.4, y: 0.4 } }, tint: 0xd9cdb8 },
@@ -100,6 +106,24 @@ export const owlRig: CreatureRig = {
         { partId: 'legF', rot: [{ t: 0, v: -0.7 }, { t: 1, v: -0.7 }] },
         { partId: 'legB', rot: [{ t: 0, v: -0.7 }, { t: 1, v: -0.7 }] },
         { partId: 'body', py: [{ t: 0, v: 0 }, { t: 0.5, v: -2 }, { t: 1, v: 0 }] },
+      ],
+    },
+    carry: {
+      // Fetching food home: the same low glide-walk, beak held full (M9 task 5's "owl beak").
+      durationMs: 460,
+      tracks: [
+        { partId: 'body', py: [{ t: 0, v: 0 }, { t: 0.5, v: -4 }, { t: 1, v: 0 }], rot: [{ t: 0, v: 0.06 }, { t: 0.5, v: -0.06 }, { t: 1, v: 0.06 }] },
+        { partId: 'wing', rot: [{ t: 0, v: 0 }, { t: 0.5, v: -0.15 }, { t: 1, v: 0 }] },
+        { partId: 'legF', rot: [{ t: 0, v: 0.25 }, { t: 0.5, v: -0.25 }, { t: 1, v: 0.25 }] },
+        { partId: 'legB', rot: [{ t: 0, v: -0.25 }, { t: 0.5, v: 0.25 }, { t: 1, v: -0.25 }] },
+        { partId: 'head', rot: [{ t: 0, v: 0.2 }, { t: 0.5, v: 0.3 }, { t: 1, v: 0.2 }] },
+      ],
+    },
+    sit: {
+      // Settled to brood: a gentle squash (M9 task 5).
+      durationMs: 1000,
+      tracks: [
+        { partId: 'body', sy: [{ t: 0, v: 0.85 }, { t: 1, v: 0.85 }], py: [{ t: 0, v: 3 }, { t: 1, v: 3 }] },
       ],
     },
   },
