@@ -46,13 +46,14 @@ async function start(): Promise<void> {
   await renderer.init(mount);
   renderer.sync(state); // initial snapshot so frame 0 has positions
 
-  renderer.centerOn(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 0.21); // whole valley in view
+  renderer.centerOn(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 0.21); // as far out as the min-zoom floor allows (whole valley where the viewport fits it)
 
   const audio = new AudioEngine();
   const scheduler = new CallScheduler(audio);
   void audio.preload();
   window.addEventListener('pointerdown', () => audio.unlock(), { once: true });
   const hud = new Hud(audio);
+  hud.setClock(getClock(state.tick)); // render the clock pill immediately, don't wait ~100ms for the first sim tick
 
   // Offline catch-up (spec §4.6): drain owed ticks under a dawn overlay before
   // the live loop starts, so vocalizations from unobserved ticks stay unheard
