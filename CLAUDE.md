@@ -103,7 +103,7 @@ v1 (two open tabs overwrite each other's timeline harmlessly).
 
 ## Working process (user-agreed)
 
-- Build milestone by milestone (M0–M8 in spec §6); **the user reviews each milestone in the
+- Build milestone by milestone (M0–M9 in spec §6); **the user reviews each milestone in the
   browser before the next begins.** Every milestone ends with `npm test` green + `npm run build`
   clean + a deployed/dev URL to look at.
 - Mobile perf is tested on a real phone at M2/M3, not deferred to the end.

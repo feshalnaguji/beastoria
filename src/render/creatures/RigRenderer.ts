@@ -24,6 +24,12 @@ export interface RigInstance {
    */
   shadow?: Container | undefined;
   shadowGraphic?: Graphics | undefined;
+  /** The rig's 'food' part, looked up by id once at build time same as
+   * `shadow` above — lets the renderer force it visible for a flying
+   * creature's carry-home leg without touching clip priority (final-review
+   * fix wave, fix 2). Undefined for rigs that omit a 'food' part (none do
+   * today). */
+  food?: Container | undefined;
 }
 
 export function buildRig(rig: CreatureRig, stage: LifeStage): RigInstance {
@@ -36,6 +42,7 @@ export function buildRig(rig: CreatureRig, stage: LifeStage): RigInstance {
   const tintables: Graphics[] = [];
   let shadow: Container | undefined;
   let shadowGraphic: Graphics | undefined;
+  let food: Container | undefined;
 
   for (const part of rig.parts) {
     const node = new Container();
@@ -55,6 +62,7 @@ export function buildRig(rig: CreatureRig, stage: LifeStage): RigInstance {
       shadow = node;
       shadowGraphic = g;
     }
+    if (part.id === 'food') food = node;
 
     containers.set(part.id, node);
     const parent = part.parent ? containers.get(part.parent) : undefined;
@@ -68,6 +76,7 @@ export function buildRig(rig: CreatureRig, stage: LifeStage): RigInstance {
     stageTint: style.tint ?? 0xffffff,
     shadow,
     shadowGraphic,
+    food,
   };
 }
 

@@ -27,6 +27,12 @@ export class Animator {
     for (const [id, node] of parts) {
       this.bases.set(id, { x: node.position.x, y: node.position.y, sx: node.scale.x, sy: node.scale.y });
     }
+    // play('idle') never runs from a freshly constructed Animator (clipName
+    // already reads 'idle', so play()'s early-return would no-op) — apply
+    // part visibility here too, or hideInClips parts (e.g. the carried-food
+    // part) default to visible in every idle bake and freshly built T2 rig
+    // (final-review fix wave, fix 1).
+    this.applyClipVisibility('idle');
   }
 
   play(name: ClipName): void {

@@ -154,8 +154,10 @@ const MOURNING_GATHER_MIN_TICKS = 200;
  * 'treeNest' case below) — a brooding sitter renders here instead of at the
  * home's own point, so it visibly sits IN the bowl. */
 const TREE_NEST_BOWL_OFFSET: Vec2 = { x: 38, y: 26 };
-/** Event kinds that spawn a moment sparkle (M9 task 5). */
-const SPARKLE_EVENT_KINDS = new Set<SimEvent['kind']>(['hatched', 'born', 'paired']);
+/** Event kinds that spawn a moment sparkle (M9 task 5). 'reborn' added in the
+ * final-review fix wave (fix 3) — the phoenix's rebirth deserves the same
+ * sparkle as a hatch or birth. */
+const SPARKLE_EVENT_KINDS = new Set<SimEvent['kind']>(['hatched', 'born', 'paired', 'reborn']);
 
 /** Small, gentle activity glyphs floating above a creature's crown — the
  * valley's readable vocabulary for its richest loops (M9 task 5). */
@@ -686,6 +688,14 @@ export class Renderer {
         view.rig.root.visible = true;
         view.spriteWrap.visible = false;
         view.rig.animator.play(clip);
+        // A flying carrier ferries food home too, but clipFor deliberately
+        // keeps 'flap' as the airborne pose (a ground carry pose mid-air
+        // would look broken) — so hideInClips alone would hide the food the
+        // whole flight. Override it explicitly here, every frame, since
+        // `step` can flip 0→1 mid-flap without a clip switch (play()'s
+        // early-return skips applyClipVisibility when the clip name is
+        // unchanged) (final-review fix wave, fix 2).
+        if (view.rig.food && clip === 'flap') view.rig.food.visible = view.step === 1;
         let rate = 1;
         if (clip === 'walk' && dtMs > 0) {
           const walkDurMs = speciesRig.clips.walk.durationMs;
