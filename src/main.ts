@@ -108,11 +108,25 @@ async function start(): Promise<void> {
     inspectCard.hide();
     inspectedId = null;
   }
+  // Multi-touch guard: only a single finger's down→up pair may register as a
+  // tap. Without this, a two-finger pinch-zoom's second pointerdown
+  // overwrites downAt with that finger's position, and if its pointerup
+  // lands within TAP_DRAG_THRESHOLD_PX of its own pointerdown (common — one
+  // finger often does most of the pinch motion while the other pivots), the
+  // tap-vs-drag check below fires a spurious "tap" that selects a creature
+  // and sets renderer.followId, which then fights the user's own pinch/pan
+  // by re-centering the camera on it every frame. activePointers tracks how
+  // many fingers are currently down; a second pointerdown while one is
+  // already active clears downAt so no tap can fire until every finger has
+  // fully lifted and a fresh single pointerdown/pointerup pair occurs.
   let downAt: { x: number; y: number } | null = null;
+  let activePointers = 0;
   renderer.canvas.addEventListener('pointerdown', (e) => {
-    downAt = { x: e.clientX, y: e.clientY };
+    downAt = activePointers > 0 ? null : { x: e.clientX, y: e.clientY };
+    activePointers++;
   });
   renderer.canvas.addEventListener('pointerup', (e) => {
+    activePointers = Math.max(0, activePointers - 1);
     if (!downAt) return;
     const moved = Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y);
     downAt = null;
@@ -126,6 +140,13 @@ async function start(): Promise<void> {
     } else {
       dismissInspect(); // tap on empty ground dismisses both card and follow
     }
+  });
+  // Matches Camera.ts's own pointercancel handling on the same canvas (a
+  // cancelled gesture — e.g. the browser taking over for a system gesture —
+  // must not leave downAt/activePointers stale for the next unrelated tap).
+  renderer.canvas.addEventListener('pointercancel', () => {
+    activePointers = Math.max(0, activePointers - 1);
+    downAt = null;
   });
 
   let ticksSinceSave = 0;

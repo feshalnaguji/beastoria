@@ -4,7 +4,27 @@
  * data is unrecognizable — a bad save must never crash the game.
  */
 import { SAVE_VERSION, type SaveFile } from './schema';
-import type { WorldState } from '../sim/state';
+import type { HomeKind, Vec2, WorldState } from '../sim/state';
+import { DREY_SITES, FROG_SPAWN_CLUMPS, TURTLE_SAND_NESTS } from '../sim/valley';
+
+/**
+ * M10 added three home kinds (drey/spawnClump/sandNest) but SAVE_VERSION
+ * didn't bump — createWorld() is the only place that ever seeds state.homes
+ * from these static site lists, so a save made before M10 shipped has zero
+ * homes of these kinds, forever; loading it does not top them up. Meanwhile
+ * squirrel/frog/turtle are wandersIn species (species.ts) with population
+ * floors, so the regulator brings them into any loaded world regardless of
+ * save age — they pair, enter 'nesting', and claimHome (family.ts) finds no
+ * home of the matching kind and sits stuck forever. Defensive top-up below
+ * appends the missing static sites, same as the lastWandererTick defaulting
+ * further down: pure data placement, zero RNG draws, so it can't perturb
+ * replay determinism or any seeded fixture/test baseline.
+ */
+const NEW_HOME_SITE_GROUPS: [HomeKind, Vec2[]][] = [
+  ['drey', DREY_SITES],
+  ['spawnClump', FROG_SPAWN_CLUMPS],
+  ['sandNest', TURTLE_SAND_NESTS],
+];
 
 /** v(n) → v(n+1) steps, indexed by source version. Empty until v2 exists. */
 const STEPS: Record<number, (save: SaveFile) => SaveFile> = {};
@@ -33,6 +53,18 @@ export function migrate(raw: unknown): SaveFile | null {
   // saves were written — never reject on this alone.
   if (typeof save.sim.lastWandererTick !== 'object' || save.sim.lastWandererTick === null) {
     save.sim.lastWandererTick = {};
+  }
+  // M10 defensive top-up (see NEW_HOME_SITE_GROUPS above): if a save has no
+  // home of a given new kind at all, seed it from the same static sites
+  // createWorld() would have used. Kind-presence (not exact count) is the
+  // check, so this is idempotent across repeated migrate() calls on an
+  // already-topped-up save.
+  const presentKinds = new Set(save.sim.homes.map((h) => h.kind));
+  for (const [kind, sites] of NEW_HOME_SITE_GROUPS) {
+    if (presentKinds.has(kind)) continue;
+    for (const pos of sites) {
+      save.sim.homes.push({ id: save.sim.nextId++, kind, pos: { ...pos }, familyId: null });
+    }
   }
   return save;
 }

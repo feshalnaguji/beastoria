@@ -64,7 +64,11 @@ describe('save round-trip', () => {
 
 describe('migrations', () => {
   it('accepts the frozen v1 fixture', () => {
-    const save = migrate(fixtureV1);
+    // Cloned rather than passed directly: migrate() writes onto its argument
+    // in place (defensive defaulting/top-up further down), and fixtureV1 is
+    // a shared module-level import reused by every test in this file — a
+    // direct call here would permanently mutate it for tests that run after.
+    const save = migrate(JSON.parse(JSON.stringify(fixtureV1)));
     expect(save).not.toBeNull();
     expect(save?.version).toBe(SAVE_VERSION);
     expect(save?.sim.creatures.length).toBeGreaterThan(0);
@@ -100,6 +104,71 @@ describe('migrations', () => {
     const save = migrate({ ...base, sim });
     expect(save).not.toBeNull();
     expect(save?.sim.lastWandererTick).toEqual({});
+  });
+
+  // migrate() writes onto its argument's nested arrays/objects in place
+  // (see the lastWandererTick default above and the homes top-up below) —
+  // fine for its real caller (a freshly-parsed, one-shot object from
+  // idb-keyval), but fixtureV1 is a shared module-level import reused by
+  // every test in this file, so each test here must deep-clone it first to
+  // avoid leaking mutations into tests that run after it (including the
+  // earlier 'accepts the frozen v1 fixture' test, which calls migrate()
+  // with the fixture directly and would otherwise permanently pollute it
+  // for the rest of the suite).
+  // Also strips any of the three new kinds so the "save predates them"
+  // precondition holds regardless of the fixed fixture's own baseline
+  // content or of migrate()'s in-place mutation making a prior test's clone
+  // outlive its test — this test's precondition doesn't depend on any other
+  // test's ordering or behavior.
+  const NEW_HOME_KINDS = new Set(['drey', 'spawnClump', 'sandNest']);
+  function cloneFixtureWithoutNewHomeKinds(): { version: number; savedAtEpochMs: number; sim: { homes: { id: number; kind: string }[]; nextId: number } } {
+    const clone = JSON.parse(JSON.stringify(fixtureV1));
+    clone.sim.homes = clone.sim.homes.filter((h: { kind: string }) => !NEW_HOME_KINDS.has(h.kind));
+    return clone;
+  }
+
+  it('tops up pre-M10 saves with the new drey/spawnClump/sandNest homes', () => {
+    // The frozen v1 fixture predates M10's three new home kinds — it has
+    // none of them (real regression: squirrel/frog/turtle are wandersIn
+    // species that get brought into any loaded world by the population
+    // regulator regardless of save age, pair up, and then stick forever in
+    // 'nesting' because claimHome finds no home of their kind).
+    const base = cloneFixtureWithoutNewHomeKinds();
+    const priorKinds = new Set(base.sim.homes.map((h) => h.kind));
+    expect(priorKinds.has('drey')).toBe(false);
+    expect(priorKinds.has('spawnClump')).toBe(false);
+    expect(priorKinds.has('sandNest')).toBe(false);
+    const priorIds = new Set(base.sim.homes.map((h) => h.id));
+    const priorNextId = base.sim.nextId;
+
+    const save = migrate(cloneFixtureWithoutNewHomeKinds());
+    expect(save).not.toBeNull();
+    if (!save) throw new Error('save missing');
+
+    for (const kind of ['drey', 'spawnClump', 'sandNest'] as const) {
+      const homesOfKind = save.sim.homes.filter((h) => h.kind === kind);
+      expect(homesOfKind.length).toBeGreaterThan(0);
+      for (const h of homesOfKind) {
+        expect(priorIds.has(h.id)).toBe(false); // no id collision with pre-existing homes
+        expect(h.id).toBeGreaterThanOrEqual(priorNextId); // allocated from nextId onward
+        expect(h.familyId).toBeNull();
+      }
+    }
+    // Every added id was actually consumed from nextId, so it advanced too.
+    expect(save.sim.nextId).toBeGreaterThan(priorNextId);
+    // ids stay unique across the whole homes array.
+    const allIds = save.sim.homes.map((h) => h.id);
+    expect(new Set(allIds).size).toBe(allIds.length);
+  });
+
+  it('is idempotent: re-migrating an already-topped-up save adds nothing new', () => {
+    const once = migrate(cloneFixtureWithoutNewHomeKinds());
+    expect(once).not.toBeNull();
+    if (!once) throw new Error('save missing');
+    const twice = migrate(JSON.parse(JSON.stringify(once)));
+    expect(twice).not.toBeNull();
+    expect(twice?.sim.homes).toEqual(once.sim.homes);
+    expect(twice?.sim.nextId).toBe(once.sim.nextId);
   });
 
   it('loadSave survives a corrupt stored value', async () => {
