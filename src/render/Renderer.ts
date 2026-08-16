@@ -11,6 +11,8 @@ import {
   WORLD_HEIGHT,
   WORLD_WIDTH,
   type Creature,
+  type Home,
+  type HomeKind,
   type LifeStage,
   type SpeciesId,
   type Vec2,
@@ -102,6 +104,43 @@ interface CreatureView {
    * shown instead of the shadow ellipse while swimming. Undefined for every
    * other species. */
   rippleSprite?: Sprite | undefined;
+  /** Amphibious-only hysteresis (M10 task 4): the last STABLE swim/land
+   * decision, only flipped once `swimAgreeCount` below reaches 3 consecutive
+   * frames of the raw isWater reading disagreeing with it — kills the
+   * shoreline clip flicker a single hard boundary test used to produce.
+   * Always false for non-amphibious species (never read for them). */
+  swimmingState: boolean;
+  /** Consecutive frames the raw isWater reading has disagreed with
+   * `swimmingState` — reset to 0 the instant it agrees again. */
+  swimAgreeCount: number;
+  /** M10 task 4: true this sync while this creature is the nurse-hold
+   * mother (feedMode 'nurse', activity 'feedYoung' step 1) — reads as
+   * settled ('sit' clip, milk-droplet glyph) instead of 'eat'. */
+  nursing: boolean;
+  /** M10 task 4: true this sync while this baby sits within
+   * NURSE_EAT_RADIUS of its family's nursing mother — reads as snuggled in
+   * ('eat' clip) regardless of its own activity. */
+  nursed: boolean;
+  /** M10 task 4: which emergence is currently easing in — 'hatch' (pure
+   * scale 0→1 at the nest point) or 'birth' (scale 0.3→1 + a small outward
+   * slide from the home mouth) — or undefined once settled/for every
+   * ordinary creature. */
+  emergeKind: 'hatch' | 'birth' | undefined;
+  /** Ms elapsed since this emergence started; the view reverts to normal
+   * rendering (emergeKind cleared) once it passes EMERGE_MS. */
+  emergeMs: number;
+  /** Birth-only: unit vector from the home mouth toward this baby's actual
+   * spawn point, computed once when the emergence starts — drives the
+   * outward slide (see EMERGE_SLIDE_PX). Unused (0,0) for hatches. */
+  emergeDirX: number;
+  emergeDirY: number;
+  /** Ms accumulated toward this sleeper's next drifting 'z' — only advances
+   * while actually napping; resets to 0 the moment it stops (so waking mid-
+   * cycle doesn't leave a z queued to fire the instant it dozes off again). */
+  zzzTimerMs: number;
+  /** This view's own jittered cadence around ZZZ_INTERVAL_MS, fixed at
+   * creation off the creature's id — pure cosmetic variety, no RNG draw. */
+  zzzIntervalMs: number;
 }
 
 /** Baked walk frames per species (Step 1: symmetric 3-key clips sample
@@ -154,14 +193,69 @@ const MOURNING_GATHER_MIN_TICKS = 200;
  * 'treeNest' case below) — a brooding sitter renders here instead of at the
  * home's own point, so it visibly sits IN the bowl. */
 const TREE_NEST_BOWL_OFFSET: Vec2 = { x: 38, y: 26 };
-/** Event kinds that spawn a moment sparkle (M9 task 5). 'reborn' added in the
- * final-review fix wave (fix 3) — the phoenix's rebirth deserves the same
- * sparkle as a hatch or birth. */
-const SPARKLE_EVENT_KINDS = new Set<SimEvent['kind']>(['hatched', 'born', 'paired', 'reborn']);
+/** Event kinds that spawn the generic moment sparkle (M9 task 5). 'hatched'
+ * and 'born' were removed in M10 task 4 — they now get their own staged
+ * moments (the shell-crack overlay, the emergence scale/slide) instead of
+ * the generic sparkle, which would look redundant on top of them. */
+const SPARKLE_EVENT_KINDS = new Set<SimEvent['kind']>(['paired', 'reborn']);
+
+/** Egg-mode home kinds (every species whose `reproduction.mode` is 'egg') —
+ * these are the only homes whose `syncHomes` egg draw is replaced by the
+ * hatch crack overlay when phase leaves 'expecting' (M10 task 4). The three
+ * live-birth homes (burrow/glade/drey) never draw eggs at all — nothing was
+ * visible during 'expecting', so nothing needs replacing when it ends. */
+const EGG_HOME_KINDS: ReadonlySet<HomeKind> = new Set([
+  'treeNest',
+  'reedNest',
+  'lilyPatch',
+  'treeHollow',
+  'groundNest',
+  'groveNest',
+  'spawnClump',
+  'sandNest',
+]);
+
+/** Approximates each egg-mode home's own nest-bowl point (mirroring
+ * `syncHomes`' own egg-cluster offsets from `home.pos`), so the hatch crack
+ * overlay lands where the eggs it replaces were actually drawn. */
+const NEST_VISUAL_OFFSET: Partial<Record<HomeKind, Vec2>> = {
+  treeNest: { x: 38, y: 22 },
+  reedNest: { x: 0, y: -3 },
+  lilyPatch: { x: -6, y: 10 },
+  treeHollow: { x: 0, y: -6 },
+  groundNest: { x: 0, y: -2 },
+  groveNest: { x: 0, y: -3 },
+  spawnClump: { x: 0, y: -1 },
+  sandNest: { x: 0, y: -1 },
+};
+
+function nestVisualPoint(home: Home): Vec2 {
+  const off = NEST_VISUAL_OFFSET[home.kind];
+  return off ? { x: home.pos.x + off.x, y: home.pos.y + off.y } : { ...home.pos };
+}
 
 /** Small, gentle activity glyphs floating above a creature's crown — the
- * valley's readable vocabulary for its richest loops (M9 task 5). */
-type GlyphKind = 'forage' | 'nap' | 'court' | 'carry' | 'brood' | 'mourning';
+ * valley's readable vocabulary for its richest loops (M9 task 5). 'nurse'
+ * joined in M10 task 4 — a soft milk-white droplet, replacing the amber
+ * 'carry' dot specifically for nurse-feedMode mothers mid-hold. */
+type GlyphKind = 'forage' | 'nap' | 'court' | 'carry' | 'brood' | 'mourning' | 'nurse';
+
+/** M10 task 4: babies within this world-px radius of their family's
+ * currently-nursing mother read as snuggled in (clip 'eat', no matter their
+ * own activity) — matches the brief's 60-unit nursing read, distinct from
+ * family.ts's own 90-unit NURSE_RANGE hunger-relief radius. */
+const NURSE_EAT_RADIUS = 60;
+/** Hatch/birth emergence: scale (and, for births, a small outward slide)
+ * eases in over this long, then the view settles into normal rendering. */
+const EMERGE_MS = 900;
+/** Birth-only: the newborn visually recedes from the home mouth by this
+ * many px, easing to 0 extra offset by EMERGE_MS — independent of how far
+ * family.ts's own spawn jitter actually placed it. */
+const EMERGE_SLIDE_PX = 12;
+/** A sleeping creature's average gap between drifting 'z's — jittered per
+ * view (see CreatureView.zzzIntervalMs) so a napping cluster doesn't emit in
+ * lockstep. */
+const ZZZ_INTERVAL_MS = 2500;
 
 /** A view mid-fade after leaving state.creatures (M9 task 5's gentle
  * passing) — drained in the render loop rather than destroyed same-frame. */
@@ -172,6 +266,16 @@ interface FadingView {
 
 function clamp(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
+}
+
+/** M10 task 4: true while this baby sits within NURSE_EAT_RADIUS of its
+ * family's currently-nursing mother (nursingMotherPos, built once per sync
+ * in sync() above). */
+function isNursed(c: Creature, nursingMotherPos: Map<number, Vec2>): boolean {
+  if (c.stage !== 'baby' || c.familyId === null) return false;
+  const m = nursingMotherPos.get(c.familyId);
+  if (!m) return false;
+  return Math.hypot(c.pos.x - m.x, c.pos.y - m.y) <= NURSE_EAT_RADIUS;
 }
 
 /** Activity labels this close to a home carrying a family label are hidden
@@ -247,8 +351,9 @@ export class Renderer {
    * per creature per frame just to call isWater(). */
   private readonly scratchPos: Vec2 = { x: 0, y: 0 };
 
-  /** Show per-creature activity labels (toggled from the DevPanel). */
-  debugLabels = true;
+  /** Show per-creature activity labels (toggled from the DevPanel). Off by
+   * default (M10 task 4) — the glyph/pose vocabulary reads without text. */
+  debugLabels = false;
 
   /** Creature id the camera should track (DevPanel click-to-follow). */
   followId: number | null = null;
@@ -295,12 +400,14 @@ export class Renderer {
       this.ambient.shimmerLayer, // above ground, below memorials
       this.memorialLayer,
       this.homeLayer,
+      this.ambient.hatchLayer, // hatch crack overlay, drawn over the nest
       this.detailLayer,
       this.ambient.grassLayer, // above terrain detail
       this.ambient.dappleLayer,
       this.creatureLayer,
       this.glyphLayer, // activity glyphs, above creature bodies
       this.ambient.sparkleLayer, // moment sparkles
+      this.ambient.zzzLayer, // drifting sleep 'z's
       this.ambient.fireflyLayer, // above creatures
       this.homeLabelLayer,
     );
@@ -364,6 +471,25 @@ export class Renderer {
   sync(state: WorldState): void {
     this.clock = getClock(state.tick);
     const alive = new Set<number>();
+    const newlyCreatedIds: number[] = [];
+
+    // Nurse holds (M10 task 4): a first pass so every baby's per-creature
+    // check below can look its own family's currently-nursing mother up in
+    // O(1) rather than re-scanning state.creatures per baby.
+    const nursingMotherPos = new Map<number, Vec2>();
+    const nursingIds = new Set<number>();
+    for (const c of state.creatures) {
+      if (
+        c.familyId !== null &&
+        SPECIES[c.species].reproduction.feedMode === 'nurse' &&
+        c.activity.id === 'feedYoung' &&
+        c.activity.step === 1
+      ) {
+        nursingMotherPos.set(c.familyId, c.pos);
+        nursingIds.add(c.id);
+      }
+    }
+
     for (const c of state.creatures) {
       alive.add(c.id);
       let view = this.views.get(c.id);
@@ -371,6 +497,7 @@ export class Renderer {
         view = this.createView(c);
         this.views.set(c.id, view);
         this.creatureLayer.addChild(view.node);
+        newlyCreatedIds.push(c.id);
       } else if (view.stage !== c.stage) {
         this.applyStage(view, c.stage); // creatures grow up
       }
@@ -385,6 +512,8 @@ export class Renderer {
       const offset = c.activity.id === 'brood' ? this.broodOffsetFor(state, c) : undefined;
       view.broodOffsetX = offset?.x ?? 0;
       view.broodOffsetY = offset?.y ?? 0;
+      view.nursing = nursingIds.has(c.id);
+      view.nursed = isNursed(c, nursingMotherPos);
     }
     // Creatures who have passed ease out instead of vanishing same-frame —
     // see this.fading, drained in render() (M9 task 5).
@@ -398,7 +527,7 @@ export class Renderer {
     this.syncHomes(state);
     this.syncMemorials(state);
     this.ambient.setMemorialAnchors(state.memorials.map((m) => m.pos));
-    this.consumeNewEvents(state);
+    this.consumeNewEvents(state, newlyCreatedIds);
   }
 
   /** A brooding sitter at a treeNest home renders offset into the drawn
@@ -422,7 +551,7 @@ export class Renderer {
    * tick (live play) or once after a whole offline catch-up drain (many
    * ticks, one call) — see main.ts / CatchUp.ts.
    */
-  private consumeNewEvents(state: WorldState): void {
+  private consumeNewEvents(state: WorldState, newlyCreatedIds: number[]): void {
     if (!this.eventsInitialized) {
       // First sync ever (boot, before any tick has run): a loaded save's
       // entire event history is already "seen" — nothing sparkles retroactively.
@@ -434,18 +563,74 @@ export class Renderer {
     for (let i = log.length - 1; i >= 0; i--) {
       const e = log[i];
       if (!e || e.tick <= this.lastSeenEventTick) break;
-      this.spawnMomentSparkle(state, e);
+      this.handleEvent(state, e, newlyCreatedIds);
     }
     this.lastSeenEventTick = state.tick;
   }
 
-  private spawnMomentSparkle(state: WorldState, e: SimEvent): void {
+  /**
+   * Dispatches one new sim event to its render-side moment. 'hatched'/'born'
+   * get their own staged moments (M10 task 4: the shell-crack overlay, the
+   * emergence scale/slide) instead of the generic sparkle — spawning both
+   * would be redundant on top of a dedicated staged moment. Every other
+   * sparkle-worthy kind ('paired'/'reborn') is unchanged from M9 task 5.
+   */
+  private handleEvent(state: WorldState, e: SimEvent, newlyCreatedIds: number[]): void {
+    if (e.kind === 'hatched' || e.kind === 'born') {
+      this.startEmergence(state, e, newlyCreatedIds);
+      if (e.kind === 'hatched') this.spawnHatchOverlay(state, e);
+      return;
+    }
     if (!SPARKLE_EVENT_KINDS.has(e.kind)) return;
     // 'paired' carries no pos (the pair hasn't claimed a home yet) — fall
     // back to either member's current position, looked up by familyId.
     const pos = e.pos ?? state.creatures.find((c) => c.familyId === e.familyId)?.pos;
     if (!pos) return;
     this.ambient.spawnSparkle(pos);
+  }
+
+  /**
+   * Starts the hatch scale-in or birth scale+slide-out on every view this
+   * event's babies got THIS sync — matched by "created in this very sync()
+   * call" (newlyCreatedIds) rather than by position, since family.ts adds
+   * exactly this event's babies to state.creatures in the same tick the
+   * event is emitted, so id membership + familyId is exact, no fuzzy
+   * distance matching needed. Runs once per event, so exactly-once even
+   * across a catch-up drain that buffers many hatches into one sync() call.
+   */
+  private startEmergence(state: WorldState, e: SimEvent, newlyCreatedIds: number[]): void {
+    if (e.familyId === undefined) return;
+    const home = e.pos; // 'hatched'/'born' always carry pos (= home.pos)
+    for (const id of newlyCreatedIds) {
+      const c = state.creatures.find((cr) => cr.id === id);
+      if (!c || c.familyId !== e.familyId) continue;
+      const view = this.views.get(id);
+      if (!view) continue;
+      view.emergeMs = 0;
+      if (e.kind === 'hatched') {
+        view.emergeKind = 'hatch';
+        view.emergeDirX = 0;
+        view.emergeDirY = 0;
+      } else {
+        view.emergeKind = 'birth';
+        const dx = c.pos.x - (home?.x ?? c.pos.x);
+        const dy = c.pos.y - (home?.y ?? c.pos.y);
+        const len = Math.hypot(dx, dy);
+        view.emergeDirX = len > 0.01 ? dx / len : 0;
+        view.emergeDirY = len > 0.01 ? dy / len : -1;
+      }
+    }
+  }
+
+  /** Starts a shell-crack overlay at the hatching family's nest bowl. */
+  private spawnHatchOverlay(state: WorldState, e: SimEvent): void {
+    if (e.familyId === undefined) return;
+    const fam = state.families.find((f) => f.id === e.familyId);
+    const home =
+      fam === undefined || fam.homeId === null ? undefined : state.homes.find((h) => h.id === fam.homeId);
+    const pos = home && EGG_HOME_KINDS.has(home.kind) ? nestVisualPoint(home) : e.pos;
+    if (!pos) return;
+    this.ambient.spawnHatch(pos);
   }
 
   /** Burrows, nests (with eggs while expecting), and family name labels. */
@@ -545,10 +730,10 @@ export class Renderer {
           g.circle(dx, ballY + 4, 13).fill(0x6d563a);
           g.circle(dx, ballY, 12).fill(0x8a6f4d);
           g.circle(dx - 3, ballY - 4, 5).fill({ color: 0xa89066, alpha: 0.85 });
-          if (fam?.phase === 'expecting') {
-            g.ellipse(dx - 2, ballY - 1, 3, 4).fill(0xf1ead6);
-            g.ellipse(dx + 2, ballY - 2, 3, 4).fill(0xe8e2ce);
-          }
+          // Squirrels give live birth (reproduction.mode: 'live') — unlike
+          // every other home kind above, a drey never shows eggs during
+          // 'expecting' (M10 task 4 fix: this block used to draw two anyway,
+          // a Task 3 copy-paste leftover with nothing to hatch into).
           break;
         }
         case 'spawnClump': { // frog spawn: a jelly clump among the reeds
@@ -694,7 +879,23 @@ export class Renderer {
         tickDisp >= AIRBORNE_SPEED_FRACTION * speedFor(view.species, view.stage);
       this.scratchPos.x = x;
       this.scratchPos.y = y;
-      const swimming = speciesParams.medium === 'amphibious' && isWater(this.scratchPos);
+      // Shore hysteresis (M10 task 4): a single hard isWater boundary test
+      // flickered the swim/land clip right at the shoreline (a duck's own
+      // position oscillates across it by a px or two frame to frame). Only
+      // flip the STABLE decision once the raw reading has disagreed with it
+      // for 3 consecutive frames — applies to every amphibious species
+      // (duck/frog/turtle), not just the duck the flicker was first seen on.
+      const rawWater = speciesParams.medium === 'amphibious' && isWater(this.scratchPos);
+      if (rawWater === view.swimmingState) {
+        view.swimAgreeCount = 0;
+      } else {
+        view.swimAgreeCount++;
+        if (view.swimAgreeCount >= 3) {
+          view.swimmingState = rawWater;
+          view.swimAgreeCount = 0;
+        }
+      }
+      const swimming = view.swimmingState;
 
       // Ease the flight lift toward its target over LIFT_EASE_MS, both ways,
       // so takeoff/landing never pop. Stays pinned at 0 for every species
@@ -705,11 +906,38 @@ export class Renderer {
       const liftEase = view.liftT * view.liftT * (3 - 2 * view.liftT); // smoothstep, matches Animator's sample()
       const liftPx = tier === 2 ? -LIFT_MAX_PX * liftEase : 0; // only the live T2 rig actually lifts
 
+      // Hatch/birth emergence (M10 task 4): scale eases in over EMERGE_MS,
+      // and a birth additionally recedes from the home mouth by
+      // EMERGE_SLIDE_PX, easing to 0 extra offset — see startEmergence().
+      // Cleared once the ease completes, so every ordinary view skips this
+      // block entirely (emergeScale 1, no offset, same as before this task).
+      let emergeScale = 1;
+      let emergeOffX = 0;
+      let emergeOffY = 0;
+      if (view.emergeKind !== undefined) {
+        view.emergeMs += dtMs;
+        const t = clamp(view.emergeMs / EMERGE_MS, 0, 1);
+        const ease = 1 - (1 - t) * (1 - t) * (1 - t); // ease-out cubic
+        if (view.emergeKind === 'hatch') {
+          emergeScale = ease;
+        } else {
+          emergeScale = 0.3 + 0.7 * ease;
+          const slide = EMERGE_SLIDE_PX * (1 - ease);
+          emergeOffX = -view.emergeDirX * slide;
+          emergeOffY = -view.emergeDirY * slide;
+        }
+        if (t >= 1) view.emergeKind = undefined;
+      }
+
       // A brooding sitter at a treeNest home nudges into the drawn bowl
       // (broodOffsetX/Y, set in sync() — zero for every other case).
-      view.node.position.set(x + view.broodOffsetX, y + view.broodOffsetY + liftPx);
+      view.node.position.set(
+        x + view.broodOffsetX + emergeOffX,
+        y + view.broodOffsetY + emergeOffY + liftPx,
+      );
       const facingLeft = Math.cos(view.heading) < 0;
-      view.node.scale.x = facingLeft ? -1 : 1;
+      view.node.scale.x = (facingLeft ? -1 : 1) * emergeScale;
+      view.node.scale.y = emergeScale;
       // A passing elder softens — the gentlest farewell.
       view.node.alpha = view.activityId === 'pass' ? 0.75 : 1;
 
@@ -728,8 +956,18 @@ export class Renderer {
       // Single source of truth for which pose to show, shared by T2's live
       // rig and T1's baked-frame cascade below (M9 task 5's clipFor fix —
       // moving now outranks brood/nap, so a sitter still walking to the
-      // nest reads as walking, not asleep mid-stride).
-      const clip = clipFor(view.activityId, moving, airborneNow, swimming, view.step);
+      // nest reads as walking, not asleep mid-stride). M10 task 4 adds the
+      // nurse hold: the mother reads 'sit' (settled) and her snuggled-in
+      // babies read 'eat', both computed once per sync in view.nursing/nursed.
+      const clip = clipFor(
+        view.activityId,
+        moving,
+        airborneNow,
+        swimming,
+        view.step,
+        view.nursing,
+        view.nursed,
+      );
 
       if (tier === 2) {
         view.rig.root.visible = true;
@@ -817,10 +1055,23 @@ export class Renderer {
         view.label.scale.x = facingLeft ? -1 : 1;
       }
 
+      // Crown position + on-screen test, shared below by the activity glyph
+      // and the drifting sleep 'z's — both anchor to the same point.
+      const stageScale = speciesRig.stages[view.stage].scale;
+      const crownX = x + view.broodOffsetX;
+      const crownY = y + view.broodOffsetY + LABEL_HEIGHT[view.species] * stageScale;
+      const onscreen =
+        x > camCX - glyphHalfW && x < camCX + glyphHalfW && y > camCY - glyphHalfH && y < camCY + glyphHalfH;
+
       // Activity glyph: ease alpha toward the desired kind (0 if none), and
       // only ever swap kinds once fully faded out — see the field comment
       // on CreatureView.glyphKind. Drawn only when visible and on-screen.
-      const desiredGlyph = glyphKindFor(view.activityId, view.step, view.minTicks);
+      // Nursing wins over everything else — a soft milk-white droplet
+      // instead of whatever the underlying activity would otherwise show
+      // (M10 task 4; replaces the amber 'carry' dot for nurse-feedMode mothers).
+      const desiredGlyph: GlyphKind | undefined = view.nursing
+        ? 'nurse'
+        : glyphKindFor(view.activityId, view.step, view.minTicks);
       if (desiredGlyph !== view.glyphKind && view.glyphAlpha <= 0) view.glyphKind = desiredGlyph;
       const glyphTarget = desiredGlyph !== undefined && view.glyphKind === desiredGlyph ? 1 : 0;
       if (view.glyphAlpha < glyphTarget) {
@@ -828,15 +1079,23 @@ export class Renderer {
       } else if (view.glyphAlpha > glyphTarget) {
         view.glyphAlpha = Math.max(glyphTarget, view.glyphAlpha - dtMs / GLYPH_FADE_MS);
       }
-      if (view.glyphKind !== undefined && view.glyphAlpha > 0) {
-        const onscreen =
-          x > camCX - glyphHalfW && x < camCX + glyphHalfW && y > camCY - glyphHalfH && y < camCY + glyphHalfH;
-        if (onscreen) {
-          const stageScale = speciesRig.stages[view.stage].scale;
-          const crownX = x + view.broodOffsetX;
-          const crownY = y + view.broodOffsetY + LABEL_HEIGHT[view.species] * stageScale;
-          this.drawGlyph(view.glyphKind, crownX, crownY, glyphRadius, view.glyphAlpha);
+      if (view.glyphKind !== undefined && view.glyphAlpha > 0 && onscreen) {
+        this.drawGlyph(view.glyphKind, crownX, crownY, glyphRadius, view.glyphAlpha);
+      }
+
+      // Drifting sleep 'z's (M10 task 4): only while actually settled into
+      // the sleep pose (clip 'sleep' via nap) — not just walking toward the
+      // nap spot, which the crescent glyph above already shows regardless
+      // of motion. Timer resets the moment a nap ends, so waking mid-cycle
+      // never leaves a z queued to fire the instant it dozes off again.
+      if (clip === 'sleep' && view.activityId === 'nap') {
+        view.zzzTimerMs += dtMs;
+        if (view.zzzTimerMs >= view.zzzIntervalMs) {
+          view.zzzTimerMs -= view.zzzIntervalMs;
+          if (onscreen) this.ambient.spawnZ({ x: crownX, y: crownY });
         }
+      } else {
+        view.zzzTimerMs = 0;
       }
     }
 
@@ -914,6 +1173,18 @@ export class Renderer {
       case 'mourning':
         g.ellipse(cx, cy, r * 0.4, r * 0.64).fill({ color: 0xb3aebd, alpha: 0.75 * alpha });
         break;
+      case 'nurse': {
+        // A soft milk-white droplet: round base + a small peak, distinct in
+        // both shape and color from the amber 'carry' dot (M10 task 4).
+        const dropColor = 0xf7f3e8;
+        g.circle(cx, cy + r * 0.14, r * 0.42).fill({ color: dropColor, alpha: 0.9 * alpha });
+        g.moveTo(cx, cy - r * 0.5)
+          .lineTo(cx - r * 0.22, cy - r * 0.06)
+          .lineTo(cx + r * 0.22, cy - r * 0.06)
+          .closePath()
+          .fill({ color: dropColor, alpha: 0.9 * alpha });
+        break;
+      }
     }
   }
 
@@ -973,6 +1244,21 @@ export class Renderer {
       liftT: 0,
       shadowBaseY: rigFor(c.species).parts.find((p) => p.id === 'shadow')?.y ?? 0,
       rippleSprite,
+      // Seed the swim/land hysteresis from the true reading (no 3-frame
+      // delay on spawn) — irrelevant for non-amphibious species, which
+      // never read swimmingState (medium gates it every frame in render()).
+      swimmingState: SPECIES[c.species].medium === 'amphibious' && isWater(c.pos),
+      swimAgreeCount: 0,
+      nursing: false,
+      nursed: false,
+      emergeKind: undefined,
+      emergeMs: 0,
+      emergeDirX: 0,
+      emergeDirY: 0,
+      zzzTimerMs: 0,
+      // Jittered ±~20% around ZZZ_INTERVAL_MS off the creature's own id —
+      // pure cosmetic variety, deliberately not a sim RNG draw.
+      zzzIntervalMs: ZZZ_INTERVAL_MS + ((c.id * 37) % 401) - 200,
     };
     this.positionLabel(view);
     return view;
@@ -1087,6 +1373,13 @@ export class Renderer {
  * stop moving does the brood/nap pose take over. `feedYoung` splits on its
  * `step` field while moving: step 1 (carrying food home) shows 'carry'
  * instead of a plain 'walk'.
+ *
+ * M10 task 4 adds the nurse hold, both stationary-only (already excluded
+ * from `moving` since neither mother nor snuggled-in baby travels during a
+ * hold): `nursing` (the mother, feedMode 'nurse' + activity 'feedYoung' step
+ * 1) reads 'sit' instead of the generic 'eat' the old feedYoung fallback
+ * gave her; `nursed` (a family baby within NURSE_EAT_RADIUS) reads 'eat'
+ * regardless of its own activity — nursing wins even over its own nap/brood.
  */
 function clipFor(
   activityId: string,
@@ -1094,11 +1387,15 @@ function clipFor(
   airborne: boolean,
   swimming: boolean,
   feedYoungStep: number | undefined,
+  nursing: boolean,
+  nursed: boolean,
 ): ClipName {
   if (activityId === 'pass') return 'sleep';
   if (airborne) return 'flap';
   if (swimming) return 'swim';
   if (moving) return activityId === 'feedYoung' && feedYoungStep === 1 ? 'carry' : 'walk';
+  if (nursing) return 'sit';
+  if (nursed) return 'eat';
   if (activityId === 'brood') return 'sit';
   if (activityId === 'nap') return 'sleep';
   if (activityId === 'forage' || activityId === 'feedYoung') return 'eat';

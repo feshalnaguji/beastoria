@@ -33,6 +33,22 @@ const SPARKLE_POOL_SIZE = 60;
 const SPARKLE_LIFE_MS = 1500;
 const SPARKLE_TINT = 0xfff6df; // soft cream
 
+/** Hatch crack overlay (M10 task 4): a hatch is rare enough that a small
+ * Sprite pool (texture-swapped, unlike the Particle pools above) is cheap —
+ * generous enough for several families hatching close together, or a burst
+ * of buffered 'hatched' events landing in one post-catch-up sync. */
+const HATCH_POOL_SIZE = 10;
+/** whole -> cracked -> halves, ~700ms each, then the halves fade over 800ms. */
+const HATCH_STAGE_MS = 700;
+const HATCH_FADE_MS = 800;
+const HATCH_TOTAL_MS = HATCH_STAGE_MS * 3 + HATCH_FADE_MS;
+
+/** Drifting sleep 'z's (M10 task 4): small, frequent, capped pool — a
+ * napping population could otherwise emit indefinitely. */
+const ZZZ_POOL_SIZE = 12;
+const ZZZ_LIFE_MS = 2000;
+const ZZZ_RISE_PX = 14;
+
 // Meadow rejection zones — same padding as the ground painter's flower scatter.
 const POND_EDGE = { ...POND, rx: POND.rx * 1.15, ry: POND.ry * 1.15 };
 const FOREST_CORE = { ...FOREST, rx: FOREST.rx * 0.8, ry: FOREST.ry * 0.8 };
@@ -70,12 +86,34 @@ interface Sparkle {
   vy: number; // px/ms (negative = rising)
 }
 
+/** A single pooled hatch-crack overlay — cycles through the three baked
+ * shell textures, then fades out. Sprite-based (not Particle) because it
+ * needs per-instance texture swaps, which the Particle pools above never do. */
+interface HatchOverlay {
+  sprite: Sprite;
+  active: boolean;
+  ageMs: number;
+}
+
+/** A single pooled drifting sleep 'z' — rises and fades once spawned. */
+interface Zzz {
+  sprite: Sprite;
+  active: boolean;
+  ageMs: number;
+  baseX: number;
+  baseY: number;
+}
+
 export class AmbientEffects {
   readonly shimmerLayer: Container;
   readonly grassLayer: Container;
   readonly dappleLayer: Container;
   readonly fireflyLayer: ParticleContainer;
   readonly sparkleLayer: ParticleContainer;
+  /** Hatch crack overlays, drawn over the nest (M10 task 4). */
+  readonly hatchLayer: Container;
+  /** Drifting sleep 'z's (M10 task 4). */
+  readonly zzzLayer: Container;
 
   private readonly rng: RngState;
   private elapsedMs = 0;
@@ -84,6 +122,11 @@ export class AmbientEffects {
   private readonly fireflies: Firefly[] = [];
   private readonly sparkles: Sparkle[] = [];
   private sparkleCursor = 0;
+  private readonly hatches: HatchOverlay[] = [];
+  private hatchCursor = 0;
+  private hatchTextures: [Texture, Texture, Texture] | undefined;
+  private readonly zzzs: Zzz[] = [];
+  private zzzCursor = 0;
   private shimmerA!: TilingSprite;
   private shimmerB!: TilingSprite;
 
@@ -94,8 +137,18 @@ export class AmbientEffects {
     this.dappleLayer = new Container();
     this.fireflyLayer = new ParticleContainer({ dynamicProperties: { position: true, color: true } });
     this.sparkleLayer = new ParticleContainer({ dynamicProperties: { position: true, color: true } });
+    this.hatchLayer = new Container();
+    this.zzzLayer = new Container();
     // Provisional order — Renderer re-inserts these at their final z-index spots.
-    world.addChild(this.shimmerLayer, this.grassLayer, this.dappleLayer, this.fireflyLayer, this.sparkleLayer);
+    world.addChild(
+      this.shimmerLayer,
+      this.grassLayer,
+      this.dappleLayer,
+      this.fireflyLayer,
+      this.sparkleLayer,
+      this.hatchLayer,
+      this.zzzLayer,
+    );
   }
 
   build(renderer: PixiRenderer): void {
@@ -104,6 +157,8 @@ export class AmbientEffects {
     this.buildDapple(renderer);
     this.buildFireflies(renderer);
     this.buildSparkles(renderer);
+    this.buildHatches(renderer);
+    this.buildZzzs(renderer);
   }
 
   /**
@@ -170,6 +225,40 @@ export class AmbientEffects {
       s.particle.y = s.baseY + s.vy * s.ageMs;
       s.particle.alpha = Math.sin(Math.PI * st) * 0.9;
     }
+
+    // Hatch crack overlays: 3 baked states in sequence, then the last
+    // (halves) eases out — see spawnHatch below.
+    for (const h of this.hatches) {
+      if (!h.active) continue;
+      h.ageMs += dtMs;
+      if (h.ageMs >= HATCH_TOTAL_MS) {
+        h.active = false;
+        h.sprite.visible = false;
+        continue;
+      }
+      const textures = this.hatchTextures;
+      if (textures) {
+        if (h.ageMs < HATCH_STAGE_MS) h.sprite.texture = textures[0];
+        else if (h.ageMs < HATCH_STAGE_MS * 2) h.sprite.texture = textures[1];
+        else h.sprite.texture = textures[2];
+      }
+      const sinceHalves = h.ageMs - HATCH_STAGE_MS * 3;
+      h.sprite.alpha = sinceHalves <= 0 ? 1 : Math.max(0, 1 - sinceHalves / HATCH_FADE_MS);
+    }
+
+    // Drifting sleep 'z's: rise and fade once, then sit inert until recycled.
+    for (const z of this.zzzs) {
+      if (!z.active) continue;
+      z.ageMs += dtMs;
+      if (z.ageMs >= ZZZ_LIFE_MS) {
+        z.active = false;
+        z.sprite.visible = false;
+        continue;
+      }
+      const zt = z.ageMs / ZZZ_LIFE_MS;
+      z.sprite.y = z.baseY - ZZZ_RISE_PX * zt;
+      z.sprite.alpha = (1 - zt) * 0.85;
+    }
   }
 
   /**
@@ -197,6 +286,38 @@ export class AmbientEffects {
       s.particle.y = s.baseY;
       s.particle.alpha = 0;
     }
+  }
+
+  /**
+   * Starts (or restarts, via the rolling pool cursor) a shell-crack overlay
+   * at a nest position — the hatch itself is the moment, so this replaces
+   * the generic moment sparkle for 'hatched' events (M10 task 4). Never
+   * allocates: recycles the oldest pooled sprite exactly like spawnSparkle.
+   */
+  spawnHatch(pos: Vec2): void {
+    const h = this.hatches[this.hatchCursor];
+    this.hatchCursor = (this.hatchCursor + 1) % HATCH_POOL_SIZE;
+    if (!h) return;
+    h.active = true;
+    h.ageMs = 0;
+    h.sprite.visible = true;
+    h.sprite.alpha = 1;
+    h.sprite.position.set(pos.x, pos.y);
+    if (this.hatchTextures) h.sprite.texture = this.hatchTextures[0];
+  }
+
+  /** Starts one drifting sleep 'z' at a crown position (M10 task 4). */
+  spawnZ(pos: Vec2): void {
+    const z = this.zzzs[this.zzzCursor];
+    this.zzzCursor = (this.zzzCursor + 1) % ZZZ_POOL_SIZE;
+    if (!z) return;
+    z.active = true;
+    z.ageMs = 0;
+    z.baseX = pos.x;
+    z.baseY = pos.y;
+    z.sprite.visible = true;
+    z.sprite.alpha = 0.85;
+    z.sprite.position.set(pos.x, pos.y);
   }
 
   /**
@@ -348,6 +469,69 @@ export class AmbientEffects {
       });
       this.sparkleLayer.addParticle(particle);
       this.sparkles.push({ particle, active: false, ageMs: 0, lifeMs: SPARKLE_LIFE_MS, baseX: 0, baseY: 0, vx: 0, vy: 0 });
+    }
+  }
+
+  /** Three baked shell states — whole, cracked, halves — reused by every
+   * hatch anywhere in the valley (Ambient's bake-once pattern). */
+  private buildHatches(renderer: PixiRenderer): void {
+    const W = 20;
+    const H = 26;
+    const shell = 0xf1ead6;
+    const shade = 0xcdbf9c;
+
+    const gWhole = new Graphics().ellipse(W / 2, H / 2, W / 2 - 1, H / 2 - 1).fill(shell);
+    const wholeTex = this.bake(renderer, gWhole, W, H);
+
+    const gCracked = new Graphics().ellipse(W / 2, H / 2, W / 2 - 1, H / 2 - 1).fill(shell);
+    gCracked
+      .moveTo(W * 0.32, H * 0.18)
+      .lineTo(W * 0.58, H * 0.42)
+      .lineTo(W * 0.34, H * 0.56)
+      .lineTo(W * 0.6, H * 0.82)
+      .stroke({ color: shade, width: 1.4, join: 'round', cap: 'round' });
+    const crackedTex = this.bake(renderer, gCracked, W, H);
+
+    // Two shell halves, tipped apart with a gap between — the moment of hatch.
+    const gHalves = new Graphics();
+    gHalves
+      .moveTo(1, H * 0.46)
+      .quadraticCurveTo(W / 2, -H * 0.02, W - 1, H * 0.4)
+      .quadraticCurveTo(W * 0.65, H * 0.3, 1, H * 0.46)
+      .fill(shell);
+    gHalves
+      .moveTo(1, H * 0.62)
+      .quadraticCurveTo(W * 0.5, H * 0.5, W - 1, H * 0.58)
+      .quadraticCurveTo(W / 2, H * 1.04, 1, H * 0.62)
+      .fill(shell);
+    const halvesTex = this.bake(renderer, gHalves, W, H);
+
+    this.hatchTextures = [wholeTex, crackedTex, halvesTex];
+    for (let i = 0; i < HATCH_POOL_SIZE; i++) {
+      const sprite = new Sprite(wholeTex);
+      sprite.anchor.set(0.5);
+      sprite.visible = false;
+      this.hatchLayer.addChild(sprite);
+      this.hatches.push({ sprite, active: false, ageMs: 0 });
+    }
+  }
+
+  /** A tiny baked 'z' glyph, reused by every drifting sleep particle. */
+  private buildZzzs(renderer: PixiRenderer): void {
+    const s = 6;
+    const g = new Graphics();
+    g.moveTo(0, 0.5)
+      .lineTo(s, 0.5)
+      .lineTo(0, s - 0.5)
+      .lineTo(s, s - 0.5)
+      .stroke({ color: 0xf4f7ef, width: 1.3, join: 'round', cap: 'round' });
+    const tex = this.bake(renderer, g, s, s);
+    for (let i = 0; i < ZZZ_POOL_SIZE; i++) {
+      const sprite = new Sprite(tex);
+      sprite.anchor.set(0.5);
+      sprite.visible = false;
+      this.zzzLayer.addChild(sprite);
+      this.zzzs.push({ sprite, active: false, ageMs: 0, baseX: 0, baseY: 0 });
     }
   }
 
