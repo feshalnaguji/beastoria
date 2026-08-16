@@ -141,6 +141,10 @@ interface CreatureView {
   /** This view's own jittered cadence around ZZZ_INTERVAL_MS, fixed at
    * creation off the creature's id — pure cosmetic variety, no RNG draw. */
   zzzIntervalMs: number;
+  /** Ms since this glyph started showing — drives the gentle sine bob
+   * (period 2.4s, amplitude ±1.5px) and is reset when glyphKind changes
+   * (M10 task 4 fix). Never allocated; a per-view float only. */
+  glyphBornMs: number;
 }
 
 /** Baked walk frames per species (Step 1: symmetric 3-key clips sample
@@ -630,7 +634,18 @@ export class Renderer {
       fam === undefined || fam.homeId === null ? undefined : state.homes.find((h) => h.id === fam.homeId);
     const pos = home && EGG_HOME_KINDS.has(home.kind) ? nestVisualPoint(home) : e.pos;
     if (!pos) return;
-    this.ambient.spawnHatch(pos);
+    // Per-home-kind scale to fit different egg sizes (M10 task 4 fix).
+    let scale = 1.0;
+    let tint = 0xffffff;
+    if (home) {
+      if (home.kind === 'sandNest') {
+        scale = 0.55;
+      } else if (home.kind === 'spawnClump') {
+        scale = 0.4;
+        tint = 0xa8c890; // Soft green tint for frog jelly-dot eggs.
+      }
+    }
+    this.ambient.spawnHatch(pos, scale, tint);
   }
 
   /** Burrows, nests (with eggs while expecting), and family name labels. */
@@ -1072,7 +1087,10 @@ export class Renderer {
       const desiredGlyph: GlyphKind | undefined = view.nursing
         ? 'nurse'
         : glyphKindFor(view.activityId, view.step, view.minTicks);
-      if (desiredGlyph !== view.glyphKind && view.glyphAlpha <= 0) view.glyphKind = desiredGlyph;
+      if (desiredGlyph !== view.glyphKind && view.glyphAlpha <= 0) {
+        view.glyphKind = desiredGlyph;
+        view.glyphBornMs = 0; // Reset birth time when glyph kind changes.
+      }
       const glyphTarget = desiredGlyph !== undefined && view.glyphKind === desiredGlyph ? 1 : 0;
       if (view.glyphAlpha < glyphTarget) {
         view.glyphAlpha = Math.min(glyphTarget, view.glyphAlpha + dtMs / GLYPH_FADE_MS);
@@ -1080,7 +1098,12 @@ export class Renderer {
         view.glyphAlpha = Math.max(glyphTarget, view.glyphAlpha - dtMs / GLYPH_FADE_MS);
       }
       if (view.glyphKind !== undefined && view.glyphAlpha > 0 && onscreen) {
-        this.drawGlyph(view.glyphKind, crownX, crownY, glyphRadius, view.glyphAlpha);
+        // Glyph life: gentle sine bob (period 2.4s, amplitude ±1.5px) phased per
+        // creature id, and scale-in using glyphAlpha (M10 task 4 fix).
+        view.glyphBornMs += dtMs;
+        const bobY = Math.sin((view.glyphBornMs / 1000) * 2 * Math.PI / 2.4) * 1.5;
+        const scaledRadius = glyphRadius * view.glyphAlpha;
+        this.drawGlyph(view.glyphKind, crownX, crownY + bobY, scaledRadius, view.glyphAlpha);
       }
 
       // Drifting sleep 'z's (M10 task 4): only while actually settled into
@@ -1259,6 +1282,7 @@ export class Renderer {
       // Jittered ±~20% around ZZZ_INTERVAL_MS off the creature's own id —
       // pure cosmetic variety, deliberately not a sim RNG draw.
       zzzIntervalMs: ZZZ_INTERVAL_MS + ((c.id * 37) % 401) - 200,
+      glyphBornMs: 0,
     };
     this.positionLabel(view);
     return view;

@@ -93,6 +93,8 @@ interface HatchOverlay {
   sprite: Sprite;
   active: boolean;
   ageMs: number;
+  scale: number; // Per-home-kind scale to fit different egg sizes (M10 task 4 fix).
+  tint: number; // Per-home-kind tint for spawnClump (soft green, M10 task 4 fix).
 }
 
 /** A single pooled drifting sleep 'z' — rises and fades once spawned. */
@@ -294,15 +296,19 @@ export class AmbientEffects {
    * the generic moment sparkle for 'hatched' events (M10 task 4). Never
    * allocates: recycles the oldest pooled sprite exactly like spawnSparkle.
    */
-  spawnHatch(pos: Vec2): void {
+  spawnHatch(pos: Vec2, scale: number = 1, tint: number = 0xffffff): void {
     const h = this.hatches[this.hatchCursor];
     this.hatchCursor = (this.hatchCursor + 1) % HATCH_POOL_SIZE;
     if (!h) return;
     h.active = true;
     h.ageMs = 0;
+    h.scale = scale;
+    h.tint = tint;
     h.sprite.visible = true;
     h.sprite.alpha = 1;
     h.sprite.position.set(pos.x, pos.y);
+    h.sprite.scale.set(scale);
+    h.sprite.tint = tint;
     if (this.hatchTextures) h.sprite.texture = this.hatchTextures[0];
   }
 
@@ -512,7 +518,7 @@ export class AmbientEffects {
       sprite.anchor.set(0.5);
       sprite.visible = false;
       this.hatchLayer.addChild(sprite);
-      this.hatches.push({ sprite, active: false, ageMs: 0 });
+      this.hatches.push({ sprite, active: false, ageMs: 0, scale: 1, tint: 0xffffff });
     }
   }
 
