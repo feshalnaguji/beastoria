@@ -1,6 +1,10 @@
 /**
  * Dev panel (dev tool, not game UI): toggled with the backquote (~) key.
- * Speed control, clock readout, FPS, creature inspector via click.
+ * Speed control, clock readout, FPS, and a raw-numbers creature inspector —
+ * both this inspector and the game's own InspectCard (src/ui/InspectCard.ts)
+ * read off renderer.selectedId, the single source of truth for "who's
+ * selected"; main.ts is the only place that sets it (tap-to-inspect is now
+ * an always-available game feature, not a DevPanel-only click, M10 task 5).
  */
 import { clearSave, suppressSaves } from '../persist/store';
 import { getClock } from '../sim/clock';
@@ -14,11 +18,9 @@ export class DevPanel {
   private root: HTMLDivElement;
   private info!: HTMLPreElement;
   private visible = false;
-  private selectedId: number | null = null;
   private frames = 0;
   private fps = 0;
   private lastFpsTime = performance.now();
-  private downAt: { x: number; y: number } | null = null;
 
   constructor(
     private readonly state: WorldState,
@@ -74,21 +76,6 @@ export class DevPanel {
         this.root.style.display = this.visible ? 'block' : 'none';
       }
     });
-
-    // Click (not drag) selects the nearest creature for inspection.
-    const canvas = this.renderer.canvas;
-    canvas.addEventListener('pointerdown', (e) => {
-      this.downAt = { x: e.clientX, y: e.clientY };
-    });
-    canvas.addEventListener('pointerup', (e) => {
-      if (!this.downAt) return;
-      const moved = Math.hypot(e.clientX - this.downAt.x, e.clientY - this.downAt.y);
-      this.downAt = null;
-      if (moved > 6) return; // it was a drag
-      const picked = this.renderer.pickCreature(this.state, e.clientX, e.clientY);
-      this.selectedId = picked ? picked.id : null;
-      this.renderer.followId = this.selectedId; // click = inspect + follow
-    });
   }
 
   /** Call once per rendered frame. */
@@ -109,7 +96,7 @@ export class DevPanel {
       `creatures ${this.state.creatures.length}`,
     ];
 
-    const c = this.state.creatures.find((x) => x.id === this.selectedId);
+    const c = this.state.creatures.find((x) => x.id === this.renderer.selectedId);
     if (c) {
       lines.push(
         '',
@@ -124,7 +111,7 @@ export class DevPanel {
         lines.push(`family #${fam.id} — ${fam.phase} (${role})`);
       }
     } else {
-      lines.push('', '(click a creature to inspect)');
+      lines.push('', '(tap a creature to inspect)');
     }
     lines.push(`families ${this.state.families.length}  memorials ${this.state.memorials.length}`);
     this.info.textContent = lines.join('\n');

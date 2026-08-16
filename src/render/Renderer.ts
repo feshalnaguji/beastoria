@@ -145,6 +145,11 @@ interface CreatureView {
    * (period 2.4s, amplitude ±1.5px) and is reset when glyphKind changes
    * (M10 task 4 fix). Never allocated; a per-view float only. */
   glyphBornMs: number;
+  /** M10 task 5: this frame's airborne read (mirrors the local `airborneNow`
+   * computed in render()) — mirrored onto the view so InspectCard's "doing"
+   * text (via presentationFor()) can agree with what's on screen without
+   * recomputing the speed/medium inference itself. */
+  airborneNow: boolean;
 }
 
 /** Baked walk frames per species (Step 1: symmetric 3-key clips sample
@@ -351,6 +356,11 @@ export class Renderer {
   private lastFrameTime = 0;
   /** Baked once (Ambient's bake-once pattern): a duck's swim ripple. */
   private rippleTexture!: Texture;
+  /** Baked once (M10 task 5): the tap-selected creature's subtle ring. */
+  private selectionRingTexture!: Texture;
+  /** Single reused sprite (only one creature can be selected at a time) —
+   * repositioned onto the selected view each frame, hidden otherwise. */
+  private selectionRingSprite!: Sprite;
   /** Reused every frame's swimming check — avoids allocating a Vec2 literal
    * per creature per frame just to call isWater(). */
   private readonly scratchPos: Vec2 = { x: 0, y: 0 };
@@ -359,8 +369,12 @@ export class Renderer {
    * default (M10 task 4) — the glyph/pose vocabulary reads without text. */
   debugLabels = false;
 
-  /** Creature id the camera should track (DevPanel click-to-follow). */
+  /** Creature id the camera should track (tap-to-inspect / DevPanel click). */
   followId: number | null = null;
+  /** Creature id shown in the InspectCard and ringed on screen (M10 task 5).
+   * Single source of truth for "who's selected" — main.ts sets it on tap,
+   * DevPanel's own inspector reads it too instead of keeping its own copy. */
+  selectedId: number | null = null;
 
   async init(mount: HTMLElement): Promise<void> {
     this.app = new Application();
@@ -399,6 +413,10 @@ export class Renderer {
     this.creatureLayer = new Container();
     this.glyphLayer = new Graphics();
     this.ambient = new AmbientEffects(this.world, AMBIENT_SEED);
+    this.selectionRingTexture = this.bakeSelectionRingTexture();
+    this.selectionRingSprite = new Sprite(this.selectionRingTexture);
+    this.selectionRingSprite.anchor.set(0.5);
+    this.selectionRingSprite.visible = false;
     this.world.addChild(
       this.groundSprite,
       this.ambient.shimmerLayer, // above ground, below memorials
@@ -408,6 +426,7 @@ export class Renderer {
       this.detailLayer,
       this.ambient.grassLayer, // above terrain detail
       this.ambient.dappleLayer,
+      this.selectionRingSprite, // tap-selection ring, under the creature it rings
       this.creatureLayer,
       this.glyphLayer, // activity glyphs, above creature bodies
       this.ambient.sparkleLayer, // moment sparkles
@@ -471,6 +490,16 @@ export class Renderer {
     return best;
   }
 
+  /** Render-only presentation state for a creature (M10 task 5) — mirrors
+   * clipFor's airborne/swimming inference so InspectCard's "doing" text
+   * never disagrees with what's on screen. Undefined once the creature no
+   * longer has a view (e.g. it passed between the tap and the next read). */
+  presentationFor(id: number): { airborne: boolean; swimming: boolean } | undefined {
+    const view = this.views.get(id);
+    if (!view) return undefined;
+    return { airborne: view.airborneNow, swimming: view.swimmingState };
+  }
+
   /** Snapshot creature state after each sim tick (curr → prev, sim → curr). */
   sync(state: WorldState): void {
     this.clock = getClock(state.tick);
@@ -525,6 +554,7 @@ export class Renderer {
       if (!alive.has(id)) {
         this.views.delete(id);
         if (this.followId === id) this.followId = null;
+        if (this.selectedId === id) this.selectedId = null;
         this.fading.push({ view, remainingMs: PASSING_FADE_MS });
       }
     }
@@ -875,6 +905,10 @@ export class Renderer {
     const glyphHalfH = ch / 2 / zoom + GLYPH_CULL_MARGIN;
     const glyphRadius = clamp(GLYPH_RADIUS_K / zoom, GLYPH_RADIUS_MIN, GLYPH_RADIUS_MAX);
     this.glyphLayer.clear();
+    // Reset every frame; the loop below sets it true only if selectedId
+    // still has a matching view (cleared automatically otherwise — see
+    // sync()'s selectedId-on-removal handling).
+    this.selectionRingSprite.visible = false;
 
     for (const view of this.views.values()) {
       const x = view.prev.x + (view.curr.x - view.prev.x) * alpha;
@@ -892,6 +926,16 @@ export class Renderer {
         speciesParams.medium === 'air' &&
         moving &&
         tickDisp >= AIRBORNE_SPEED_FRACTION * speedFor(view.species, view.stage);
+      view.airborneNow = airborneNow; // mirrored for presentationFor() (M10 task 5)
+
+      // Tap-selection ring (M10 task 5): follows the selected view every
+      // frame, same interpolated position as its body — reset to hidden
+      // before the loop, only ever set true for the one matching view.
+      if (view.id === this.selectedId) {
+        this.selectionRingSprite.position.set(x + view.broodOffsetX, y + view.broodOffsetY);
+        this.selectionRingSprite.visible = true;
+      }
+
       this.scratchPos.x = x;
       this.scratchPos.y = y;
       // Shore hysteresis (M10 task 4): a single hard isWater boundary test
@@ -1283,6 +1327,7 @@ export class Renderer {
       // pure cosmetic variety, deliberately not a sim RNG draw.
       zzzIntervalMs: ZZZ_INTERVAL_MS + ((c.id * 37) % 401) - 200,
       glyphBornMs: 0,
+      airborneNow: false,
     };
     this.positionLabel(view);
     return view;
@@ -1343,6 +1388,20 @@ export class Renderer {
     const texture = this.app.renderer.generateTexture({
       target: g,
       frame: new Rectangle(0, 0, 24, 10),
+      resolution: 1,
+    });
+    g.destroy(true);
+    return texture;
+  }
+
+  /** One 48×48 stroked ring, baked once (Ambient's bake-once pattern) —
+   * shown under whichever creature is tap-selected (M10 task 5). Deliberately
+   * subtle: alpha 0.35, a plain stroke, no fill — a hint, not a highlight. */
+  private bakeSelectionRingTexture(): Texture {
+    const g = new Graphics().circle(24, 24, 20).stroke({ width: 3, color: 0xfff6da, alpha: 0.35 });
+    const texture = this.app.renderer.generateTexture({
+      target: g,
+      frame: new Rectangle(0, 0, 48, 48),
       resolution: 1,
     });
     g.destroy(true);
@@ -1469,7 +1528,7 @@ const FAMILY_NAMES = [
   'Sorrel',
 ];
 
-function familyName(id: number): string {
+export function familyName(id: number): string {
   return FAMILY_NAMES[id % FAMILY_NAMES.length] ?? 'Meadow';
 }
 

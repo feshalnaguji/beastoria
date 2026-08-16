@@ -14,8 +14,16 @@ import { getClock } from './sim/clock';
 import { tick } from './sim/Sim';
 import { createWorld, WORLD_HEIGHT, WORLD_WIDTH } from './sim/state';
 import { Hud } from './ui/Hud';
+import { InspectCard } from './ui/InspectCard';
 import { showWelcomeBack } from './ui/WelcomeBack';
 import { Renderer } from './render/Renderer';
+
+/** Tap-vs-drag threshold, in CSS px between pointerdown and pointerup — a
+ * movement past this reads as a camera drag (Camera.ts owns panning off its
+ * own pointer listeners on the same canvas), not a tap. Matches the value
+ * DevPanel's own inspector used before tap-to-inspect became an always-on
+ * game feature (M10 task 5) rather than a dev-only tool. */
+const TAP_DRAG_THRESHOLD_PX = 6;
 
 const AUTOSAVE_INTERVAL_TICKS = 300; // 30s of sim time at 1x
 
@@ -85,6 +93,41 @@ async function start(): Promise<void> {
     showWelcomeBack(summarizeEvents(state.eventLog, sinceTick));
   }
 
+  // Tap-to-inspect (M10 task 5): available always, not just in the DevPanel.
+  // renderer.selectedId is the single source of truth for "who's selected"
+  // (DevPanel's own inspector reads the same field instead of keeping a
+  // copy); `inspectedId` here additionally tracks whether *this* card is the
+  // one showing it, so the tick loop below can tell "still selected, just
+  // update the text" apart from "gone — renderer.sync() already cleared
+  // selectedId for us, now hide the card" without racing that clear.
+  const inspectCard = new InspectCard(() => dismissInspect());
+  let inspectedId: number | null = null;
+  function dismissInspect(): void {
+    renderer.selectedId = null;
+    renderer.followId = null;
+    inspectCard.hide();
+    inspectedId = null;
+  }
+  let downAt: { x: number; y: number } | null = null;
+  renderer.canvas.addEventListener('pointerdown', (e) => {
+    downAt = { x: e.clientX, y: e.clientY };
+  });
+  renderer.canvas.addEventListener('pointerup', (e) => {
+    if (!downAt) return;
+    const moved = Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y);
+    downAt = null;
+    if (moved > TAP_DRAG_THRESHOLD_PX) return; // it was a drag, Camera already panned
+    const picked = renderer.pickCreature(state, e.clientX, e.clientY);
+    if (picked) {
+      renderer.selectedId = picked.id;
+      renderer.followId = picked.id; // tap = inspect + soft follow
+      inspectCard.show(state, picked, renderer.presentationFor(picked.id));
+      inspectedId = picked.id;
+    } else {
+      dismissInspect(); // tap on empty ground dismisses both card and follow
+    }
+  });
+
   let ticksSinceSave = 0;
   const loop = new GameLoop(
     () => {
@@ -97,6 +140,14 @@ async function start(): Promise<void> {
       }
       scheduler.onTick(out.vocalizations, mix, performance.now());
       hud.setClock(clock);
+
+      // Keep the open InspectCard live (activity/doing text tracks the sim)
+      // and close it the moment its creature is gone.
+      if (inspectedId !== null) {
+        const selected = state.creatures.find((x) => x.id === inspectedId);
+        if (selected) inspectCard.show(state, selected, renderer.presentationFor(selected.id));
+        else dismissInspect();
+      }
 
       ticksSinceSave++;
       if (ticksSinceSave >= AUTOSAVE_INTERVAL_TICKS) {

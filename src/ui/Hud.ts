@@ -19,7 +19,7 @@ import type { Clock } from '../sim/clock';
 
 const PULSE_CSS = '@keyframes beastoria-hud-pulse { 0%,100% { opacity:1; } 50% { opacity:.55; } }';
 
-const PILL_CSS = [
+export const PILL_CSS = [
   'position:fixed', 'z-index:10',
   'background:rgba(30,40,30,.65)', 'color:#fff',
   'font-family:Georgia,serif', 'padding:6px 12px', 'border-radius:999px',
