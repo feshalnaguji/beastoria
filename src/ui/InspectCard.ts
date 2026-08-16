@@ -6,9 +6,17 @@
  * this file only renders and computes the card's text.
  */
 import { familyName } from '../render/Renderer';
+import { idHash } from '../sim/behaviors';
 import { SPECIES } from '../sim/species';
 import type { Creature, WorldState } from '../sim/state';
 import { PILL_CSS } from './Hud';
+
+/** Matches src/sim/family.ts's PASS_GATHER_TICKS and Renderer.ts's own
+ * MOURNING_GATHER_MIN_TICKS — 'gather' is reused for three unrelated family
+ * moments (mourning vigil, nest-material gathering, baby leash-back) that
+ * the sim doesn't otherwise distinguish; only the long-minTicks vigil one
+ * reads as mourning (see glyphKindFor's identical gate in Renderer.ts). */
+const MOURNING_GATHER_MIN_TICKS = 200;
 
 /** Render-only presentation hint from Renderer.presentationFor() — whether
  * the creature currently reads as airborne/swimming, same inference the
@@ -27,16 +35,6 @@ const CREATURE_NAMES = [
   'Acorn', 'Pebble', 'Breeze', 'Feather', 'Petal', 'Clay', 'Ember',
   'Frost', 'Lark',
 ];
-
-/** Same Math.imul mix as behaviors.ts's idOffsetAngle — a different id-hash
- * trick reused here for name choice instead of an angle. */
-function idHash(id: number): number {
-  let h = Math.imul(id, 0x85ebca6b) >>> 0;
-  h ^= h >>> 15;
-  h = Math.imul(h, 0x735a2d97) >>> 0;
-  h ^= h >>> 13;
-  return h >>> 0;
-}
 
 /** This creature's index within its family's parents+children (0 for a
  * family-less wanderer) — added into the name hash so siblings in the same
@@ -91,7 +89,16 @@ export function creatureDoing(c: Creature, presentation: Presentation | undefine
     case 'court':
       return 'smitten';
     case 'gather':
-      return 'paying respects';
+      // 'gather' is reused for 3 distinct family moments (family.ts) that
+      // share no other sim field — only minTicks tells them apart, exactly
+      // as Renderer.ts's glyphKindFor already gates its mourning glyph:
+      // the long vigil (minTicks 200) is the true "paying respects"; both
+      // everyday reuses (nest-material gathering, minTicks 30 for a parent;
+      // baby leashed back toward home/nurse, minTicks 30 for a baby) get
+      // their own routine wording so tapping a nest-building parent or a
+      // wandering kit never falsely reads as grief.
+      if (c.activity.minTicks >= MOURNING_GATHER_MIN_TICKS) return 'paying respects';
+      return c.stage === 'baby' ? 'heading home' : 'gathering nest material';
     default:
       return 'taking the air'; // wander, idle, socialize, and any future id
   }

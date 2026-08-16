@@ -633,11 +633,19 @@ function assertNever(x: never): never {
   throw new Error(`unreachable feedMode: ${JSON.stringify(x)}`);
 }
 
-/** Deterministic per-creature angle (same trick as voice.ts's roll): id-hash → [0, 2π). */
-export function idOffsetAngle(id: number): number {
+/** Deterministic per-id hash mix (same trick as voice.ts's roll) — a uint32
+ * spread uniformly over its range. idOffsetAngle below turns it into an
+ * angle; InspectCard.ts (M10 task 5's tap-to-inspect) reuses it directly for
+ * a deterministic name-list index instead of duplicating the mix. */
+export function idHash(id: number): number {
   let h = Math.imul(id, 0x85ebca6b) >>> 0;
   h ^= h >>> 15;
   h = Math.imul(h, 0x735a2d97) >>> 0;
   h ^= h >>> 13;
-  return ((h >>> 0) / 4294967296) * Math.PI * 2;
+  return h >>> 0;
+}
+
+/** Deterministic per-creature angle: id-hash → [0, 2π). */
+export function idOffsetAngle(id: number): number {
+  return (idHash(id) / 4294967296) * Math.PI * 2;
 }
