@@ -104,17 +104,26 @@ export const DREY_SITES: Vec2[] = [
   { x: 1100, y: 650 },
 ];
 
-/** Frog spawn clumps laid among the reeds, near the koi's lily beds (M10). */
+/**
+ * Frog spawn clumps laid among the reeds on the pond's shore band (M10).
+ * Placed at their own compass points (not the lily beds' own coordinates —
+ * review fix, see M10 task 3's justification table row 1): every site here
+ * sits >=160 units from every other home site, old or new, so no two home
+ * markers or family labels visibly intersect.
+ */
 export const FROG_SPAWN_CLUMPS: Vec2[] = [
-  { x: 2870, y: 2180 },
-  { x: 3260, y: 2330 },
-  { x: 2680, y: 2600 },
+  { x: 2947, y: 1854 },
+  { x: 3642, y: 2537 },
+  { x: 2479, y: 2388 },
 ];
 
-/** Turtle sand nests scooped into the pond's shore band (M10). */
+/**
+ * Turtle sand nests scooped into the pond's shore band (M10, review fix: see
+ * FROG_SPAWN_CLUMPS above — re-placed for the same >=160-unit spacing rule).
+ */
 export const TURTLE_SAND_NESTS: Vec2[] = [
-  { x: 2552, y: 2070 },
-  { x: 3650, y: 2530 },
+  { x: 3727, y: 2178 },
+  { x: 3111, y: 2772 },
 ];
 
 /**

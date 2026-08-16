@@ -44,15 +44,20 @@ function soak(seed: number, days: number): void {
         );
       }
     }
-    if (state.tick === DAY5_TICK) {
-      for (const id of NEW_SPECIES) {
-        expect(c[id], `${id} not yet present by day 5 (seed ${seed})`).toBeGreaterThan(0);
-      }
-    }
     if (t % 60 !== 0) continue;
     const phoenixFams = state.families.filter((f) => f.species === 'phoenix').length;
     expect(phoenixFams, `phoenix families at tick ${state.tick}`).toBeLessThanOrEqual(1);
     expect(c.phoenix, `phoenix extinct at tick ${state.tick}`).toBeGreaterThanOrEqual(1);
+    // M10 task 3 (review fix): asserted at every 60-tick sample from day 5
+    // on, not just a single tick — `c` is already computed above, so this
+    // is near-free, and it catches a species that establishes itself by day
+    // 5 then quietly dies back out before the soak ends, which a one-shot
+    // check at exactly DAY5_TICK would miss.
+    if (state.tick >= DAY5_TICK) {
+      for (const id of NEW_SPECIES) {
+        expect(c[id], `${id} not present at tick ${state.tick} (seed ${seed})`).toBeGreaterThan(0);
+      }
+    }
   }
   const end = counts(state);
   for (const id of ALL) {

@@ -531,15 +531,23 @@ export class Renderer {
           }
           break;
         }
-        case 'drey': { // a twiggy ball woven high in a forest tree
+        case 'drey': { // a twiggy ball nest woven onto a trunk, high in the canopy
           const dx = home.pos.x;
-          const dy = home.pos.y - 30;
-          g.circle(dx, dy + 4, 17).fill(0x6d563a);
-          g.circle(dx, dy, 15).fill(0x8a6f4d);
-          g.circle(dx - 4, dy - 5, 6).fill({ color: 0xa89066, alpha: 0.85 });
+          const ballY = home.pos.y - 18;
+          // Trunk stub beneath the ball (bark brown, echoing treeHollow's
+          // trunk below) — review fix: the ball no longer floats with
+          // nothing under it (M10 task 3 justification table row 2).
+          g.roundRect(dx - 4, home.pos.y - 8, 8, 14, 3).fill(0x6b4e38);
+          // The ball's own topmost extent is capped at home.pos.y - 30 —
+          // exactly treeHollow's ceiling below — so it clears the family
+          // label's fixed anchor at home.pos.y - 34 with the same 4px
+          // clearance every other home kind already keeps (review fix).
+          g.circle(dx, ballY + 4, 13).fill(0x6d563a);
+          g.circle(dx, ballY, 12).fill(0x8a6f4d);
+          g.circle(dx - 3, ballY - 4, 5).fill({ color: 0xa89066, alpha: 0.85 });
           if (fam?.phase === 'expecting') {
-            g.ellipse(dx - 3, dy - 2, 3.5, 4.5).fill(0xf1ead6);
-            g.ellipse(dx + 3, dy - 3, 3.5, 4.5).fill(0xe8e2ce);
+            g.ellipse(dx - 2, ballY - 1, 3, 4).fill(0xf1ead6);
+            g.ellipse(dx + 2, ballY - 2, 3, 4).fill(0xe8e2ce);
           }
           break;
         }

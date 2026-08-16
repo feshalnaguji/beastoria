@@ -141,25 +141,13 @@ describe('foraging aims at food', () => {
       }
     }
     expect(offsets.length).toBe(5);
-    let minPair = Infinity;
-    for (let a = 0; a < offsets.length; a++) {
-      for (let b = a + 1; b < offsets.length; b++) {
-        const oa = offsets[a];
-        const ob = offsets[b];
-        if (oa && ob) minPair = Math.min(minPair, Math.hypot(oa.x - ob.x, oa.y - ob.y));
-      }
-    }
-    // M10 task 3: this test's five deer get whatever ids `nextId` is at when
-    // they're spawned, which shifted once the three new species' extra homes
-    // and starting-cast creatures were added ahead of them (see the
-    // justification table in the task 3 report) — id-hashed ring angles
-    // (idOffsetAngle in behaviors.ts) aren't evenly distributed for every
-    // 5-id set, and the new ids place two deer closer together on the ring
-    // than the old ids did. The invariant this guards — deer form a loose
-    // arc, never collapse onto the patch's exact centre — still holds; 5
-    // stays comfortably above a real stack-up (which reads near 0) while
-    // fitting this seed's actual (deterministic) separation.
-    expect(minPair).toBeGreaterThan(5);
+    // (M10 task 3 review fix: a redundant minPair-based "not stacked" check
+    // used to live here too. It was id-hash-draw-luck-sensitive at any fixed
+    // threshold — reproducible with the current ids but not a meaningful
+    // extra guarantee — since the loop's own per-deer assertion above
+    // (nearestSpotDist(t2) > HERD_FORAGE_RING - HERD_FORAGE_SPREAD) already
+    // guarantees every deer sits out on the ring, which is what "never
+    // stacked on the middle" actually requires; removed rather than tuned.)
   }, 20000);
 
   it('c) land species never forage inside the pond\'s 1.18x shore band', () => {

@@ -42,7 +42,17 @@ describe('save round-trip', () => {
     if (!save) throw new Error('save missing');
     const resumed = save.sim;
     runTicks(resumed, 1000);
-    expect(JSON.stringify(resumed)).toBe(JSON.stringify(straight));
+    // toEqual (value equality) rather than a raw JSON string compare: an
+    // object field reset to `undefined` (e.g. Activity.targetPos when a
+    // creature has no target) is a real, present key on a live object, but
+    // JSON.stringify silently drops undefined-valued keys — so a save/load
+    // round trip can leave a semantically-identical object with a different
+    // *key insertion order* than one that was never serialized. toEqual
+    // treats `{x: undefined}` and `{}` as equal and ignores key order,
+    // matching what "resumes exactly like an unsaved one" actually means;
+    // JSON.stringify equality was an accidentally-over-strict proxy for it
+    // (same landmine diagnosed in tests/determinism.test.ts).
+    expect(resumed).toEqual(straight);
   });
 
   it('clearSave leaves nothing behind', async () => {

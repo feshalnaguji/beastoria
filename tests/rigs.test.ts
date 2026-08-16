@@ -5,7 +5,20 @@
  */
 import { describe, expect, it } from 'vitest';
 import { ALL_RIGS } from '../src/rigs/allRigs';
+import type { CoreClipName } from '../src/rigs/format';
 import { SPECIES } from '../src/sim/species';
+
+/**
+ * The full CoreClipName set, kept in sync with format.ts by construction: if
+ * a clip name is ever added to or removed from CoreClipName, this object
+ * literal fails to satisfy Record<CoreClipName, true> and the build breaks
+ * here rather than the loop below silently going stale again (review fix —
+ * M10 task 3 — this used to hardcode just the original five).
+ */
+const CORE_CLIPS = { idle: true, walk: true, sleep: true, eat: true, social: true, carry: true, sit: true } satisfies Record<
+  CoreClipName,
+  true
+>;
 
 describe.each(ALL_RIGS.map((r) => [r.species, r] as const))('%s rig', (_species, rig) => {
   it('parts have unique ids and parents defined before children', () => {
@@ -28,9 +41,9 @@ describe.each(ALL_RIGS.map((r) => [r.species, r] as const))('%s rig', (_species,
     }
   });
 
-  it('all five clips exist, tracks target real parts, keyframes span 0..1 ascending', () => {
+  it('all seven core clips exist, tracks target real parts, keyframes span 0..1 ascending', () => {
     const ids = new Set(rig.parts.map((p) => p.id));
-    for (const name of ['idle', 'walk', 'sleep', 'eat', 'social'] as const) {
+    for (const name of Object.keys(CORE_CLIPS) as CoreClipName[]) {
       const clip = rig.clips[name];
       expect(clip.durationMs).toBeGreaterThan(0);
       for (const track of clip.tracks) {

@@ -58,8 +58,9 @@ describe('vocalizations', () => {
   it('robins sing far more at dawn than at midday', () => {
     // 800 ticks (seed 5): enough samples for the dawn boost's signal to clear
     // Poisson noise from the population regulator's other-species wanderer
-    // floor (choirWorld clears every species to 0, so all 7 others wander in
-    // to satisfy their own floors) — filtered out below same as the owl test.
+    // floor (choirWorld clears every species to 0, so all 10 others wander
+    // in to satisfy their own floors) — filtered out below same as the owl
+    // test.
     const dawn = collectOver(choirWorld('robin', 0.02), 800); // starts inside the dawn window
     const noon = collectOver(choirWorld('robin', 0.3), 800);
     expect(dawn.filter((v) => v.species === 'robin').length).toBeGreaterThan(
