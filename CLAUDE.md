@@ -93,17 +93,20 @@ v1 (two open tabs overwrite each other's timeline harmlessly).
   with root causes fixed — phoenix grove leash + larder, hardCap enforced at laying
   and hatching; flap/swim presentation (lift, shadow detach, duck ripple); carry/sit
   clips + activity glyphs + hatch/birth/pairing sparkles + gentle-passing fades +
-  berry clusters at food spots; 135 tests)
-- **Status: v1.1 shipped.** Next: v2 Caretaker World (only after the user decides to
+  berry clusters at food spots; 135 tests), M10 (v1.2 final: sim bugs fixed (no
+  freezing, no water-walking), feedMode realism (nurse/carry/self), 3 new species
+  (squirrel/frog/turtle = 11 total), hatch/birth staging, tap-to-inspect card,
+  animation crossfade smoothness + arrival settle, labels off; 159 tests)
+- **Status: v1.2 shipped.** Next: v2 Caretaker World (only after the user decides to
   proceed; feeding, care, unlocking families).
-- **Awaiting user review:** real-device FPS + visual polish pass on the live site
-  (flight/swim/glyphs close-ups, T2-at-0.55 perf).
+- **Awaiting user review:** live check on their devices (new species behavior, inspect
+  card interaction, hatch/birth moments, perf with 11 species population).
 - Live: https://feshalnaguji.github.io/beastoria/ · repo: feshalnaguji/beastoria
   (GitHub Pages auto-deploys main; CI runs tests+build)
 
 ## Working process (user-agreed)
 
-- Build milestone by milestone (M0–M9 in spec §6); **the user reviews each milestone in the
+- Build milestone by milestone (M0–M10 in spec §6); **the user reviews each milestone in the
   browser before the next begins.** Every milestone ends with `npm test` green + `npm run build`
   clean + a deployed/dev URL to look at.
 - Mobile perf is tested on a real phone at M2/M3, not deferred to the end.
