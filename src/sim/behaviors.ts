@@ -34,10 +34,25 @@ const ARRIVE_DIST = 10;
 const PROGRESS_CHECK_TICKS = 100;
 /** A stall checkpoint counts as "no progress" below this much net movement. */
 const PROGRESS_MIN_DIST = 1;
-/** How close a baby must be to a nursing mother to feed during her hold. */
-const NURSE_RANGE = 90;
+/**
+ * How close a baby must be to be fed — a nursing mother's stationary hold,
+ * or a carry-delivery parent's stationary hold at the nest. One number for
+ * both (M11): the renderer's own divergent NURSE_EAT_RADIUS goes away in a
+ * later task, importing this instead.
+ */
+export const FEED_RANGE = 90;
 /** Hunger relief per tick per baby in reach during a nursing hold (M10). */
 const NURSE_HUNGER_RATE = 0.006;
+/** How often (in nurse-hold ticks) a nursed baby emits a feed-beat mote. */
+const NURSE_MOTE_TICKS = 18;
+/** How long a carry parent stands at the food spot before heading home (M11). */
+const PICKUP_TICKS = 20;
+/** How often (in delivery-hold ticks) a carry parent feeds the hungriest baby in reach. */
+const DELIVER_INTERVAL = 25;
+/** Hunger relief per delivered portion. */
+const DELIVER_PORTION = 0.35;
+/** Safety net: a delivery hold gives up after this many ticks regardless. */
+const DELIVER_MAX_TICKS = 200;
 /** Passive-graze hunger relief per tick for self-feeding babies (koi fry). */
 const PASSIVE_GRAZE_RATE = 0.0015;
 const HERD_RADIUS = 350;
@@ -58,6 +73,18 @@ const HERD_FORAGE_SPREAD = 20;
 const GROVE_LEASH = 520;
 /** Activities in which a creature holds still — it must be able to stand there. */
 const STOPPED_ACTIVITIES = new Set<ActivityId>(['idle', 'nap']);
+
+/** A transient "this baby just got fed" beat — never persisted, never logged. */
+export interface Feeding {
+  babyId: number;
+  parentId: number;
+  pos: Vec2;
+}
+
+/** Per-tick scratch space threaded through applyActivity for transient output. */
+export interface TickScratch {
+  feedings: Feeding[];
+}
 
 /**
  * The food spots an unattached phoenix is allowed to choose between: those a
@@ -186,7 +213,12 @@ export function selectBehavior(state: WorldState, c: Creature, clock: Clock): vo
   startActivity(state, c, bestId);
 }
 
-export function applyActivity(state: WorldState, c: Creature, _clock: Clock): void {
+export function applyActivity(
+  state: WorldState,
+  c: Creature,
+  _clock: Clock,
+  scratch?: TickScratch,
+): void {
   c.activity.ticks++;
   const p = SPECIES[c.species];
   const medium = p.medium;
@@ -319,9 +351,19 @@ export function applyActivity(state: WorldState, c: Creature, _clock: Clock): vo
                 other.familyId !== null &&
                 other.familyId === c.familyId &&
                 other.stage === 'baby' &&
-                Math.hypot(other.pos.x - c.pos.x, other.pos.y - c.pos.y) <= NURSE_RANGE
+                Math.hypot(other.pos.x - c.pos.x, other.pos.y - c.pos.y) <= FEED_RANGE
               ) {
                 other.needs.hunger = clamp01(other.needs.hunger - NURSE_HUNGER_RATE);
+                // Stagger the feed-beat mote per baby via an id-hash offset
+                // (no RNG draw) so siblings don't all sparkle on one tick.
+                const phase = (c.activity.ticks + idHash(other.id)) % NURSE_MOTE_TICKS;
+                if (phase === 0) {
+                  scratch?.feedings.push({
+                    babyId: other.id,
+                    parentId: c.id,
+                    pos: { x: other.pos.x, y: other.pos.y },
+                  });
+                }
               }
             }
             if (c.activity.ticks >= c.activity.minTicks) {
@@ -345,41 +387,110 @@ export function applyActivity(state: WorldState, c: Creature, _clock: Clock): vo
         }
 
         case 'carry': {
-          // Birds, exactly today's flow: fetch food nearby (step 0), carry
-          // it home (step 1).
-          if (c.activity.step === 0 && !c.activity.targetPos) {
-            const angle = nextRange(state.rng, 0, Math.PI * 2);
-            const dist = nextRange(state.rng, 140, 280);
-            const candidate = {
-              x: Math.max(40, Math.min(WORLD_WIDTH - 40, c.pos.x + Math.cos(angle) * dist)),
-              y: Math.max(40, Math.min(WORLD_HEIGHT - 40, c.pos.y + Math.sin(angle) * dist)),
-            };
-            c.activity.targetPos = canOccupy(landing, candidate)
-              ? candidate
-              : { x: c.pos.x, y: c.pos.y };
+          // Birds. A four-step errand (M11): 0 seek real food, 1 a stationary
+          // pickup pause at the berry cluster, 2 carry it home (unchanged
+          // from before), 3 a stationary delivery hold that feeds one
+          // hungry mouth at a time. `targetId` is never repurposed — it
+          // keeps meaning "home id" for the whole activity, exactly like the
+          // nurse flow above, so a pre-M11 save caught mid-errand re-enters
+          // harmlessly under the new numbering: every step re-derives its
+          // own target from scratch. A save frozen at old step 1
+          // (carry-home) now reads as a PICKUP_TICKS pickup pause standing
+          // wherever it was — then step 2 sets targetPos from targetId's
+          // home and arrives at once (it was already there), then step 3
+          // delivers. Nothing is lost, nothing is misread.
+
+          // Step 0: seek food — the same larder every forage errand uses
+          // (larder swap, phoenix grove leash, ground-walker reed filter),
+          // so a parent visibly forages before carrying food home instead of
+          // beelining a raw random point.
+          if (c.activity.step === 0) {
+            if (!c.activity.targetPos) {
+              c.activity.targetPos = forageTarget(state, c);
+            }
+            const target = c.activity.targetPos;
+            const remaining = moveToward(c, target, speedFor(c.species, c.stage), medium, landing);
+            if (remaining < 0) {
+              startActivity(state, c, 'idle'); // refused snap — no safety net today
+              break;
+            }
+            if (remaining <= ARRIVE_DIST) {
+              c.activity.step = 1;
+              c.activity.ticks = 0; // pickup pause starts fresh
+            }
+            break;
           }
-          const target = c.activity.targetPos;
-          if (!target) break;
-          const remaining = moveToward(c, target, speedFor(c.species, c.stage), medium, landing);
-          if (remaining >= 0 && remaining <= ARRIVE_DIST) {
-            if (c.activity.step === 0) {
-              // Food gathered — head home.
+
+          // Step 1: a stationary pickup pause at the food spot (`clipFor`
+          // already yields 'eat' for a stationary feedYoung) — PICKUP_TICKS
+          // long, then head home.
+          if (c.activity.step === 1) {
+            if (c.activity.ticks >= PICKUP_TICKS) {
               const home = state.homes.find((h) => h.id === c.activity.targetId);
               if (!home) {
                 startActivity(state, c, 'idle');
                 break;
               }
-              c.activity.step = 1;
+              c.activity.step = 2;
               c.activity.targetPos = { ...home.pos };
-            } else {
-              // Deliver: feed every hungry baby in the family.
-              for (const other of state.creatures) {
-                if (other.familyId === c.familyId && other.stage === 'baby') {
-                  other.needs.hunger = clamp01(other.needs.hunger - 0.35);
-                }
-              }
-              startActivity(state, c, 'idle');
             }
+            break;
+          }
+
+          // Step 2: carry the food home (today's carry-home leg, unchanged).
+          if (c.activity.step === 2) {
+            const target = c.activity.targetPos;
+            if (!target) {
+              startActivity(state, c, 'idle');
+              break;
+            }
+            const remaining = moveToward(c, target, speedFor(c.species, c.stage), medium, landing);
+            if (remaining < 0) {
+              startActivity(state, c, 'idle'); // refused snap — no safety net today
+              break;
+            }
+            if (remaining > ARRIVE_DIST) break; // still travelling
+            c.activity.step = 3;
+            c.activity.ticks = 0; // fall through: the delivery hold below fires this same tick
+          }
+
+          // Step 3: a stationary delivery hold at the nest. Every
+          // DELIVER_INTERVAL ticks (the fall-through above means the first
+          // delivery fires immediately at ticks === 0), find the hungriest
+          // family baby within FEED_RANGE whose hunger exceeds SATISFIED —
+          // array order with a strict `>` while tracking the max, so ties
+          // resolve to array order and no RNG is drawn — and feed it one
+          // DELIVER_PORTION. Ends when nobody is left to feed, or after
+          // DELIVER_MAX_TICKS as a safety net.
+          if (c.activity.ticks % DELIVER_INTERVAL === 0) {
+            let hungriest: Creature | undefined;
+            let maxHunger = -Infinity;
+            for (const other of state.creatures) {
+              if (
+                other.familyId !== null &&
+                other.familyId === c.familyId &&
+                other.stage === 'baby' &&
+                other.needs.hunger > SATISFIED &&
+                other.needs.hunger > maxHunger &&
+                Math.hypot(other.pos.x - c.pos.x, other.pos.y - c.pos.y) <= FEED_RANGE
+              ) {
+                maxHunger = other.needs.hunger;
+                hungriest = other;
+              }
+            }
+            if (!hungriest) {
+              startActivity(state, c, 'idle');
+              break;
+            }
+            hungriest.needs.hunger = clamp01(hungriest.needs.hunger - DELIVER_PORTION);
+            scratch?.feedings.push({
+              babyId: hungriest.id,
+              parentId: c.id,
+              pos: { x: hungriest.pos.x, y: hungriest.pos.y },
+            });
+          }
+          if (c.activity.ticks >= DELIVER_MAX_TICKS) {
+            startActivity(state, c, 'idle');
           }
           break;
         }

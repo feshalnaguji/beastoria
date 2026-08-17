@@ -28,6 +28,9 @@ const FEED_TRIGGER_HUNGER = 0.5;
 /** How long a nursing mother holds still once she reaches home (behaviors.ts). */
 const NURSE_HOLD_TICKS = 80;
 const BABY_LEASH = 140;
+/** Tighter leash while a nurse hold is active, so kits gather within feeding
+ * range instead of loitering at the edge of it (M11; see FEED_RANGE). */
+const NURSE_GATHER_RADIUS = 60;
 const PASS_GATHER_TICKS = 200;
 const PASS_GATHER_RANGE = 700;
 const MEMORIAL_TICKS = 2 * TICKS_PER_DAY;
@@ -316,19 +319,29 @@ function stepFamily(state: WorldState, fam: Family): void {
           ? parents.find((p) => p.activity.id === 'feedYoung' && p.activity.step === 1)
           : undefined;
       const leashAnchor = nurseHolder?.pos ?? home?.pos;
+      // While she holds, the leash tightens and the re-gather scatter
+      // shrinks to match, so babies land well inside FEED_RANGE and
+      // visibly snuggle in rather than stopping just outside it (M11).
+      // Same two draws per re-gather either way — only the values change.
+      const leashRadius = nurseHolder ? NURSE_GATHER_RADIUS : BABY_LEASH;
       if (leashAnchor) {
         for (const child of children) {
           if (child.stage !== 'baby') continue;
           const d = Math.hypot(child.pos.x - leashAnchor.x, child.pos.y - leashAnchor.y);
-          if (d > BABY_LEASH && child.activity.id !== 'gather') {
+          if (d > leashRadius && child.activity.id !== 'gather') {
             child.activity = {
               id: 'gather',
               ticks: 0,
               minTicks: 30,
-              targetPos: {
-                x: leashAnchor.x + nextRange(state.rng, -40, 40),
-                y: leashAnchor.y + nextRange(state.rng, -30, 30),
-              },
+              targetPos: nurseHolder
+                ? {
+                    x: leashAnchor.x + nextRange(state.rng, -25, 25),
+                    y: leashAnchor.y + nextRange(state.rng, -18, 18),
+                  }
+                : {
+                    x: leashAnchor.x + nextRange(state.rng, -40, 40),
+                    y: leashAnchor.y + nextRange(state.rng, -30, 30),
+                  },
             };
           }
         }
