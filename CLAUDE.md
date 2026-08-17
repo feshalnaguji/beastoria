@@ -96,17 +96,31 @@ v1 (two open tabs overwrite each other's timeline harmlessly).
   berry clusters at food spots; 135 tests), M10 (v1.2 final: sim bugs fixed (no
   freezing, no water-walking), feedMode realism (nurse/carry/self), 3 new species
   (squirrel/frog/turtle = 11 total), hatch/birth staging, tap-to-inspect card,
-  animation crossfade smoothness + arrival settle, labels off; 159 tests)
-- **Status: v1.2 shipped.** Next: v2 Caretaker World (only after the user decides to
-  proceed; feeding, care, unlocking families).
-- **Awaiting user review:** live check on their devices (new species behavior, inspect
-  card interaction, hatch/birth moments, perf with 11 species population).
+  animation crossfade smoothness + arrival settle, labels off, pre-M10-save home
+  migration + multi-touch tap guard (final-review fix wave); 161 tests), M11 (v1.3:
+  parents forage at real FOOD_SPOTS locations instead of a raw random point, carry
+  errand now four visible steps (seek/pickup/carry/deliver), delivery sequenced one
+  hungry baby at a time instead of an instant aggregate decrement, nurse and carry
+  feeding share one FEED_RANGE radius (closes a sim/render mismatch where fed babies
+  could look un-fed), baby leash tightens during any active feed/nurse hold so little
+  ones visibly gather in, a new kangaroo species (12 total) with a rig-art pouch/joey
+  shown during her nurse hold, an amber/milk-white feed-mote effect and step-aware
+  inspect-card text so every feeding is a moment you can watch; 174 tests)
+- **Status: v1.3 shipped.** M11 candidate items (raw-point carry foraging, instant
+  aggregate feeding, unwatched nursing, missing kangaroo) are all addressed. Next: v2
+  Caretaker World (only once the user decides to proceed; feeding, care, unlocking
+  families).
+- **Awaiting user review:** live check on their devices — the new feeding beats (a
+  parent visibly stopping at a berry cluster, one-at-a-time delivery), the nurse-hold
+  animation (mother 'sit' + nursed-baby 'eat' clip + milk-droplet glyph, built in M10
+  but never eyeballed until now — this is the user's own reserved check), the
+  kangaroo's hop gait and pouch/joey, and perf with 12 species population.
 - Live: https://feshalnaguji.github.io/beastoria/ · repo: feshalnaguji/beastoria
   (GitHub Pages auto-deploys main; CI runs tests+build)
 
 ## Working process (user-agreed)
 
-- Build milestone by milestone (M0–M10 in spec §6); **the user reviews each milestone in the
+- Build milestone by milestone (M0–M11 in spec §6); **the user reviews each milestone in the
   browser before the next begins.** Every milestone ends with `npm test` green + `npm run build`
   clean + a deployed/dev URL to look at.
 - Mobile perf is tested on a real phone at M2/M3, not deferred to the end.
