@@ -49,6 +49,13 @@ const ZZZ_POOL_SIZE = 12;
 const ZZZ_LIFE_MS = 2000;
 const ZZZ_RISE_PX = 14;
 
+/** Feed motes (M11): a mote arcs from parent to baby at the exact moment of
+ * feeding — one per sequenced carry delivery, one per staggered nurse
+ * suckle beat. Short and frequent, so a small bounded pool (spawnHatch's
+ * pattern) covers a whole family feeding without ever allocating. */
+const FEED_MOTE_POOL_SIZE = 12;
+const FEED_MOTE_MS = 500;
+
 // Meadow rejection zones — same padding as the ground painter's flower scatter.
 const POND_EDGE = { ...POND, rx: POND.rx * 1.15, ry: POND.ry * 1.15 };
 const FOREST_CORE = { ...FOREST, rx: FOREST.rx * 0.8, ry: FOREST.ry * 0.8 };
@@ -106,6 +113,24 @@ interface Zzz {
   baseY: number;
 }
 
+/** A single pooled feed mote — eases from parent to baby along a gentle,
+ * upward-bowed arc, fading over its last 40% (M11). Sprite-based (like
+ * HatchOverlay) because it needs a per-instance tint swap (amber vs
+ * milk-white), which the Particle pools above never do. */
+interface FeedMote {
+  sprite: Sprite;
+  active: boolean;
+  ageMs: number;
+  fromX: number;
+  fromY: number;
+  toX: number;
+  toY: number;
+  /** Peak upward bow (world px, negative = up) — scaled to the hop's own
+   * length so a short suckle and a long carry-delivery both read as a
+   * gentle lift, not a fixed-height jump. */
+  bowPx: number;
+}
+
 export class AmbientEffects {
   readonly shimmerLayer: Container;
   readonly grassLayer: Container;
@@ -116,6 +141,8 @@ export class AmbientEffects {
   readonly hatchLayer: Container;
   /** Drifting sleep 'z's (M10 task 4). */
   readonly zzzLayer: Container;
+  /** Feed motes (M11). */
+  readonly feedMoteLayer: Container;
 
   private readonly rng: RngState;
   private elapsedMs = 0;
@@ -129,6 +156,8 @@ export class AmbientEffects {
   private hatchTextures: [Texture, Texture, Texture] | undefined;
   private readonly zzzs: Zzz[] = [];
   private zzzCursor = 0;
+  private readonly feedMotes: FeedMote[] = [];
+  private feedMoteCursor = 0;
   private shimmerA!: TilingSprite;
   private shimmerB!: TilingSprite;
 
@@ -141,6 +170,7 @@ export class AmbientEffects {
     this.sparkleLayer = new ParticleContainer({ dynamicProperties: { position: true, color: true } });
     this.hatchLayer = new Container();
     this.zzzLayer = new Container();
+    this.feedMoteLayer = new Container();
     // Provisional order — Renderer re-inserts these at their final z-index spots.
     world.addChild(
       this.shimmerLayer,
@@ -150,6 +180,7 @@ export class AmbientEffects {
       this.sparkleLayer,
       this.hatchLayer,
       this.zzzLayer,
+      this.feedMoteLayer,
     );
   }
 
@@ -161,6 +192,7 @@ export class AmbientEffects {
     this.buildSparkles(renderer);
     this.buildHatches(renderer);
     this.buildZzzs(renderer);
+    this.buildFeedMotes(renderer);
   }
 
   /**
@@ -261,6 +293,24 @@ export class AmbientEffects {
       z.sprite.y = z.baseY - ZZZ_RISE_PX * zt;
       z.sprite.alpha = (1 - zt) * 0.85;
     }
+
+    // Feed motes: ease-out from parent to baby along a gentle, upward-bowed
+    // arc (a parabola peaking at the midpoint), fading over the last 40% of
+    // their short life — see spawnFeedMote (M11).
+    for (const m of this.feedMotes) {
+      if (!m.active) continue;
+      m.ageMs += dtMs;
+      if (m.ageMs >= FEED_MOTE_MS) {
+        m.active = false;
+        m.sprite.visible = false;
+        continue;
+      }
+      const mt = m.ageMs / FEED_MOTE_MS;
+      const ease = 1 - (1 - mt) * (1 - mt); // ease-out quad
+      m.sprite.x = m.fromX + (m.toX - m.fromX) * ease;
+      m.sprite.y = m.fromY + (m.toY - m.fromY) * ease + m.bowPx * 4 * mt * (1 - mt);
+      m.sprite.alpha = mt < 0.6 ? 1 : 1 - (mt - 0.6) / 0.4;
+    }
   }
 
   /**
@@ -324,6 +374,30 @@ export class AmbientEffects {
     z.sprite.visible = true;
     z.sprite.alpha = 0.85;
     z.sprite.position.set(pos.x, pos.y);
+  }
+
+  /**
+   * Starts (or restarts, via the rolling pool cursor) a feed mote arcing
+   * from `from` to `to` — the moment of a feeding (M11). `tint` is amber for
+   * a carried mouthful, milk-white for a suckle (Renderer picks the tint off
+   * the parent's own feedMode). Never allocates: recycles the oldest pooled
+   * sprite exactly like spawnHatch/spawnZ.
+   */
+  spawnFeedMote(from: Vec2, to: Vec2, tint: number): void {
+    const m = this.feedMotes[this.feedMoteCursor];
+    this.feedMoteCursor = (this.feedMoteCursor + 1) % FEED_MOTE_POOL_SIZE;
+    if (!m) return;
+    m.active = true;
+    m.ageMs = 0;
+    m.fromX = from.x;
+    m.fromY = from.y;
+    m.toX = to.x;
+    m.toY = to.y;
+    m.bowPx = -Math.min(28, Math.hypot(to.x - from.x, to.y - from.y) * 0.35 + 6);
+    m.sprite.visible = true;
+    m.sprite.alpha = 1;
+    m.sprite.tint = tint;
+    m.sprite.position.set(from.x, from.y);
   }
 
   /**
@@ -538,6 +612,19 @@ export class AmbientEffects {
       sprite.visible = false;
       this.zzzLayer.addChild(sprite);
       this.zzzs.push({ sprite, active: false, ageMs: 0, baseX: 0, baseY: 0 });
+    }
+  }
+
+  /** A tiny baked dot, reused (tint-swapped per spawn) by every feed mote —
+   * amber for a carried mouthful, milk-white for a suckle (M11). */
+  private buildFeedMotes(renderer: PixiRenderer): void {
+    const tex = this.bake(renderer, new Graphics().circle(3, 3, 3).fill(0xffffff), 6, 6);
+    for (let i = 0; i < FEED_MOTE_POOL_SIZE; i++) {
+      const sprite = new Sprite(tex);
+      sprite.anchor.set(0.5);
+      sprite.visible = false;
+      this.feedMoteLayer.addChild(sprite);
+      this.feedMotes.push({ sprite, active: false, ageMs: 0, fromX: 0, fromY: 0, toX: 0, toY: 0, bowPx: 0 });
     }
   }
 

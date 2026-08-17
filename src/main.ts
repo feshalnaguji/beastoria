@@ -154,6 +154,7 @@ async function start(): Promise<void> {
     () => {
       const out = tick(state, []);
       renderer.sync(state);
+      renderer.onFeedings(out.feedings);
       const clock = getClock(state.tick);
       const mix = computeMix(clock, renderer.viewInfo(), state);
       for (const [bed, gain] of Object.entries(mix.beds) as [BedName, number][]) {

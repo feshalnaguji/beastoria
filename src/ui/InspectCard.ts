@@ -81,9 +81,22 @@ export function creatureDoing(c: Creature, presentation: Presentation | undefine
     case 'nap':
       return 'dozing';
     case 'feedYoung':
-      return SPECIES[c.species].reproduction.feedMode === 'nurse'
-        ? 'nursing the little ones'
-        : 'bringing food home';
+      // Nurse hold stays a single steady phrase (its step numbering means
+      // something different — see behaviors.ts). Carry mode's four steps
+      // (M11 renumbering) each earn their own words, so the text always
+      // matches what's on screen: out searching, then a pause at the food
+      // (still reads as "out finding" — the pause itself is wordless, shown
+      // by the 'eat'-clip head-dip, not by a text change), then the flight
+      // home, then the one-baby-at-a-time delivery hold.
+      if (SPECIES[c.species].reproduction.feedMode === 'nurse') return 'nursing the little ones';
+      switch (c.activity.step) {
+        case 2:
+          return 'bringing food home';
+        case 3:
+          return 'feeding the little ones';
+        default:
+          return 'out finding food for the little ones';
+      }
     case 'brood':
       return 'keeping the eggs warm';
     case 'court':

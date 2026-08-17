@@ -19,6 +19,7 @@ import {
   type WorldState,
 } from '../sim/state';
 import { isWater } from '../sim/valley';
+import { FEED_RANGE, type Feeding } from '../sim/behaviors';
 import type { ClipName, CreatureRig } from '../rigs/format';
 import { ALL_RIGS } from '../rigs/allRigs';
 import { Camera } from './Camera';
@@ -68,7 +69,8 @@ interface CreatureView {
   heading: number;
   activityId: string;
   /** Copied from `c.activity.step` each sync (M9 task 5) — distinguishes
-   * feedYoung's two legs (0 fetch, 1 carry home) for clipFor. */
+   * feedYoung's carry-mode legs (0 seek, 1 pickup pause, 2 carry home, 3
+   * delivery hold — M11 renumbering) for clipFor. */
   step: number | undefined;
   /** Copied from `c.activity.minTicks` each sync — the only render-visible
    * signal that separates the mourning 'gather' from its two other reuses
@@ -118,9 +120,15 @@ interface CreatureView {
    * settled ('sit' clip, milk-droplet glyph) instead of 'eat'. */
   nursing: boolean;
   /** M10 task 4: true this sync while this baby sits within
-   * NURSE_EAT_RADIUS of its family's nursing mother — reads as snuggled in
+   * FEED_RANGE of its family's nursing mother — reads as snuggled in
    * ('eat' clip) regardless of its own activity. */
   nursed: boolean;
+  /** M11: ms remaining on a "just got fed" hold, set to FED_HOLD_MS by
+   * onFeedings() the instant this baby is named in a Feeding, then decayed
+   * every rendered frame. While > 0 the baby reads 'eat' and shows the
+   * carry/nurse-tinted fed glyph (see fedGlyphFor) regardless of its own
+   * activity — a per-view float, nothing persisted. */
+  fedMs: number;
   /** M10 task 4: which emergence is currently easing in — 'hatch' (pure
    * scale 0→1 at the nest point) or 'birth' (scale 0.3→1 + a small outward
    * slide from the home mouth) — or undefined once settled/for every
@@ -249,11 +257,15 @@ function nestVisualPoint(home: Home): Vec2 {
  * 'carry' dot specifically for nurse-feedMode mothers mid-hold. */
 type GlyphKind = 'forage' | 'nap' | 'court' | 'carry' | 'brood' | 'mourning' | 'nurse';
 
-/** M10 task 4: babies within this world-px radius of their family's
- * currently-nursing mother read as snuggled in (clip 'eat', no matter their
- * own activity) — matches the brief's 60-unit nursing read, distinct from
- * family.ts's own 90-unit NURSE_RANGE hunger-relief radius. */
-const NURSE_EAT_RADIUS = 60;
+/** M11: how long a just-fed baby keeps reading as fed (clip 'eat', a
+ * carry/nurse-tinted glyph — see fedGlyphFor) before decaying back to
+ * normal — long enough to read as "this one just got fed" without lingering. */
+const FED_HOLD_MS = 1200;
+/** Feed mote tints (M11) — the same two colours the carry/nurse glyphs
+ * already use, so the mote and the glyph it leads into read as one
+ * vocabulary: amber for a carried mouthful, milk-white for a suckle. */
+const FEED_MOTE_TINT_CARRY = 0xe8a53c;
+const FEED_MOTE_TINT_NURSE = 0xf7f3e8;
 /** Hatch/birth emergence: scale (and, for births, a small outward slide)
  * eases in over this long, then the view settles into normal rendering. */
 const EMERGE_MS = 900;
@@ -277,14 +289,16 @@ function clamp(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
 }
 
-/** M10 task 4: true while this baby sits within NURSE_EAT_RADIUS of its
+/** M10 task 4: true while this baby sits within FEED_RANGE of its
  * family's currently-nursing mother (nursingMotherPos, built once per sync
- * in sync() above). */
+ * in sync() above). M11: this now shares the sim's own feed radius
+ * (src/sim/behaviors.ts's FEED_RANGE) instead of a narrower render-only
+ * constant, so every baby the sim actually feeds reads as fed on screen. */
 function isNursed(c: Creature, nursingMotherPos: Map<number, Vec2>): boolean {
   if (c.stage !== 'baby' || c.familyId === null) return false;
   const m = nursingMotherPos.get(c.familyId);
   if (!m) return false;
-  return Math.hypot(c.pos.x - m.x, c.pos.y - m.y) <= NURSE_EAT_RADIUS;
+  return Math.hypot(c.pos.x - m.x, c.pos.y - m.y) <= FEED_RANGE;
 }
 
 /** Activity labels this close to a home carrying a family label are hidden
@@ -430,6 +444,7 @@ export class Renderer {
       this.selectionRingSprite, // tap-selection ring, under the creature it rings
       this.creatureLayer,
       this.glyphLayer, // activity glyphs, above creature bodies
+      this.ambient.feedMoteLayer, // feed motes, above activity glyphs (M11)
       this.ambient.sparkleLayer, // moment sparkles
       this.ambient.zzzLayer, // drifting sleep 'z's
       this.ambient.fireflyLayer, // above creatures
@@ -499,6 +514,32 @@ export class Renderer {
     const view = this.views.get(id);
     if (!view) return undefined;
     return { airborne: view.airborneNow, swimming: view.swimmingState };
+  }
+
+  /**
+   * M11: main.ts calls this once per tick, right after sync(state), with
+   * that tick's TickOutput.feedings — the transient "this baby just got
+   * fed" beats (one per sequenced carry delivery, one per staggered nurse
+   * suckle beat). For each, spawns a mote arcing from the parent's view to
+   * the baby's view (tinted by the PARENT's feedMode, so a carry delivery
+   * always arcs amber and a nurse suckle always arcs milk-white) and starts
+   * the baby's FED_HOLD_MS "just fed" hold (see CreatureView.fedMs). Missing
+   * views (a feeding whose parent or baby left state.creatures between the
+   * tick and this call) are skipped — transient like vocalizations, an
+   * unwatched feed leaves no trace.
+   */
+  onFeedings(feedings: readonly Feeding[]): void {
+    for (const f of feedings) {
+      const parentView = this.views.get(f.parentId);
+      const babyView = this.views.get(f.babyId);
+      if (!parentView || !babyView) continue;
+      const tint =
+        SPECIES[parentView.species].reproduction.feedMode === 'nurse'
+          ? FEED_MOTE_TINT_NURSE
+          : FEED_MOTE_TINT_CARRY;
+      this.ambient.spawnFeedMote(parentView.curr, babyView.curr, tint);
+      babyView.fedMs = FED_HOLD_MS;
+    }
   }
 
   /** Snapshot creature state after each sim tick (curr → prev, sim → curr). */
@@ -966,6 +1007,12 @@ export class Renderer {
       }
       const swimming = view.swimmingState;
 
+      // M11: a "just got fed" hold, started by onFeedings() the instant
+      // this baby is named in a Feeding — decays every rendered frame
+      // (wall-clock, not tick-driven) back to 0.
+      if (view.fedMs > 0) view.fedMs = Math.max(0, view.fedMs - dtMs);
+      const fed = view.fedMs > 0;
+
       // Ease the flight lift toward its target over LIFT_EASE_MS, both ways,
       // so takeoff/landing never pop. Stays pinned at 0 for every species
       // that never goes airborne (liftTarget is always 0 for them).
@@ -1028,6 +1075,8 @@ export class Renderer {
       // nest reads as walking, not asleep mid-stride). M10 task 4 adds the
       // nurse hold: the mother reads 'sit' (settled) and her snuggled-in
       // babies read 'eat', both computed once per sync in view.nursing/nursed.
+      // M11 adds `fed`: any baby mid FED_HOLD_MS also reads 'eat', whether
+      // it was carry-delivered or nurse-suckled.
       const clip = clipFor(
         view.activityId,
         moving,
@@ -1036,6 +1085,7 @@ export class Renderer {
         view.step,
         view.nursing,
         view.nursed,
+        fed,
       );
 
       if (tier === 2) {
@@ -1046,10 +1096,12 @@ export class Renderer {
         // keeps 'flap' as the airborne pose (a ground carry pose mid-air
         // would look broken) — so hideInClips alone would hide the food the
         // whole flight. Override it explicitly here, every frame, since
-        // `step` can flip 0→1 mid-flap without a clip switch (play()'s
-        // early-return skips applyClipVisibility when the clip name is
-        // unchanged) (final-review fix wave, fix 2).
-        if (view.rig.food && clip === 'flap') view.rig.food.visible = view.step === 1;
+        // `step` can change without a clip switch (play()'s early-return
+        // skips applyClipVisibility when the clip name is unchanged)
+        // (final-review fix wave, fix 2). M11 renumbering: carry mode's
+        // step 2 is the carry-home leg — the only step the food prop should
+        // show for (steps 0/1 are the outbound seek/pickup, still empty-beaked).
+        if (view.rig.food && clip === 'flap') view.rig.food.visible = view.step === 2;
         let rate = 1;
         if (clip === 'walk' && dtMs > 0) {
           const walkDurMs = speciesRig.clips.walk.durationMs;
@@ -1138,9 +1190,14 @@ export class Renderer {
       // Nursing wins over everything else — a soft milk-white droplet
       // instead of whatever the underlying activity would otherwise show
       // (M10 task 4; replaces the amber 'carry' dot for nurse-feedMode mothers).
+      // M11: a `fed` baby (mid its own FED_HOLD_MS hold) shows the matching
+      // fed glyph — carry-amber or nurse-milk, see fedGlyphFor — next in
+      // priority, overriding whatever its own activity would otherwise glyph.
       const desiredGlyph: GlyphKind | undefined = view.nursing
         ? 'nurse'
-        : glyphKindFor(view.activityId, view.step, view.minTicks);
+        : fed
+          ? fedGlyphFor(view.species)
+          : glyphKindFor(view.activityId, view.step, view.minTicks, view.species);
       if (desiredGlyph !== view.glyphKind && view.glyphAlpha <= 0) {
         view.glyphKind = desiredGlyph;
         view.glyphBornMs = 0; // Reset birth time when glyph kind changes.
@@ -1328,6 +1385,7 @@ export class Renderer {
       swimAgreeCount: 0,
       nursing: false,
       nursed: false,
+      fedMs: 0,
       emergeKind: undefined,
       emergeMs: 0,
       emergeDirX: 0,
@@ -1464,15 +1522,21 @@ export class Renderer {
  * "Walk to the clutch, then sit"), so a sitter or napper still covering
  * ground must read as walking, not as asleep mid-stride — only once they
  * stop moving does the brood/nap pose take over. `feedYoung` splits on its
- * `step` field while moving: step 1 (carrying food home) shows 'carry'
- * instead of a plain 'walk'.
+ * `step` field while moving: carry mode's step 2 (carrying food home, M11
+ * renumbering — see src/sim/behaviors.ts) shows 'carry' instead of a plain
+ * 'walk'.
  *
  * M10 task 4 adds the nurse hold, both stationary-only (already excluded
  * from `moving` since neither mother nor snuggled-in baby travels during a
  * hold): `nursing` (the mother, feedMode 'nurse' + activity 'feedYoung' step
  * 1) reads 'sit' instead of the generic 'eat' the old feedYoung fallback
- * gave her; `nursed` (a family baby within NURSE_EAT_RADIUS) reads 'eat'
+ * gave her; `nursed` (a family baby within FEED_RANGE) reads 'eat'
  * regardless of its own activity — nursing wins even over its own nap/brood.
+ *
+ * M11 adds `fed`: any baby mid its own FED_HOLD_MS "just got fed" beat (see
+ * CreatureView.fedMs) also reads 'eat', whether the feeding was a carry
+ * delivery or a nurse suckle — same rank as `nursed`, since it's the same
+ * "snuggled in and being fed" read.
  */
 function clipFor(
   activityId: string,
@@ -1482,13 +1546,14 @@ function clipFor(
   feedYoungStep: number | undefined,
   nursing: boolean,
   nursed: boolean,
+  fed: boolean,
 ): ClipName {
   if (activityId === 'pass') return 'sleep';
   if (airborne) return 'flap';
   if (swimming) return 'swim';
-  if (moving) return activityId === 'feedYoung' && feedYoungStep === 1 ? 'carry' : 'walk';
+  if (moving) return activityId === 'feedYoung' && feedYoungStep === 2 ? 'carry' : 'walk';
   if (nursing) return 'sit';
-  if (nursed) return 'eat';
+  if (nursed || fed) return 'eat';
   if (activityId === 'brood') return 'sit';
   if (activityId === 'nap') return 'sleep';
   if (activityId === 'forage' || activityId === 'feedYoung') return 'eat';
@@ -1498,13 +1563,23 @@ function clipFor(
 
 /**
  * Which small activity glyph (if any) a creature's current activity earns
- * (M9 task 5). `feedYoung` only glyphs on its carry-home leg (step 1) —
- * fetching (step 0) reads as plain foraging/walking, no glyph. `gather` is
- * reused for three different family moments the sim doesn't otherwise
- * distinguish; only the long-minTicks mourning one glyphs (see
+ * (M9 task 5). `feedYoung` only glyphs for carry-mode species (`species`'s
+ * own reproduction.feedMode) — nurse mode's own step-0 walk-home leg reads
+ * as plain walking, no glyph, exactly as before M11; its glyph vocabulary
+ * comes entirely from the `nursing`/fed overrides in render() instead.
+ * Carry mode's four steps (M11 renumbering) split evenly: steps 0-1
+ * (seeking, pickup pause) read 'forage' — the parent is out looking; steps
+ * 2-3 (carrying home, delivery hold) read 'carry' — it has something.
+ * `gather` is reused for three different family moments the sim doesn't
+ * otherwise distinguish; only the long-minTicks mourning one glyphs (see
  * MOURNING_GATHER_MIN_TICKS).
  */
-function glyphKindFor(activityId: string, step: number | undefined, minTicks: number): GlyphKind | undefined {
+function glyphKindFor(
+  activityId: string,
+  step: number | undefined,
+  minTicks: number,
+  species: SpeciesId,
+): GlyphKind | undefined {
   switch (activityId) {
     case 'forage':
       return 'forage';
@@ -1515,12 +1590,20 @@ function glyphKindFor(activityId: string, step: number | undefined, minTicks: nu
     case 'brood':
       return 'brood';
     case 'feedYoung':
-      return step === 1 ? 'carry' : undefined;
+      if (SPECIES[species].reproduction.feedMode !== 'carry') return undefined;
+      return step === 0 || step === 1 ? 'forage' : step === 2 || step === 3 ? 'carry' : undefined;
     case 'gather':
       return minTicks >= MOURNING_GATHER_MIN_TICKS ? 'mourning' : undefined;
     default:
       return undefined;
   }
+}
+
+/** Which glyph a just-fed baby shows (M11) — matches the mote tint that led
+ * into it: nurse-mode babies keep the milk droplet (they were suckling, not
+ * carried to), everyone else gets the amber carry dot. */
+function fedGlyphFor(species: SpeciesId): GlyphKind {
+  return SPECIES[species].reproduction.feedMode === 'nurse' ? 'nurse' : 'carry';
 }
 
 const FAMILY_NAMES = [
