@@ -5,7 +5,7 @@
  */
 import { SAVE_VERSION, type SaveFile } from './schema';
 import type { HomeKind, Vec2, WorldState } from '../sim/state';
-import { DREY_SITES, FROG_SPAWN_CLUMPS, TURTLE_SAND_NESTS } from '../sim/valley';
+import { DREY_SITES, FROG_SPAWN_CLUMPS, TURTLE_SAND_NESTS, SHADE_SCRAPES } from '../sim/valley';
 
 /**
  * M10 added three home kinds (drey/spawnClump/sandNest) but SAVE_VERSION
@@ -19,11 +19,16 @@ import { DREY_SITES, FROG_SPAWN_CLUMPS, TURTLE_SAND_NESTS } from '../sim/valley'
  * appends the missing static sites, same as the lastWandererTick defaulting
  * further down: pure data placement, zero RNG draws, so it can't perturb
  * replay determinism or any seeded fixture/test baseline.
+ *
+ * M11 added a fourth (shadeScrape, for the kangaroo) the same way, and this
+ * regression shipped for real in M10 (commit df20058) before being caught by
+ * a test — see tests/persist.test.ts's dedicated shadeScrape top-up case.
  */
 const NEW_HOME_SITE_GROUPS: [HomeKind, Vec2[]][] = [
   ['drey', DREY_SITES],
   ['spawnClump', FROG_SPAWN_CLUMPS],
   ['sandNest', TURTLE_SAND_NESTS],
+  ['shadeScrape', SHADE_SCRAPES],
 ];
 
 /** v(n) → v(n+1) steps, indexed by source version. Empty until v2 exists. */

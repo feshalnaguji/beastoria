@@ -51,6 +51,10 @@ sources are themselves licensed under the same CC-BY-SA version.
   frogs, Lake Seppings, CC BY-SA 4.0, Hughesdarren) was pulled as a second-source candidate but its
   usable calls were too brief/sparse (silence-detected: two isolated ~20ms blips in 33s) to cut a
   clean one-shot from; not shipped. `call1`/`call2` both come from the Wood Frog source instead.
+- `families/kangaroo/*` (M11 task 2): kangaroo ships silent by design — kangaroos chuff and thump
+  rather than call, a deliberate choice (not an omission) matched in `src/sim/species.ts` via
+  `voice: { rate: 0 }`, so it never rolls a vocalization in the first place; `src/audio/manifest.ts`
+  also carries no `kangaroo` entry.
 
 ## Task 3 raw ingredients (unprocessed, staged in `assets_raw/`, gitignored — not shipped by this task)
 

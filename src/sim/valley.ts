@@ -127,6 +127,17 @@ export const TURTLE_SAND_NESTS: Vec2[] = [
 ];
 
 /**
+ * Kangaroo shade scrapes — scraped dirt hollows under scrub, out on the open
+ * meadow (M11). Each sits >=160 units from every other home site, old or
+ * new, so no two home markers or family labels visibly intersect.
+ */
+export const SHADE_SCRAPES: Vec2[] = [
+  { x: 1950, y: 1050 },
+  { x: 3050, y: 1550 },
+  { x: 1150, y: 2550 },
+];
+
+/**
  * How a creature relates to water (spec §4.3 walkability).
  * 'air' is the flying media: nowhere in the valley is off-limits in passing.
  * Where a flier may come to REST is its species' `landingMedium` instead.

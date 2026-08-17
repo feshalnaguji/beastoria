@@ -17,9 +17,9 @@ import { SPECIES } from '../src/sim/species';
 import { createWorld, type SpeciesId, type WorldState } from '../src/sim/state';
 
 const ALL = Object.keys(SPECIES) as SpeciesId[];
-/** M10 task 3: the three new neighbors must establish themselves quickly —
- * not just survive to the end of the soak. */
-const NEW_SPECIES: SpeciesId[] = ['squirrel', 'frog', 'turtle'];
+/** M10 task 3 + M11 task 2: the new neighbors must establish themselves
+ * quickly — not just survive to the end of the soak. */
+const NEW_SPECIES: SpeciesId[] = ['squirrel', 'frog', 'turtle', 'kangaroo'];
 const DAY5_TICK = 5 * TICKS_PER_DAY;
 
 function counts(state: WorldState): Record<string, number> {

@@ -305,6 +305,7 @@ const LABEL_HEIGHT: Record<SpeciesId, number> = {
   squirrel: -46,
   frog: -30,
   turtle: -22,
+  kangaroo: -100,
 };
 
 /** Day/night multiply-tint ramp, keyed by fraction of day. */
@@ -803,6 +804,15 @@ export class Renderer {
             g.ellipse(home.pos.x - 4, home.pos.y - 1, 3.5, 3).fill(0xf1ead6);
             g.ellipse(home.pos.x + 4, home.pos.y - 1, 3.5, 3).fill(0xe8e2ce);
           }
+          break;
+        }
+        case 'shadeScrape': { // kangaroo's scraped dirt hollow under a scrub tuft
+          g.ellipse(home.pos.x, home.pos.y + 5, 34, 13).fill({ color: 0x9b8560, alpha: 0.85 });
+          g.ellipse(home.pos.x, home.pos.y, 24, 9).fill({ color: 0xb59e73, alpha: 0.92 });
+          g.ellipse(home.pos.x - 16, home.pos.y - 10, 7, 11).fill({ color: 0x6f8a4c, alpha: 0.85 }); // scrub tuft
+          g.ellipse(home.pos.x - 19, home.pos.y - 14, 4, 7).fill({ color: 0x7fa15a, alpha: 0.8 });
+          // Kangaroos give live birth (reproduction.mode: 'live') — like glade
+          // and drey above, a shade scrape never shows eggs during 'expecting'.
           break;
         }
         default: {

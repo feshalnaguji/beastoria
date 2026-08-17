@@ -157,7 +157,7 @@ describe('foraging aims at food', () => {
     // species may ever be sent to forage in here — that's the reed spots'
     // exclusive territory (ducks/koi/fliers only).
     const shoreBand = { x: POND.x, y: POND.y, rx: POND.rx * 1.18, ry: POND.ry * 1.18 };
-    const landSpecies: SpeciesId[] = ['rabbit', 'deer', 'dodo', 'squirrel'];
+    const landSpecies: SpeciesId[] = ['rabbit', 'deer', 'dodo', 'squirrel', 'kangaroo'];
     for (const species of landSpecies) {
       const state = bareWorld(31);
       // Deliberately near the pond's west shore, where a reed spot is the

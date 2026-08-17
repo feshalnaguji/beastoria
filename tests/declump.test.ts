@@ -4,6 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { idOffsetAngle } from '../src/sim/behaviors';
+import { seedRng } from '../src/sim/rng';
 import { tick } from '../src/sim/Sim';
 import { createWorld, spawnCreature, type Vec2, type WorldState } from '../src/sim/state';
 
@@ -97,6 +98,17 @@ describe('family nest-building does not stack parents on one point', () => {
     const state: WorldState = createWorld(13);
     state.creatures = [];
     state.families = [];
+    // Ids are hashed into the ring angle (idOffsetAngle), and the 600-tick
+    // run below draws on state.rng for movement/pairing jitter, so this
+    // test's outcome is sensitive to exactly where createWorld(13) left both
+    // — which drifts with the total species/home count createWorld seeds
+    // before this wipe (a species or home-site addition elsewhere shifts
+    // state.nextId and consumes different rng draws, silently re-rolling
+    // this test's outcome; caught by M11 task 2 adding the kangaroo). Both
+    // pinned to a fixed base/fresh seed instead, so the test is about the
+    // ring spread, not incidental to world-creation history.
+    state.nextId = 500;
+    state.rng = seedRng(13);
     const magnet = spawnCreature(state, 'rabbit', { x: 2000, y: 1500 }, 0.45);
     magnet.needs = { hunger: 0, rest: 0, social: 0 };
     const seekers: number[] = [];

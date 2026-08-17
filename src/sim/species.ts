@@ -337,6 +337,29 @@ export const SPECIES: Record<SpeciesId, SpeciesParams> = {
     wandersIn: true,
     voice: { rate: 0 }, // silent by design — turtles never vocalize
   },
+  kangaroo: {
+    speed: 9, // the valley's quickest mover, in long unhurried bounds
+    diurnal: true,
+    lifespanTicksMean: 33600, // ≈ 14 game days — the valley's other gentle giant
+    stageFractions: { baby: 0.1, juvenile: 0.15, adult: 0.55 },
+    needRates: { hunger: 1 / 1400, rest: 1 / 2600, social: 1 / 1600 },
+    eatRate: 0.0035,
+    sleepRate: 0.003,
+    socialRate: 0.006,
+    homeKind: 'shadeScrape',
+    reproduction: {
+      mode: 'live',
+      clutchMin: 1,
+      clutchMax: 1, // a single joey — nursing reads unambiguous
+      broodTicks: 700,
+      cooldownTicks: 2400,
+      feedMode: 'nurse',
+    },
+    population: { floor: 2, softCap: 5, hardCap: 8 },
+    medium: 'land',
+    wandersIn: true,
+    voice: { rate: 0 }, // silent by design — kangaroos chuff and thump, not call
+  },
 };
 
 /** Stage speed multipliers: babies toddle, elders amble. */

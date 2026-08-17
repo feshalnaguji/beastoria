@@ -73,6 +73,7 @@ describe('starting world', () => {
       'drey',
       'spawnClump',
       'sandNest',
+      'shadeScrape',
     ]) {
       expect(kinds.has(k as never)).toBe(true);
     }

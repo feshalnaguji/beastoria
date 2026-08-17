@@ -98,8 +98,18 @@ describe('migrations', () => {
   });
 
   it('defaults a missing lastWandererTick to {} instead of rejecting', () => {
-    const base = fixtureV1 as { version: number; savedAtEpochMs: number; sim: object };
-    const sim = { ...base.sim } as Record<string, unknown>;
+    // Deep-cloned (not a shallow `{ ...base.sim }`): migrate() pushes onto
+    // save.sim.homes in place (see the top-up below), and a shallow copy's
+    // `homes` array still aliases fixtureV1's own — a real bug this task
+    // (M11 task 2) found, where that alias let this test permanently
+    // corrupt the shared frozen fixture (extra homes, stale nextId) for
+    // every test running after it in this file.
+    const base = JSON.parse(JSON.stringify(fixtureV1)) as {
+      version: number;
+      savedAtEpochMs: number;
+      sim: Record<string, unknown>;
+    };
+    const sim = base.sim;
     delete sim.lastWandererTick;
     const save = migrate({ ...base, sim });
     expect(save).not.toBeNull();
@@ -169,6 +179,47 @@ describe('migrations', () => {
     expect(twice).not.toBeNull();
     expect(twice?.sim.homes).toEqual(once.sim.homes);
     expect(twice?.sim.nextId).toBe(once.sim.nextId);
+  });
+
+  it('tops up a v1.2 save with the new shadeScrape homes — the df20058 regression, caught by a test this time', () => {
+    // Simulate a genuine v1.2 save (post-M10, pre-M11): migrate the frozen
+    // pre-M10 fixture once so it already has drey/spawnClump/sandNest — the
+    // shape of a real save from the M10-through-M11 window — but it predates
+    // M11's kangaroo, so it has no shadeScrape homes at all. This is exactly
+    // the M10 regression class (commit df20058: a new home kind added to
+    // createWorld()'s siteGroups but not to this migration, so pairing
+    // kangaroos would find no home of their kind and stick forever) —
+    // caught here by a test instead of shipping and being found by a user.
+    const migratedOnce = migrate(JSON.parse(JSON.stringify(fixtureV1)));
+    expect(migratedOnce).not.toBeNull();
+    if (!migratedOnce) throw new Error('save missing');
+    // The frozen fixture predates every M10/M11 home kind, so a single
+    // migrate() tops up drey/spawnClump/sandNest AND shadeScrape all at
+    // once — stripping shadeScrape back out models a genuine v1.2 save:
+    // real history with M10's three kinds already present, but predating
+    // M11's kangaroo.
+    const v12 = {
+      ...migratedOnce,
+      sim: { ...migratedOnce.sim, homes: migratedOnce.sim.homes.filter((h) => h.kind !== 'shadeScrape') },
+    };
+    expect(v12.sim.homes.some((h) => h.kind === 'shadeScrape')).toBe(false);
+    const priorIds = new Set(v12.sim.homes.map((h) => h.id));
+    const priorNextId = v12.sim.nextId;
+
+    const save = migrate(JSON.parse(JSON.stringify(v12)));
+    expect(save).not.toBeNull();
+    if (!save) throw new Error('save missing');
+
+    const scrapes = save.sim.homes.filter((h) => h.kind === 'shadeScrape');
+    expect(scrapes.length).toBeGreaterThan(0);
+    for (const h of scrapes) {
+      expect(priorIds.has(h.id)).toBe(false); // no id collision with pre-existing homes
+      expect(h.id).toBeGreaterThanOrEqual(priorNextId); // allocated from nextId onward
+      expect(h.familyId).toBeNull();
+    }
+    expect(save.sim.nextId).toBeGreaterThan(priorNextId);
+    const allIds = save.sim.homes.map((h) => h.id);
+    expect(new Set(allIds).size).toBe(allIds.length); // ids stay unique across the whole array
   });
 
   it('loadSave survives a corrupt stored value', async () => {

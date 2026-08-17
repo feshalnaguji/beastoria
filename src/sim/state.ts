@@ -17,6 +17,7 @@ import {
   DREY_SITES,
   FROG_SPAWN_CLUMPS,
   TURTLE_SAND_NESTS,
+  SHADE_SCRAPES,
   nearestRestable,
 } from './valley';
 
@@ -36,7 +37,8 @@ export type SpeciesId =
   | 'phoenix'
   | 'squirrel'
   | 'frog'
-  | 'turtle';
+  | 'turtle'
+  | 'kangaroo';
 
 export type LifeStage = 'baby' | 'juvenile' | 'adult' | 'elder';
 
@@ -119,7 +121,8 @@ export type HomeKind =
   | 'groveNest'
   | 'drey'
   | 'spawnClump'
-  | 'sandNest';
+  | 'sandNest'
+  | 'shadeScrape';
 
 export interface Home {
   id: number;
@@ -198,6 +201,11 @@ const STARTING_CAST: { species: SpeciesId; ageFrac: number; sex: Sex }[] = [
   { species: 'turtle', ageFrac: 0.5, sex: 'm' },
   { species: 'turtle', ageFrac: 0.55, sex: 'f' },
   { species: 'turtle', ageFrac: 0.9, sex: 'm' }, // ancient elder
+  // M11: the twelfth neighbor, appended last for the same reason as M10's
+  // three above — every earlier species' RNG draw sequence stays untouched.
+  { species: 'kangaroo', ageFrac: 0.1, sex: 'f' }, // joey-aged
+  { species: 'kangaroo', ageFrac: 0.45, sex: 'm' },
+  { species: 'kangaroo', ageFrac: 0.5, sex: 'f' },
 ];
 
 /** Where each species wakes up on day one (koi in water, phoenix at the grove). */
@@ -213,6 +221,7 @@ const SPAWN_ANCHORS: Record<SpeciesId, { x: number; y: number; rx: number; ry: n
   squirrel: { x: 850, y: 750, rx: 350, ry: 300 },
   frog: { x: 2800, y: 2150, rx: 180, ry: 120 },
   turtle: { x: 2700, y: 2000, rx: 200, ry: 140 },
+  kangaroo: { x: 1750, y: 2200, rx: 450, ry: 350 },
 };
 
 function spawnPosFor(rng: RngState, species: SpeciesId): Vec2 {
@@ -256,6 +265,9 @@ export function createWorld(seed: number): WorldState {
     ['drey', DREY_SITES],
     ['spawnClump', FROG_SPAWN_CLUMPS],
     ['sandNest', TURTLE_SAND_NESTS],
+    // M11: appended after the M10 trio for the same reason — every existing
+    // home's id is unchanged, only new ids are added at the tail.
+    ['shadeScrape', SHADE_SCRAPES],
   ];
   for (const [kind, sites] of siteGroups) {
     for (const pos of sites) {

@@ -7,6 +7,7 @@ import { deerRig } from './deerRig';
 import { dodoRig } from './dodoRig';
 import { duckRig } from './duckRig';
 import { frogRig } from './frogRig';
+import { kangarooRig } from './kangarooRig';
 import { koiRig } from './koiRig';
 import { owlRig } from './owlRig';
 import { phoenixRig } from './phoenixRig';
@@ -27,4 +28,5 @@ export const ALL_RIGS: CreatureRig[] = [
   squirrelRig,
   frogRig,
   turtleRig,
+  kangarooRig,
 ];
