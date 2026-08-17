@@ -36,6 +36,7 @@ const NURSE_GATHER_RADIUS = 60;
 const PICKUP_TICKS = 20;
 const DELIVER_INTERVAL = 25;
 const DELIVER_PORTION = 0.35;
+const DELIVER_MAX_TICKS = 200;
 // Mirrors behaviors.ts's module-private FORAGE_SPREAD (same convention as
 // tests/foodspots.test.ts).
 const FORAGE_SPREAD = 24;
@@ -519,6 +520,57 @@ describe('carry delivery (step 3): sequenced, ranged, and reported', () => {
     // the delivery (decayNeeds runs before applyActivity every tick).
     expect(hungerAfterFeed).toBeCloseTo(hungerBeforeFeed + growthRate - DELIVER_PORTION, 9);
     expect(fedId).toBe(babyB.id);
+  });
+
+  it('(g) [M11 fix] a straggler beyond FEED_RANGE but within the old BABY_LEASH is pulled inside FEED_RANGE and fed during the step-3 delivery hold, instead of the errand bailing to idle', () => {
+    // Mirrors the nurse-hold gather test (f) above, but for the carry-mode
+    // delivery hold: before the fix, family.ts's leash only tightened for
+    // feedMode === 'nurse' step 1, so a carry-mode straggler between
+    // FEED_RANGE (90) and the old BABY_LEASH (140) was never pulled in —
+    // the delivery hold's first scan found nobody in range and bailed to
+    // 'idle' immediately, discarding the fetched food.
+    const { state, fam, feeder, babyA, babyB } = reachDeliveryHold(8, [IN_RANGE, IN_RANGE_2]);
+    babyA.ageTicks = 0;
+    babyB.ageTicks = 0;
+    // babyB starts beyond FEED_RANGE but still inside the pre-fix BABY_LEASH
+    // (140) — exactly the scenario the fix targets.
+    babyB.pos = { x: feeder.pos.x + OUT_OF_RANGE, y: feeder.pos.y };
+    babyB.needs.hunger = 0.9;
+
+    tick(state, []);
+    expect(babyB.activity.id).toBe('gather'); // the tightened delivery leash catches it
+    const target = babyB.activity.targetPos;
+    if (!target) throw new Error('no gather target');
+    expect(
+      Math.hypot(target.x - feeder.pos.x, target.y - feeder.pos.y),
+    ).toBeLessThanOrEqual(NURSE_GATHER_RADIUS);
+
+    // Keep babyA pinned in range and hungry so the delivery hold has a
+    // mouth to feed at every DELIVER_INTERVAL check and never bails early —
+    // giving babyB's own gather movement room to close the gap. Any other
+    // sibling is kept satisfied so it can't steal babyB's delivery.
+    let fed = false;
+    let closedIn = false;
+    for (
+      let i = 0;
+      i < DELIVER_MAX_TICKS && feeder.activity.id === 'feedYoung' && feeder.activity.step === 3;
+      i++
+    ) {
+      babyA.pos = { x: feeder.pos.x + IN_RANGE, y: feeder.pos.y };
+      babyA.needs.hunger = Math.max(babyA.needs.hunger, 0.7);
+      for (const c of state.creatures) {
+        if (fam.childIds.includes(c.id) && c.id !== babyA.id && c.id !== babyB.id) {
+          c.needs.hunger = 0;
+        }
+      }
+      const before = babyB.needs.hunger;
+      tick(state, []);
+      const dist = Math.hypot(babyB.pos.x - feeder.pos.x, babyB.pos.y - feeder.pos.y);
+      if (dist <= FEED_RANGE) closedIn = true;
+      if (babyB.needs.hunger < before - 1e-9) fed = true;
+    }
+    expect(closedIn).toBe(true);
+    expect(fed).toBe(true);
   });
 });
 

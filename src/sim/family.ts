@@ -309,21 +309,25 @@ function stepFamily(state: WorldState, fam: Family): void {
         break;
       }
 
-      // Babies stay near the home — EXCEPT while a nurse hold is active
-      // (mother in feedYoung step 1), when the leash's anchor becomes her
-      // position instead: same leash mechanism (distance check + gather
-      // target), just a different point, so babies visibly gather to nurse
-      // rather than merely tolerating her being elsewhere in the yard.
-      const nurseHolder =
-        feedMode === 'nurse'
-          ? parents.find((p) => p.activity.id === 'feedYoung' && p.activity.step === 1)
-          : undefined;
-      const leashAnchor = nurseHolder?.pos ?? home?.pos;
-      // While she holds, the leash tightens and the re-gather scatter
+      // Babies stay near the home — EXCEPT while a parent is actively
+      // holding to feed (a nursing mother in feedYoung step 1, or a carry
+      // parent in its step-3 delivery hold), when the leash's anchor
+      // becomes that parent's position instead: same leash mechanism
+      // (distance check + gather target), just a different point, so
+      // babies visibly gather in to be fed rather than merely tolerating
+      // the parent being elsewhere in the yard.
+      const deliveringParent = parents.find(
+        (p) =>
+          p.activity.id === 'feedYoung' &&
+          ((feedMode === 'nurse' && p.activity.step === 1) ||
+            (feedMode === 'carry' && p.activity.step === 3)),
+      );
+      const leashAnchor = deliveringParent?.pos ?? home?.pos;
+      // While a parent holds, the leash tightens and the re-gather scatter
       // shrinks to match, so babies land well inside FEED_RANGE and
-      // visibly snuggle in rather than stopping just outside it (M11).
+      // visibly gather in rather than stopping just outside it (M11).
       // Same two draws per re-gather either way — only the values change.
-      const leashRadius = nurseHolder ? NURSE_GATHER_RADIUS : BABY_LEASH;
+      const leashRadius = deliveringParent ? NURSE_GATHER_RADIUS : BABY_LEASH;
       if (leashAnchor) {
         for (const child of children) {
           if (child.stage !== 'baby') continue;
@@ -333,7 +337,7 @@ function stepFamily(state: WorldState, fam: Family): void {
               id: 'gather',
               ticks: 0,
               minTicks: 30,
-              targetPos: nurseHolder
+              targetPos: deliveringParent
                 ? {
                     x: leashAnchor.x + nextRange(state.rng, -25, 25),
                     y: leashAnchor.y + nextRange(state.rng, -18, 18),
