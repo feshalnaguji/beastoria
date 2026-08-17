@@ -63,7 +63,11 @@ export interface Activity {
   minTicks: number;
   targetPos?: Vec2 | undefined;
   targetId?: number | undefined;
-  /** Sub-step within multi-leg activities (e.g. feedYoung: 0 fetch, 1 return). */
+  /**
+   * Sub-step within multi-leg activities. feedYoung carry mode: 0 seek food,
+   * 1 pickup pause, 2 carry home, 3 deliver. feedYoung nurse mode: 0 travel
+   * home, 1 nursing hold.
+   */
   step?: number | undefined;
 }
 

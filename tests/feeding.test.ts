@@ -572,6 +572,55 @@ describe('carry delivery (step 3): sequenced, ranged, and reported', () => {
     expect(closedIn).toBe(true);
     expect(fed).toBe(true);
   });
+
+  it('(h) [M11 fix] with NO sibling propping the hold in range, the delivery hold does not bail to idle on its very first tick — the leash gets a window to pull the straggler in before the errand would restart', () => {
+    // Unlike (g), which kept babyA pinned in range every tick so there was
+    // always a mouth to feed, this pins BOTH babies beyond FEED_RANGE (90)
+    // but within the old BABY_LEASH (140) for the entire run-up to step 3 —
+    // the exact gap (g) didn't cover. familySystem runs before applyActivity
+    // each tick (Sim.ts's pipeline order), so on the tick the parent's step
+    // flips 2 -> 3 (and the fall-through fires the very first delivery scan
+    // that same tick), familySystem still saw the parent in step 2 moments
+    // earlier: deliveringParent was undefined, the leash was still the loose
+    // BABY_LEASH, and neither baby (both inside BABY_LEASH but outside
+    // FEED_RANGE) had been pulled in yet. Before the fix, that first scan
+    // found nobody in range and bailed straight to 'idle', discarding the
+    // food the parent just carried home.
+    const { state, fam, feeder, babyA, babyB } = reachDeliveryHold(8, [OUT_OF_RANGE, OUT_OF_RANGE]);
+    babyA.ageTicks = 0;
+    babyB.ageTicks = 0;
+
+    // By the time reachDeliveryHold returns, that critical first scan has
+    // already run (both babies were pinned OUT_OF_RANGE for the whole
+    // run-up). The fix means the errand is still alive right here.
+    expect(feeder.activity.id).toBe('feedYoung');
+    expect(feeder.activity.step).toBe(3);
+
+    let fed = false;
+    let closedIn = false;
+    for (
+      let i = 0;
+      i < DELIVER_MAX_TICKS && feeder.activity.id === 'feedYoung' && feeder.activity.step === 3;
+      i++
+    ) {
+      babyA.needs.hunger = Math.max(babyA.needs.hunger, 0.7);
+      babyB.needs.hunger = Math.max(babyB.needs.hunger, 0.7);
+      for (const c of state.creatures) {
+        if (fam.childIds.includes(c.id) && c.id !== babyA.id && c.id !== babyB.id) {
+          c.needs.hunger = 0;
+        }
+      }
+      const beforeA = babyA.needs.hunger;
+      const beforeB = babyB.needs.hunger;
+      tick(state, []);
+      const distA = Math.hypot(babyA.pos.x - feeder.pos.x, babyA.pos.y - feeder.pos.y);
+      const distB = Math.hypot(babyB.pos.x - feeder.pos.x, babyB.pos.y - feeder.pos.y);
+      if (distA <= FEED_RANGE || distB <= FEED_RANGE) closedIn = true;
+      if (babyA.needs.hunger < beforeA - 1e-9 || babyB.needs.hunger < beforeB - 1e-9) fed = true;
+    }
+    expect(closedIn).toBe(true);
+    expect(fed).toBe(true);
+  });
 });
 
 describe('self (fish): koi', () => {

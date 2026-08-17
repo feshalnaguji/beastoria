@@ -37,8 +37,9 @@ const PROGRESS_MIN_DIST = 1;
 /**
  * How close a baby must be to be fed — a nursing mother's stationary hold,
  * or a carry-delivery parent's stationary hold at the nest. One number for
- * both (M11): the renderer's own divergent NURSE_EAT_RADIUS goes away in a
- * later task, importing this instead.
+ * both (M11): unifies what used to be two divergent radii (this one, plus
+ * the renderer's own NURSE_EAT_RADIUS, now deleted — the renderer imports
+ * this constant instead).
  */
 export const FEED_RANGE = 90;
 /** Hunger relief per tick per baby in reach during a nursing hold (M10). */
@@ -356,8 +357,10 @@ export function applyActivity(
                 other.needs.hunger = clamp01(other.needs.hunger - NURSE_HUNGER_RATE);
                 // Stagger the feed-beat mote per baby via an id-hash offset
                 // (no RNG draw) so siblings don't all sparkle on one tick.
+                // Gated on hunger, same as the carry-delivery scan below, so
+                // an already-sated baby doesn't get a milk-mote arcing to it.
                 const phase = (c.activity.ticks + idHash(other.id)) % NURSE_MOTE_TICKS;
-                if (phase === 0) {
+                if (phase === 0 && other.needs.hunger > SATISFIED) {
                   scratch?.feedings.push({
                     babyId: other.id,
                     parentId: c.id,
@@ -379,7 +382,11 @@ export function applyActivity(
             break;
           }
           const remaining = moveToward(c, home.pos, speedFor(c.species, c.stage), medium, landing);
-          if (remaining >= 0 && remaining <= ARRIVE_DIST) {
+          if (remaining < 0) {
+            startActivity(state, c, 'idle'); // refused snap — no safety net today
+            break;
+          }
+          if (remaining <= ARRIVE_DIST) {
             c.activity.step = 1;
             c.activity.ticks = 0; // the hold starts fresh; targetId still means home id
           }
@@ -479,7 +486,17 @@ export function applyActivity(
               }
             }
             if (!hungriest) {
-              startActivity(state, c, 'idle');
+              // Don't give up on the very first scan (ticks === 0): that
+              // scan runs on the same tick the parent stepped 2 -> 3, before
+              // this tick's familySystem had a chance to see the parent
+              // delivering and tighten the baby leash (Sim.ts runs
+              // familySystem before applyActivity, so `deliveringParent` was
+              // still undefined a moment ago). Give the tightened leash at
+              // least one more tick to pull a straggler into FEED_RANGE
+              // before bailing — DELIVER_MAX_TICKS remains the real timeout.
+              if (c.activity.ticks > 0) {
+                startActivity(state, c, 'idle');
+              }
               break;
             }
             hungriest.needs.hunger = clamp01(hungriest.needs.hunger - DELIVER_PORTION);
