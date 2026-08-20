@@ -106,15 +106,33 @@ v1 (two open tabs overwrite each other's timeline harmlessly).
   ones visibly gather in, a new kangaroo species (12 total) with a rig-art pouch/joey
   shown during her nurse hold, an amber/milk-white feed-mote effect and step-aware
   inspect-card text so every feeding is a moment you can watch; 174 tests)
-- **Status: v1.3 shipped.** M11 candidate items (raw-point carry foraging, instant
-  aggregate feeding, unwatched nursing, missing kangaroo) are all addressed. Next: v2
-  Caretaker World (only once the user decides to proceed; feeding, care, unlocking
-  families).
-- **Awaiting user review:** live check on their devices — the new feeding beats (a
-  parent visibly stopping at a berry cluster, one-at-a-time delivery), the nurse-hold
-  animation (mother 'sit' + nursed-baby 'eat' clip + milk-droplet glyph, built in M10
-  but never eyeballed until now — this is the user's own reserved check), the
-  kangaroo's hop gait and pouch/joey, and perf with 12 species population.
+- **Status: v1.3 shipped and live-reviewed (2026-08-20).** M11 candidate items
+  (raw-point carry foraging, instant aggregate feeding, unwatched nursing, missing
+  kangaroo) shipped, but the live review found the feeding beats still don't read
+  well and the kangaroo/joey behavior isn't accurate. M12 candidate open per that
+  review — see below. v2 Caretaker World stays next-after-that (only once the user
+  decides to proceed; feeding, care, unlocking families).
+- **M12 candidate (from 2026-08-20 live review, not yet planned/branched):**
+  (1) feeding still doesn't read well despite M11's mote/glyph work — user's own
+  words: "feeding is not that good"; needs a fresh look at what's actually
+  unconvincing (pacing? the mote itself? clip readability?) rather than assuming
+  M11's specific mechanism was the whole fix; (2) kangaroo/joey behavior is not
+  accurate — user specifically flagged babies appearing to go toward/into the
+  pouch, which M11 deliberately did NOT build (the joey is static rig art gated to
+  the mother's 'sit' clip only; the real baby kangaroo is a separate Creature that
+  walks/gathers/feeds normally and is pulled inward by the nurse-hold leash to
+  within 60 units of her — likely reads as "climbing into the pocket" without
+  actually doing so, or the two — real baby + decorative joey glyph — visually
+  conflict/duplicate). Needs a real design decision: keep joey purely decorative
+  and fix the collision/reading with the real baby, or reconsider actual
+  pouch-carry (M10/M11 explicitly ruled this out as a new system — re-litigate only
+  with fresh justification); (3) general ask, not kangaroo-specific: animal rigs
+  should be "a bit more realistic and better looking and recognizable" — likely
+  spans multiple/all 12 species, needs scoping (which species first, what
+  "recognizable" means — silhouette clarity? color accuracy? proportions?) before
+  any plan is written. Needs superpowers:brainstorming before any plan is written.
+- **Awaiting user review:** perf with 12 species population (not yet explicitly
+  confirmed either way in the 2026-08-20 review).
 - Live: https://feshalnaguji.github.io/beastoria/ · repo: feshalnaguji/beastoria
   (GitHub Pages auto-deploys main; CI runs tests+build)
 
