@@ -565,8 +565,21 @@ describe('f) M13 Task 7: an intermediate "mount" errand replaces the instant fli
     let mounted = -1;
     for (let t = 0; t < 30 && mounted < 0; t++) {
       localTick(state);
-      if ((joey.activity.id as string) === 'mount') sawMountErrand = true;
-      if (joey.carriedBy === mother.id) mounted = state.tick;
+      // Checked against THIS tick's carriedBy directly (not a variable set
+      // on a prior iteration): if carriedBy already reads as mother.id this
+      // tick, it is the mount/release tick itself, and an activity id of
+      // 'mount' on it is NOT counted as errand evidence — only a tick
+      // strictly before the joey is ever aboard counts. Without this guard,
+      // a future implementation could satisfy this test by relabeling the
+      // same instant, same-tick, atomic carriedBy-flip's activity id to
+      // 'mount' without ever building a real multi-tick "walk to flank,
+      // pause, then mount" errand. This mirrors 7c's
+      // `joey.carriedBy === mother.id` (definitely-still-riding) gate.
+      if (joey.carriedBy === mother.id) {
+        mounted = state.tick;
+      } else if ((joey.activity.id as string) === 'mount') {
+        sawMountErrand = true;
+      }
     }
     // Sanity: it did mount today (just instantly) — this much still holds.
     expect(mounted).toBeGreaterThan(0);
