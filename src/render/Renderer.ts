@@ -184,6 +184,31 @@ interface CreatureView {
    * interpolated position exactly like an uncarried creature, rather than
    * crashing or vanishing. */
   pouchAttached: boolean;
+  /** M13 task 9 — mount ease only: the joey's own position at the instant
+   * of reparenting (still in its old parent's local space at that moment),
+   * converted into the mother's pouch-local space via `pouch.toLocal`.
+   * While defined, render()'s `pouchAttached` branch lerps `view.node`'s
+   * local position from here toward the fixed `POUCH_RIDER_OFFSET` (an
+   * ease-out-cubic of `pouchEaseMs / POUCH_EASE_MS`) instead of snapping
+   * straight to it. Cleared (`undefined`) the instant that ease completes,
+   * so the steady-state render path afterward is byte-identical to M12's —
+   * the whole point of a self-clearing offset (EMERGE_MS's own precedent),
+   * not just tidiness. */
+  pouchEaseFrom: Vec2 | undefined;
+  /** M13 task 9 — dismount ease only: the world-space (creatureLayer-local)
+   * gap between the pouch anchor point and the joey's own actual new
+   * position, captured at the instant of release. Eased down to (0, 0)
+   * over POUCH_EASE_MS and added on top of the normal interpolated
+   * `(x, y)` in render()'s NOT-attached branch — the same composition slot
+   * `broodOffsetX/Y`, `emergeOffX/Y`, and `liftPx` already share. Cleared
+   * once the ease completes; undefined for every creature that has never
+   * dismounted. */
+  pouchEaseDelta: Vec2 | undefined;
+  /** M13 task 9: ms elapsed into whichever of the two eases above is
+   * currently active. Shared by both fields since they're never active at
+   * once — `pouchAttached` flips exactly once between a mount and its
+   * eventual dismount — and reset to 0 the instant either one starts. */
+  pouchEaseMs: number;
 }
 
 /** Baked walk frames per species (Step 1: symmetric 3-key clips sample
@@ -336,6 +361,15 @@ const POUCH_RIDER_Z = 2;
  * rig already flips (see the facingLeft scale.x logic in render()). */
 const POUCH_WORLD_OFFSET_X = 6;
 const POUCH_WORLD_OFFSET_Y = 0;
+
+/** M13 task 9: the pouch mount/dismount errand (Task 8's sim-side `'mount'`
+ * activity) now eases visually instead of snapping — this is that ease's
+ * wall-clock duration. Modeled directly on EMERGE_MS's shape (self-
+ * clearing, one-way, ease-out-cubic offset composed onto the interpolated
+ * position) rather than LIFT_EASE_MS's reversible smoothstep: mounting and
+ * dismounting are each a one-way transition with a definite end, never
+ * reversed mid-flight the way lift can flicker takeoff/landing. */
+const POUCH_EASE_MS = 600;
 
 /** A view mid-fade after leaving state.creatures (M9 task 5's gentle
  * passing) — drained in the render loop rather than destroyed same-frame. */
@@ -773,11 +807,37 @@ export class Renderer {
    */
   private updatePouchAttachment(view: CreatureView, carrierId: number | null): void {
     if (view.pouchAttached) {
+      // Dismount: capture the world-space (creatureLayer-local) gap between
+      // the pouch anchor point and the joey's own actual new position
+      // (`view.curr`, already advanced to this tick's real `c.pos` by
+      // sync() before this call runs — see the caller) BEFORE detaching —
+      // once removeChild runs below, the pouch's transform is no longer
+      // reachable from view.node's old parent chain. render()'s NOT-
+      // attached branch eases this delta down to (0, 0) over POUCH_EASE_MS
+      // (see pouchEaseDelta) so the joey visibly climbs down rather than
+      // teleporting to her feet.
+      const oldPouch = view.node.parent;
+      if (oldPouch) {
+        const anchorWorld = this.creatureLayer.toLocal(POUCH_RIDER_OFFSET, oldPouch);
+        view.pouchEaseDelta = { x: anchorWorld.x - view.curr.x, y: anchorWorld.y - view.curr.y };
+        view.pouchEaseMs = 0;
+      }
       view.node.parent?.removeChild(view.node);
       view.pouchAttached = false;
     }
     const pouch = carrierId === null ? undefined : this.views.get(carrierId)?.rig.pouch;
     if (pouch) {
+      // Mount: capture the joey's current position — still expressed in its
+      // OLD parent's local space at this instant (creatureLayer, unless a
+      // carrier swap somehow chained straight from one pouch to another,
+      // which family.ts never does) — converted into the mother's pouch-
+      // local space, BEFORE reparenting. render()'s pouchAttached branch
+      // eases `view.node`'s local position from here toward the fixed
+      // POUCH_RIDER_OFFSET (see pouchEaseFrom) instead of snapping there.
+      const fromContainer = view.node.parent ?? this.creatureLayer;
+      const localStart = pouch.toLocal(view.node.position, fromContainer);
+      view.pouchEaseFrom = { x: localStart.x, y: localStart.y };
+      view.pouchEaseMs = 0;
       this.attachToPouch(view, pouch);
     } else {
       // No carrier (dismounted), or a defensive fallback — the carrier's
@@ -1261,14 +1321,51 @@ export class Renderer {
         // parent chain (the carrier's own node.scale.x) already applies it,
         // and re-applying it here would cancel it back out whenever she
         // faces left.
-        view.node.position.set(POUCH_RIDER_OFFSET.x, POUCH_RIDER_OFFSET.y);
+        //
+        // M13 task 9: while `pouchEaseFrom` is defined (set by
+        // updatePouchAttachment at the instant of reparenting), lerp from
+        // there toward POUCH_RIDER_OFFSET instead of snapping straight to
+        // it — ease-out-cubic over POUCH_EASE_MS, mirroring EMERGE_MS's own
+        // self-clearing shape exactly. Once the ease completes (t >= 1),
+        // clear the field so every frame after is byte-identical to M12's
+        // unconditional snap — no per-frame cost once settled.
+        if (view.pouchEaseFrom) {
+          view.pouchEaseMs += dtMs;
+          const t = clamp(view.pouchEaseMs / POUCH_EASE_MS, 0, 1);
+          const ease = 1 - (1 - t) * (1 - t) * (1 - t); // ease-out cubic
+          view.node.position.set(
+            view.pouchEaseFrom.x + (POUCH_RIDER_OFFSET.x - view.pouchEaseFrom.x) * ease,
+            view.pouchEaseFrom.y + (POUCH_RIDER_OFFSET.y - view.pouchEaseFrom.y) * ease,
+          );
+          if (t >= 1) view.pouchEaseFrom = undefined;
+        } else {
+          view.node.position.set(POUCH_RIDER_OFFSET.x, POUCH_RIDER_OFFSET.y);
+        }
         view.node.scale.set(1);
       } else {
+        // M13 task 9: the reverse edge — while `pouchEaseDelta` is defined
+        // (set by updatePouchAttachment at the instant of release), ease
+        // that world-space gap between the pouch anchor and the joey's own
+        // actual position down to (0, 0), ease-out-cubic over
+        // POUCH_EASE_MS, composed onto the interpolated position exactly
+        // the way `emergeOffX/Y` already coexists with `broodOffsetX/Y` and
+        // `liftPx` below. Self-clears at t >= 1, same shape as the mount
+        // ease above.
+        let dismountOffX = 0;
+        let dismountOffY = 0;
+        if (view.pouchEaseDelta) {
+          view.pouchEaseMs += dtMs;
+          const t = clamp(view.pouchEaseMs / POUCH_EASE_MS, 0, 1);
+          const ease = 1 - (1 - t) * (1 - t) * (1 - t); // ease-out cubic
+          dismountOffX = view.pouchEaseDelta.x * (1 - ease);
+          dismountOffY = view.pouchEaseDelta.y * (1 - ease);
+          if (t >= 1) view.pouchEaseDelta = undefined;
+        }
         // A brooding sitter at a treeNest home nudges into the drawn bowl
         // (broodOffsetX/Y, set in sync() — zero for every other case).
         view.node.position.set(
-          x + view.broodOffsetX + emergeOffX,
-          y + view.broodOffsetY + emergeOffY + liftPx,
+          x + view.broodOffsetX + emergeOffX + dismountOffX,
+          y + view.broodOffsetY + emergeOffY + liftPx + dismountOffY,
         );
         view.node.scale.x = (facingLeft ? -1 : 1) * emergeScale;
         view.node.scale.y = emergeScale;
@@ -1304,6 +1401,15 @@ export class Renderer {
         (feedMode === 'carry' && view.activityId === 'feedYoung' && view.step === 3);
       const feedGiving = giving && !!speciesRig.clips.feedGive;
       const feedTaking = view.feedContact && !!speciesRig.clips.feedTake;
+      // M13 task 9: same "does this rig define the clip" guard as
+      // feedGiving/feedTaking above, for the pouch mount/dismount errand's
+      // own pose. `'mount' in speciesRig.clips` checks the presence of an
+      // (as-yet-unauthored) optional key without needing `ExtraClipName`
+      // to list it — that's Task 10's job, once it writes the kangaroo's
+      // actual 'mount' clip. Until then this always evaluates false, so
+      // clipFor's two new mount branches always fall back to 'sit'/'idle',
+      // exactly matching today's (M12) behavior.
+      const hasMount = 'mount' in speciesRig.clips;
 
       // Single source of truth for which pose to show, shared by T2's live
       // rig and T1's baked-frame cascade below (M9 task 5's clipFor fix —
@@ -1335,6 +1441,7 @@ export class Renderer {
         feedGiving,
         feedTaking,
         view.pouchAttached,
+        hasMount,
       );
 
       if (tier === 2) {
@@ -1371,7 +1478,18 @@ export class Renderer {
           // half protrudes below pouchBack's own bottom edge at baby scale,
           // floating in mid-air under the mother's pouch. Same `.visible`
           // toggle pattern as the rippleSprite swap right below.
-          view.rig.shadow.visible = !view.pouchAttached;
+          //
+          // M13 task 9: `pouchAttached` alone would pop the shadow back in
+          // the instant dismount starts, even though the joey is still
+          // easing down from the pouch and doesn't touch ground until that
+          // ease completes — so also stay hidden for as long as
+          // `pouchEaseDelta` is defined (the dismount ease's own
+          // self-clearing flag, cleared exactly when it finishes). The
+          // mount side needs no such guard: `pouchAttached` already flips
+          // true at the very instant the mount ease begins (see
+          // updatePouchAttachment), so the shadow is already hidden from
+          // the first eased frame.
+          view.rig.shadow.visible = !view.pouchAttached && view.pouchEaseDelta === undefined;
         }
 
         // Duck swim: the shadow ellipse hands off to a baked ripple sprite
@@ -1668,6 +1786,9 @@ export class Renderer {
       airborneNow: false,
       carriedBy: null,
       pouchAttached: false,
+      pouchEaseFrom: undefined,
+      pouchEaseDelta: undefined,
+      pouchEaseMs: 0,
     };
     this.positionLabel(view);
     return view;
@@ -1864,12 +1985,29 @@ export class Renderer {
  * is always dismounted, per `stepPouch`, the moment it enters 'pass', so
  * the two never actually overlap — but `pass` still wins over `carried`
  * on principle, matching the "`pass` wins over everything else" rule
- * above). Its own `activityId` stays 'idle' the whole ride (family.ts's
- * mount() sets it once and nothing else touches it while carried) and
- * `moving` reads true (its `curr`/`prev` literally track its carrier's
- * motion, sim/movement.ts), which unchecked would show her joey walking
- * mid-air inside the pouch — so it is forced to 'sit' regardless, the
- * same held pose the mother herself plays during a nurse hold.
+ * above). `moving` reads true the whole ride (its `curr`/`prev` literally
+ * track its carrier's motion, sim/movement.ts), which unchecked would show
+ * her joey walking mid-air inside the pouch — so `carried` is checked
+ * before `moving` and wins outright.
+ *
+ * M13 task 9 (Thread 3 Task 8, sim side) replaces the old instant
+ * carriedBy flip with a multi-tick climb errand: `activityId` is `'mount'`
+ * — not the M12-era `'idle'` this comment used to describe — for both the
+ * brief ride-in settle right after actually climbing aboard (carried,
+ * step 3) and the climb-out lead-in right before dismounting (also still
+ * carried, step 2); it's `'idle'` only for the steady middle of a ride.
+ * `carried` now resolves to `'mount'` instead of the flat `'sit'` whenever
+ * `activityId === 'mount'` AND the rig actually authors that clip
+ * (`hasMount`, resolved by the caller exactly like `feedGiving`/
+ * `feedTaking` against the rig's own `clips` object) — every rig fails
+ * that guard today (Task 10 hasn't authored the kangaroo's `'mount'` clip
+ * yet), so this always falls back to `'sit'`, byte-identical to M12.
+ * `hasMount` also gets a second, NON-carried check placed after `moving`:
+ * a joey still on its own feet mid-errand (step 0 approach, step 1 settle)
+ * reads `'walk'` while it's actually covering ground (the ordinary
+ * `moving` branch already handles that — this is why the mount check sits
+ * below it) and `'mount'` (or `'idle'` as the same graceful fallback)
+ * once it settles stationary just before climbing in.
  */
 function clipFor(
   activityId: string,
@@ -1883,13 +2021,18 @@ function clipFor(
   feedGiving: boolean,
   feedTaking: boolean,
   carried: boolean,
+  hasMount: boolean,
 ): ClipName {
   if (activityId === 'pass') return 'sleep';
-  if (carried) return 'sit';
+  if (carried) return activityId === 'mount' && hasMount ? ('mount' as ClipName) : 'sit';
   if (airborne) return 'flap';
   if (swimming) return 'swim';
   if (nursing) return feedGiving ? 'feedGive' : 'sit';
   if (moving) return activityId === 'feedYoung' && feedYoungStep === 2 ? 'carry' : 'walk';
+  // M13 task 9: stationary, not-yet-carried steps 0/1 of the pouch mount
+  // errand (see the doc comment above) — `hasMount` is always false until
+  // Task 10 authors the clip, so this is 'idle' in practice today.
+  if (activityId === 'mount') return hasMount ? ('mount' as ClipName) : 'idle';
   if (nursed || fed || feedTaking) return feedTaking ? 'feedTake' : 'eat';
   if (activityId === 'brood' || activityId === 'gestate') return 'sit';
   if (activityId === 'nap') return 'sleep';
