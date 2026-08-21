@@ -1358,6 +1358,12 @@ export class Renderer {
         if (view.rig.shadow) {
           view.rig.shadow.scale.set(1 - (1 - SHADOW_AIRBORNE_SCALE) * liftEase);
           view.rig.shadow.position.y = view.shadowBaseY + SHADOW_AIRBORNE_OFFSET_PX * liftEase;
+          // M12 task 5 (opus review fix): a riding joey has no ground to
+          // cast a shadow onto inside the pouch — left visible, its lower
+          // half protrudes below pouchBack's own bottom edge at baby scale,
+          // floating in mid-air under the mother's pouch. Same `.visible`
+          // toggle pattern as the rippleSprite swap right below.
+          view.rig.shadow.visible = !view.pouchAttached;
         }
 
         // Duck swim: the shadow ellipse hands off to a baked ripple sprite
