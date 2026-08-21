@@ -438,23 +438,42 @@ function stepFamily(state: WorldState, fam: Family): void {
       if (!home || !fam.clutch) break;
       fam.clutch.broodTicksLeft--;
 
-      // Brooding turns: duty parent sits the clutch, the other lives freely.
-      if (fam.phaseTicks % BROOD_SWAP_TICKS === 0) {
-        fam.dutyParent = (fam.dutyParent + 1) % Math.max(1, parents.length);
-      }
-      // Live-birth mothers keep the duty themselves.
       const rep = SPECIES[fam.species].reproduction;
-      const sitter =
-        rep.mode === 'live'
-          ? (parents.find((p) => p.sex === 'f') ?? parents[0])
-          : parents[fam.dutyParent % parents.length];
-      if (sitter) {
-        overrideActivity(sitter, {
-          id: 'brood',
-          ticks: sitter.activity.id === 'brood' ? sitter.activity.ticks : 0,
-          minTicks: 60,
-          targetPos: { ...home.pos },
-        });
+      if (rep.mode === 'egg') {
+        // Brooding turns: duty parent sits the clutch, the other lives freely.
+        if (fam.phaseTicks % BROOD_SWAP_TICKS === 0) {
+          fam.dutyParent = (fam.dutyParent + 1) % Math.max(1, parents.length);
+        }
+        const sitter = parents[fam.dutyParent % parents.length];
+        if (sitter) {
+          overrideActivity(sitter, {
+            id: 'brood',
+            ticks: sitter.activity.id === 'brood' ? sitter.activity.ticks : 0,
+            minTicks: 60,
+            targetPos: { ...home.pos },
+          });
+        }
+      } else {
+        // Live birth: no eggs to sit, so no duty swap at all — the father
+        // never takes a "sitting" turn (family.test.ts 4c). The mother lives
+        // her ordinary life via normal utility selection for the first ~70%
+        // of gestation (no override of any kind — even a light one needs a
+        // FAMILY_ACTIVITIES entry and would stomp utility selection every
+        // tick, exactly what this is fixing). Only in the final stretch does
+        // she settle home heavy and rest, under 'gestate' — never 'brood',
+        // she has no eggs to keep warm.
+        const lateGestationTicks = Math.max(150, Math.round(rep.broodTicks * 0.3));
+        if (fam.clutch.broodTicksLeft <= lateGestationTicks) {
+          const mother = parents.find((p) => p.sex === 'f') ?? parents[0];
+          if (mother) {
+            overrideActivity(mother, {
+              id: 'gestate',
+              ticks: mother.activity.id === 'gestate' ? mother.activity.ticks : 0,
+              minTicks: 60,
+              targetPos: { ...home.pos },
+            });
+          }
+        }
       }
 
       if (fam.clutch.broodTicksLeft <= 0) {

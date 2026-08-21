@@ -51,6 +51,10 @@ export type ActivityId =
   // Family-directed activities (owned by family.ts, not utility selection):
   | 'court'
   | 'brood'
+  // Deliberately not 'brood' — a mammal has no eggs to keep warm. Used only
+  // for the final ~30% of a live-birth mother's gestation, once she settles
+  // home to rest heavy (see family.ts's 'expecting' phase).
+  | 'gestate'
   | 'feedYoung'
   | 'gather'
   | 'pass';

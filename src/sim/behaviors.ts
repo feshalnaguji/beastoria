@@ -305,7 +305,7 @@ export function decayNeeds(state: WorldState): void {
  * ANY family-latching activity generically (today only 'gather' realistically
  * needs it, but this stays correct if a future latch — e.g. a pouch-mount
  * transition — joins the set without a matching update here). */
-export const FAMILY_ACTIVITIES = new Set<ActivityId>(['court', 'brood', 'feedYoung', 'gather', 'pass']);
+export const FAMILY_ACTIVITIES = new Set<ActivityId>(['court', 'brood', 'gestate', 'feedYoung', 'gather', 'pass']);
 
 export function selectBehavior(state: WorldState, c: Creature, clock: Clock): void {
   // A passenger doesn't choose where to go (M12): a joey in the pouch must
@@ -499,6 +499,10 @@ export function applyActivity(
       break;
     }
 
+    case 'gestate':
+      // A heavily pregnant mother resting at home is the same executor as a
+      // parent sitting a clutch — walk to the target, then rest relief on
+      // arrival. falls through
     case 'brood': {
       // Walk to the clutch, then sit; brooding is restful.
       const target = c.activity.targetPos;
