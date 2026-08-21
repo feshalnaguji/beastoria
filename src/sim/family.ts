@@ -6,7 +6,7 @@
  * for creatures with family duties. Family-directed activities are released
  * back to 'idle' when the duty ends.
  */
-import { idOffsetAngle } from './behaviors';
+import { FEED_CONTACT_RANGE, feedContactRing, idOffsetAngle } from './behaviors';
 import { TICKS_PER_DAY } from './clock';
 import { emit } from './events';
 import { nextRange } from './rng';
@@ -25,12 +25,24 @@ const COURT_TICKS = 300;
 const NEST_TICKS = 400;
 const BROOD_SWAP_TICKS = 220;
 const FEED_TRIGGER_HUNGER = 0.5;
-/** How long a nursing mother holds still once she reaches home (behaviors.ts). */
-const NURSE_HOLD_TICKS = 80;
+/**
+ * Total ticks for the nurse hold's full settle -> nurse -> linger sequence
+ * (behaviors.ts: NURSE_SETTLE_TICKS 30 + NURSING_TICKS 90 + FEED_LINGER_TICKS
+ * 40 = 160; M12, was a single 80-tick hold). Used only as the activity's
+ * initial minTicks bookkeeping — the actual step transitions are driven by
+ * behaviors.ts's own per-step durations, not this field.
+ */
+const NURSE_HOLD_TICKS = 160;
 const BABY_LEASH = 140;
-/** Tighter leash while a nurse hold is active, so kits gather within feeding
- * range instead of loitering at the edge of it (M11; see FEED_RANGE). */
-const NURSE_GATHER_RADIUS = 60;
+/**
+ * The nurse-hold and carry-delivery steps during which a parent is actively
+ * holding a feeding meeting — babies get pulled to the tight feeding-contact
+ * ring instead of merely kept within BABY_LEASH of home (M12; was step 1
+ * only for nurse / step 3 only for carry, before the settle/linger steps
+ * existed).
+ */
+const NURSE_HOLDING_STEPS = new Set([1, 2, 3]);
+const CARRY_HOLDING_STEPS = new Set([3, 4]);
 const PASS_GATHER_TICKS = 200;
 const PASS_GATHER_RANGE = 700;
 const MEMORIAL_TICKS = 2 * TICKS_PER_DAY;
@@ -310,24 +322,29 @@ function stepFamily(state: WorldState, fam: Family): void {
       }
 
       // Babies stay near the home — EXCEPT while a parent is actively
-      // holding to feed (a nursing mother in feedYoung step 1, or a carry
-      // parent in its step-3 delivery hold), when the leash's anchor
-      // becomes that parent's position instead: same leash mechanism
-      // (distance check + gather target), just a different point, so
-      // babies visibly gather in to be fed rather than merely tolerating
-      // the parent being elsewhere in the yard.
+      // holding a feeding meeting (a nursing mother in feedYoung steps
+      // 1-3 — settle, nurse, linger — or a carry parent in its steps 3-4 —
+      // deliver, linger), when the leash's anchor becomes that parent's
+      // position instead: same leash mechanism (distance check + gather
+      // target), just a different point, so babies visibly gather in to be
+      // fed rather than merely tolerating the parent being elsewhere in
+      // the yard.
       const deliveringParent = parents.find(
         (p) =>
           p.activity.id === 'feedYoung' &&
-          ((feedMode === 'nurse' && p.activity.step === 1) ||
-            (feedMode === 'carry' && p.activity.step === 3)),
+          p.activity.step !== undefined &&
+          ((feedMode === 'nurse' && NURSE_HOLDING_STEPS.has(p.activity.step)) ||
+            (feedMode === 'carry' && CARRY_HOLDING_STEPS.has(p.activity.step))),
       );
       const leashAnchor = deliveringParent?.pos ?? home?.pos;
-      // While a parent holds, the leash tightens and the re-gather scatter
-      // shrinks to match, so babies land well inside FEED_RANGE and
-      // visibly gather in rather than stopping just outside it (M11).
-      // Same two draws per re-gather either way — only the values change.
-      const leashRadius = deliveringParent ? NURSE_GATHER_RADIUS : BABY_LEASH;
+      // While a parent holds, the leash tightens to the tighter feeding
+      // contact radius, so babies land within actual feeding range and
+      // visibly gather in rather than stopping just outside it (M11,
+      // tightened again in M12). The re-gather target is now a
+      // deterministic point on feedContactRing's ring around the parent
+      // (M12) — zero RNG draws — replacing the old two-draw ±25/±18
+      // scatter; the out-of-hold fallback to home below is untouched.
+      const leashRadius = deliveringParent ? FEED_CONTACT_RANGE : BABY_LEASH;
       if (leashAnchor) {
         for (const child of children) {
           if (child.stage !== 'baby') continue;
@@ -338,10 +355,7 @@ function stepFamily(state: WorldState, fam: Family): void {
               ticks: 0,
               minTicks: 30,
               targetPos: deliveringParent
-                ? {
-                    x: leashAnchor.x + nextRange(state.rng, -25, 25),
-                    y: leashAnchor.y + nextRange(state.rng, -18, 18),
-                  }
+                ? feedContactRing(leashAnchor, child.id, landingMediumOf(child.species))
                 : {
                     x: leashAnchor.x + nextRange(state.rng, -40, 40),
                     y: leashAnchor.y + nextRange(state.rng, -30, 30),

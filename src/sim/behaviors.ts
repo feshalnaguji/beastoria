@@ -35,15 +35,54 @@ const PROGRESS_CHECK_TICKS = 100;
 /** A stall checkpoint counts as "no progress" below this much net movement. */
 const PROGRESS_MIN_DIST = 1;
 /**
- * How close a baby must be to be fed — a nursing mother's stationary hold,
- * or a carry-delivery parent's stationary hold at the nest. One number for
- * both (M11): unifies what used to be two divergent radii (this one, plus
- * the renderer's own NURSE_EAT_RADIUS, now deleted — the renderer imports
- * this constant instead).
+ * How close a baby must be to count as "eligible" during a feeding hold —
+ * the radius a parent scans for the nearest baby to face, and (until M12)
+ * the radius hunger actually transferred at. Demoted in M12: actual hunger
+ * transfer now happens only within the tighter FEED_CONTACT_RANGE below —
+ * this constant gates who counts as "on approach" for the facing behavior,
+ * and family.ts's tightened gather leash. Also read directly by the
+ * renderer for its "snuggled in" pose (src/render/Renderer.ts imports it).
  */
 export const FEED_RANGE = 90;
-/** Hunger relief per tick per baby in reach during a nursing hold (M10). */
-const NURSE_HUNGER_RATE = 0.006;
+/**
+ * How close a baby must actually be for hunger to transfer during a
+ * feeding hold — a nursing mother's nursing step, or a carry parent's
+ * delivery hold (M12). Also the radius `feedContactRing` targets: once a
+ * baby is this close it's "in contact" and turns to face the parent back
+ * (see FEED_TURN). Tighter than FEED_RANGE — this is what stops feeding
+ * reading as happening at arm's length; a baby inside FEED_RANGE but
+ * outside this is pulled to a ring point on this radius (family.ts's
+ * leash) before it is ever fed.
+ */
+export const FEED_CONTACT_RANGE = 40;
+/**
+ * Turn rate (rad/tick) for the feeding-hold facing behavior (M12): each
+ * tick of a holding step, the parent turns toward its nearest eligible
+ * baby and every in-contact baby turns back toward the parent. Gentle — an
+ * about-face from directly opposed headings takes ~26 ticks (2.6s at 1x).
+ */
+const FEED_TURN = 0.12;
+/**
+ * The nurse hold's three stationary sub-steps at home (M12; was a single
+ * 80-tick hold that fed every tick from arrival). Step 1 gather & settle:
+ * babies close the last distance in, nobody fed yet. Step 2 nursing: the
+ * only step that actually relieves hunger. Step 3 satisfied linger: the
+ * meeting holds a moment before releasing. 30 + 90 + 40 = 160 ticks
+ * (~16s at 1x) — family.ts's NURSE_HOLD_TICKS mirrors this sum for the
+ * activity's initial minTicks bookkeeping.
+ */
+const NURSE_SETTLE_TICKS = 30;
+const NURSING_TICKS = 90;
+/** Shared by carry's step 4 (added M12) — see the case 'carry' block. */
+const FEED_LINGER_TICKS = 40;
+/**
+ * Hunger relief per tick per baby in reach during the nursing step only
+ * (M10; retuned M12). Retuned so total relief per hold still nets to
+ * ≈0.48 — matching the pre-M12 80-tick hold's 80 × 0.006 — despite the
+ * hold growing to a 160-tick settle/nurse/linger sequence in which only
+ * 90 ticks (the nursing step) actually feed: 0.48 / NURSING_TICKS.
+ */
+const NURSE_HUNGER_RATE = 0.48 / NURSING_TICKS;
 /** How often (in nurse-hold ticks) a nursed baby emits a feed-beat mote. */
 const NURSE_MOTE_TICKS = 18;
 /** How long a carry parent stands at the food spot before heading home (M11). */
@@ -118,6 +157,54 @@ export function socializeRing(partnerPos: Vec2, id: number, landing: Medium): Ve
     y: partnerPos.y + Math.sin(idOffsetAngle(id)) * SOCIAL_RANGE * 0.45,
   };
   return nearestRestable(landing, raw);
+}
+
+/**
+ * The point on a ring of radius FEED_CONTACT_RANGE around `parentPos` a
+ * baby heads for during a feeding hold (M12) — modelled line-for-line on
+ * socializeRing above: a deterministic per-id angle (idOffsetAngle), zero
+ * RNG draws, so siblings spread around the parent instead of stacking on
+ * one point. Clamped to legal ground for the same reason socializeRing is —
+ * a raw ring point can fall in the water for a parent standing close to
+ * shore. Replaces family.ts's old two-draw ±25/±18 re-gather scatter for
+ * the in-hold case specifically.
+ */
+export function feedContactRing(parentPos: Vec2, babyId: number, landing: Medium): Vec2 {
+  const raw = {
+    x: parentPos.x + Math.cos(idOffsetAngle(babyId)) * FEED_CONTACT_RANGE,
+    y: parentPos.y + Math.sin(idOffsetAngle(babyId)) * FEED_CONTACT_RANGE,
+  };
+  return nearestRestable(landing, raw);
+}
+
+/**
+ * The feeding hold's "meeting" (M12): every tick of a holding step, the
+ * parent turns toward its nearest eligible baby (within FEED_RANGE) and
+ * every baby already in contact (within FEED_CONTACT_RANGE) turns back to
+ * face the parent. Deterministic, zero RNG draws — turnToward does the
+ * actual work; this just picks who faces whom.
+ */
+function applyFeedFacing(state: WorldState, parent: Creature): void {
+  let nearest: Creature | undefined;
+  let nearestDist = Infinity;
+  for (const other of state.creatures) {
+    if (other.familyId === null || other.familyId !== parent.familyId || other.stage !== 'baby') {
+      continue;
+    }
+    const d = Math.hypot(other.pos.x - parent.pos.x, other.pos.y - parent.pos.y);
+    if (d <= FEED_RANGE && d < nearestDist) {
+      nearestDist = d;
+      nearest = other;
+    }
+    if (d <= FEED_CONTACT_RANGE) {
+      const bearing = Math.atan2(parent.pos.y - other.pos.y, parent.pos.x - other.pos.x);
+      other.heading = turnToward(other.heading, bearing, FEED_TURN);
+    }
+  }
+  if (nearest) {
+    const bearing = Math.atan2(nearest.pos.y - parent.pos.y, nearest.pos.x - parent.pos.x);
+    parent.heading = turnToward(parent.heading, bearing, FEED_TURN);
+  }
 }
 
 /** Centroid of same-species creatures other than `c` (herd species only call sites). */
@@ -339,20 +426,44 @@ export function applyActivity(
       const feedMode = p.reproduction.feedMode; // reuse the in-scope species params
       switch (feedMode) {
         case 'nurse': {
-          if (c.activity.step === 1) {
-            // Stationary nursing hold: no travel, just a per-tick hunger
-            // decay for every family baby within reach (deterministic
-            // arithmetic, zero RNG draws). `activity.ticks` was reset to 0
-            // on arrival below, so it now counts the hold itself directly;
-            // `targetId` is never repurposed and keeps meaning "home id"
-            // for the whole activity — a pre-M10 save landing mid-hold on
-            // load must not be misread as a tick count (it isn't one).
+          if (c.activity.step === 0 || c.activity.step === undefined) {
+            // Step 0: go straight home — a nursing mother doesn't fetch food
+            // afield first (no fetch trek, no RNG draws).
+            const home = state.homes.find((h) => h.id === c.activity.targetId);
+            if (!home) {
+              startActivity(state, c, 'idle');
+              break;
+            }
+            const remaining = moveToward(c, home.pos, speedFor(c.species, c.stage), medium, landing);
+            if (remaining < 0) {
+              startActivity(state, c, 'idle'); // refused snap — no safety net today
+              break;
+            }
+            if (remaining <= ARRIVE_DIST) {
+              c.activity.step = 1;
+              c.activity.ticks = 0; // the settle step starts fresh; targetId still means home id
+            }
+            break;
+          }
+
+          // Steps 1 (gather & settle), 2 (nursing), 3 (satisfied linger,
+          // M12): a stationary holding sequence at home, no travel.
+          // `activity.ticks` was reset to 0 on each step's arrival, so it
+          // counts that step directly; `targetId` is never repurposed and
+          // keeps meaning "home id" for the whole activity — a pre-M10 save
+          // landing mid-hold on load must not be misread as a tick count
+          // (it isn't one). The parent-baby facing behavior runs every tick
+          // of all three steps (deterministic, zero RNG draws); only step 2
+          // actually relieves hunger.
+          applyFeedFacing(state, c);
+
+          if (c.activity.step === 2) {
             for (const other of state.creatures) {
               if (
                 other.familyId !== null &&
                 other.familyId === c.familyId &&
                 other.stage === 'baby' &&
-                Math.hypot(other.pos.x - c.pos.x, other.pos.y - c.pos.y) <= FEED_RANGE
+                Math.hypot(other.pos.x - c.pos.x, other.pos.y - c.pos.y) <= FEED_CONTACT_RANGE
               ) {
                 other.needs.hunger = clamp01(other.needs.hunger - NURSE_HUNGER_RATE);
                 // Stagger the feed-beat mote per baby via an id-hash offset
@@ -369,26 +480,20 @@ export function applyActivity(
                 }
               }
             }
-            if (c.activity.ticks >= c.activity.minTicks) {
+          }
+
+          let stepTicks: number;
+          if (c.activity.step === 1) stepTicks = NURSE_SETTLE_TICKS;
+          else if (c.activity.step === 2) stepTicks = NURSING_TICKS;
+          else stepTicks = FEED_LINGER_TICKS;
+
+          if (c.activity.ticks >= stepTicks) {
+            if (c.activity.step === 3) {
               startActivity(state, c, 'idle');
+            } else {
+              c.activity.step = c.activity.step + 1;
+              c.activity.ticks = 0;
             }
-            break;
-          }
-          // Step 0: go straight home — a nursing mother doesn't fetch food
-          // afield first (no fetch trek, no RNG draws).
-          const home = state.homes.find((h) => h.id === c.activity.targetId);
-          if (!home) {
-            startActivity(state, c, 'idle');
-            break;
-          }
-          const remaining = moveToward(c, home.pos, speedFor(c.species, c.stage), medium, landing);
-          if (remaining < 0) {
-            startActivity(state, c, 'idle'); // refused snap — no safety net today
-            break;
-          }
-          if (remaining <= ARRIVE_DIST) {
-            c.activity.step = 1;
-            c.activity.ticks = 0; // the hold starts fresh; targetId still means home id
           }
           break;
         }
@@ -461,52 +566,71 @@ export function applyActivity(
             c.activity.ticks = 0; // fall through: the delivery hold below fires this same tick
           }
 
+          // By this point step is 3 (deliver) or 4 (satisfied linger,
+          // M12) — both are stationary holding steps at the nest, so the
+          // parent-baby facing behavior runs throughout (same mechanic as
+          // the nurse hold above; deterministic, zero RNG draws).
+          applyFeedFacing(state, c);
+
           // Step 3: a stationary delivery hold at the nest. Every
           // DELIVER_INTERVAL ticks (the fall-through above means the first
           // delivery fires immediately at ticks === 0), find the hungriest
-          // family baby within FEED_RANGE whose hunger exceeds SATISFIED —
-          // array order with a strict `>` while tracking the max, so ties
-          // resolve to array order and no RNG is drawn — and feed it one
-          // DELIVER_PORTION. Ends when nobody is left to feed, or after
-          // DELIVER_MAX_TICKS as a safety net.
-          if (c.activity.ticks % DELIVER_INTERVAL === 0) {
-            let hungriest: Creature | undefined;
-            let maxHunger = -Infinity;
-            for (const other of state.creatures) {
-              if (
-                other.familyId !== null &&
-                other.familyId === c.familyId &&
-                other.stage === 'baby' &&
-                other.needs.hunger > SATISFIED &&
-                other.needs.hunger > maxHunger &&
-                Math.hypot(other.pos.x - c.pos.x, other.pos.y - c.pos.y) <= FEED_RANGE
-              ) {
-                maxHunger = other.needs.hunger;
-                hungriest = other;
+          // family baby within FEED_CONTACT_RANGE whose hunger exceeds
+          // SATISFIED — array order with a strict `>` while tracking the
+          // max, so ties resolve to array order and no RNG is drawn — and
+          // feed it one DELIVER_PORTION. Ends (into step 4, the linger)
+          // when nobody is left to feed, or after DELIVER_MAX_TICKS as a
+          // safety net.
+          if (c.activity.step === 3) {
+            if (c.activity.ticks % DELIVER_INTERVAL === 0) {
+              let hungriest: Creature | undefined;
+              let maxHunger = -Infinity;
+              for (const other of state.creatures) {
+                if (
+                  other.familyId !== null &&
+                  other.familyId === c.familyId &&
+                  other.stage === 'baby' &&
+                  other.needs.hunger > SATISFIED &&
+                  other.needs.hunger > maxHunger &&
+                  Math.hypot(other.pos.x - c.pos.x, other.pos.y - c.pos.y) <= FEED_CONTACT_RANGE
+                ) {
+                  maxHunger = other.needs.hunger;
+                  hungriest = other;
+                }
               }
-            }
-            if (!hungriest) {
-              // Don't give up on the very first scan (ticks === 0): that
-              // scan runs on the same tick the parent stepped 2 -> 3, before
-              // this tick's familySystem had a chance to see the parent
-              // delivering and tighten the baby leash (Sim.ts runs
-              // familySystem before applyActivity, so `deliveringParent` was
-              // still undefined a moment ago). Give the tightened leash at
-              // least one more tick to pull a straggler into FEED_RANGE
-              // before bailing — DELIVER_MAX_TICKS remains the real timeout.
-              if (c.activity.ticks > 0) {
-                startActivity(state, c, 'idle');
+              if (!hungriest) {
+                // Don't give up on the very first scan (ticks === 0): that
+                // scan runs on the same tick the parent stepped 2 -> 3,
+                // before this tick's familySystem had a chance to see the
+                // parent delivering and tighten the baby leash (Sim.ts runs
+                // familySystem before applyActivity, so `deliveringParent`
+                // was still undefined a moment ago). Give the tightened
+                // leash at least one more tick to pull a straggler into
+                // FEED_CONTACT_RANGE before bailing — DELIVER_MAX_TICKS
+                // remains the real timeout.
+                if (c.activity.ticks > 0) {
+                  c.activity.step = 4;
+                  c.activity.ticks = 0; // satisfied linger starts fresh
+                }
+                break;
               }
-              break;
+              hungriest.needs.hunger = clamp01(hungriest.needs.hunger - DELIVER_PORTION);
+              scratch?.feedings.push({
+                babyId: hungriest.id,
+                parentId: c.id,
+                pos: { x: hungriest.pos.x, y: hungriest.pos.y },
+              });
             }
-            hungriest.needs.hunger = clamp01(hungriest.needs.hunger - DELIVER_PORTION);
-            scratch?.feedings.push({
-              babyId: hungriest.id,
-              parentId: c.id,
-              pos: { x: hungriest.pos.x, y: hungriest.pos.y },
-            });
+            if (c.activity.ticks >= DELIVER_MAX_TICKS) {
+              c.activity.step = 4;
+              c.activity.ticks = 0; // satisfied linger starts fresh
+            }
+            break;
           }
-          if (c.activity.ticks >= DELIVER_MAX_TICKS) {
+
+          // Step 4 (M12): a satisfied linger, mirroring the nurse hold's
+          // step 3 — the meeting holds a moment before releasing.
+          if (c.activity.ticks >= FEED_LINGER_TICKS) {
             startActivity(state, c, 'idle');
           }
           break;
