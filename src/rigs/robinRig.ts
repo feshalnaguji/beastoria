@@ -322,5 +322,39 @@ export const robinRig: CreatureRig = {
         { partId: 'body', sy: [{ t: 0, v: 0.85 }, { t: 1, v: 0.85 }], py: [{ t: 0, v: 3 }, { t: 1, v: 3 }] },
       ],
     },
+    feedGive: {
+      // Played by the parent during a feeding interaction: the head/beak
+      // lowers toward a ground-level meeting point — a single gentle dip
+      // and hold, unlike 'eat''s quick repeated peck-peck (M12 task 2).
+      durationMs: 700,
+      tracks: [
+        {
+          partId: 'head',
+          rot: [
+            { t: 0, v: 0 },
+            { t: 0.35, v: 0.55 },
+            { t: 0.65, v: 0.55 },
+            { t: 1, v: 0 },
+          ],
+        },
+      ],
+    },
+    feedTake: {
+      // Played by the baby (chick) during a feeding interaction: the head
+      // stretches/gapes up to meet the parent's beak partway — the mirror
+      // image of 'feedGive' (M12 task 2).
+      durationMs: 650,
+      tracks: [
+        {
+          partId: 'head',
+          rot: [
+            { t: 0, v: 0 },
+            { t: 0.35, v: -0.45 },
+            { t: 0.65, v: -0.45 },
+            { t: 1, v: 0 },
+          ],
+        },
+      ],
+    },
   },
 };

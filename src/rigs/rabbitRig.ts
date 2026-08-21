@@ -328,5 +328,53 @@ export const rabbitRig: CreatureRig = {
         },
       ],
     },
+    feedGive: {
+      // Played by the parent during a feeding interaction: a gentle
+      // downward lean of the head toward a ground-level meeting point —
+      // less than a full 'eat' dip, held while the young one arrives
+      // (M12 task 2). Loop-safe like every clip in this file.
+      durationMs: 900,
+      tracks: [
+        {
+          partId: 'head',
+          rot: [
+            { t: 0, v: 0 },
+            { t: 0.35, v: 0.5 },
+            { t: 0.65, v: 0.5 },
+            { t: 1, v: 0 },
+          ],
+          py: [
+            { t: 0, v: 0 },
+            { t: 0.35, v: 4 },
+            { t: 0.65, v: 4 },
+            { t: 1, v: 0 },
+          ],
+        },
+      ],
+    },
+    feedTake: {
+      // Played by the baby during a feeding interaction: the head stretches
+      // up and forward from its (smaller, stage-scaled) resting height to
+      // meet the parent partway — the mirror image of 'feedGive' (M12
+      // task 2).
+      durationMs: 850,
+      tracks: [
+        {
+          partId: 'head',
+          rot: [
+            { t: 0, v: 0 },
+            { t: 0.35, v: -0.4 },
+            { t: 0.65, v: -0.4 },
+            { t: 1, v: 0 },
+          ],
+          py: [
+            { t: 0, v: 0 },
+            { t: 0.35, v: -5 },
+            { t: 0.65, v: -5 },
+            { t: 1, v: 0 },
+          ],
+        },
+      ],
+    },
   },
 };

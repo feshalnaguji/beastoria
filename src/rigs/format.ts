@@ -14,8 +14,16 @@ export type CoreClipName = 'idle' | 'walk' | 'sleep' | 'eat' | 'social' | 'carry
  * Presentation-only locomotion clips a few species add on top (M9 task 4):
  * 'flap' for the three air-medium fliers (robin/owl/phoenix), 'swim' for the
  * amphibious duck. Optional per rig — most species never define these.
+ *
+ * 'feedGive' / 'feedTake' (M12 task 2) are the two halves of one feeding
+ * gesture: a parent plays 'feedGive' to lower its head/neck toward a
+ * ground-level meeting point, and a baby plays 'feedTake' to stretch its
+ * head/neck up to meet it partway. They are optional (not CoreClipName) so
+ * only the four Thread-C rigs (rabbit/deer/robin/kangaroo) need author them
+ * now; every other rig falls back to 'sit'/'eat' via clipFor (Task 3) until
+ * M13 completes the set.
  */
-export type ExtraClipName = 'flap' | 'swim';
+export type ExtraClipName = 'flap' | 'swim' | 'feedGive' | 'feedTake';
 export type ClipName = CoreClipName | ExtraClipName;
 
 /** t is 0..1 across the clip; values interpolate smoothly and loop. */

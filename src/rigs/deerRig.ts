@@ -138,5 +138,40 @@ export const deerRig: CreatureRig = {
         { partId: 'body', sy: [{ t: 0, v: 0.85 }, { t: 1, v: 0.85 }], py: [{ t: 0, v: 3 }, { t: 1, v: 3 }] },
       ],
     },
+    feedGive: {
+      // Played by the parent during a feeding interaction: the neck lowers
+      // toward a ground-level meeting point — a gentle lean, well short of
+      // 'eat''s full 1.05 rad graze — and holds while the fawn arrives
+      // (M12 task 2).
+      durationMs: 1200,
+      tracks: [
+        {
+          partId: 'neck',
+          rot: [
+            { t: 0, v: 0 },
+            { t: 0.35, v: 0.75 },
+            { t: 0.65, v: 0.75 },
+            { t: 1, v: 0 },
+          ],
+        },
+      ],
+    },
+    feedTake: {
+      // Played by the baby (fawn) during a feeding interaction: the neck
+      // stretches up beyond its resting height to meet the parent's lowered
+      // head partway — the mirror image of 'feedGive' (M12 task 2).
+      durationMs: 1100,
+      tracks: [
+        {
+          partId: 'neck',
+          rot: [
+            { t: 0, v: 0 },
+            { t: 0.35, v: -0.45 },
+            { t: 0.65, v: -0.45 },
+            { t: 1, v: 0 },
+          ],
+        },
+      ],
+    },
   },
 };

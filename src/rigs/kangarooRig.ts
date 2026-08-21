@@ -373,5 +373,54 @@ export const kangarooRig: CreatureRig = {
         { partId: 'tail', rot: [{ t: 0, v: 0.2 }, { t: 1, v: 0.2 }] },
       ],
     },
+    feedGive: {
+      // Played by the parent during a feeding interaction: the head lowers
+      // toward a ground-level meeting point — a gentle lean, well short of
+      // 'eat''s 0.55 rad graze dip — and holds while the joey arrives (M12
+      // task 2). Distinct from the pouch/'sit' nurse-hold gating (M11):
+      // this is the real baby kangaroo, walking up to be fed at ground
+      // level, not the decorative pouch joey.
+      durationMs: 900,
+      tracks: [
+        {
+          partId: 'head',
+          rot: [
+            { t: 0, v: 0 },
+            { t: 0.35, v: 0.4 },
+            { t: 0.65, v: 0.4 },
+            { t: 1, v: 0 },
+          ],
+          py: [
+            { t: 0, v: 0 },
+            { t: 0.35, v: 3 },
+            { t: 0.65, v: 3 },
+            { t: 1, v: 0 },
+          ],
+        },
+      ],
+    },
+    feedTake: {
+      // Played by the baby kangaroo during a feeding interaction: the head
+      // stretches up and forward from its resting height to meet the
+      // parent partway — the mirror image of 'feedGive' (M12 task 2).
+      durationMs: 850,
+      tracks: [
+        {
+          partId: 'head',
+          rot: [
+            { t: 0, v: 0 },
+            { t: 0.35, v: -0.35 },
+            { t: 0.65, v: -0.35 },
+            { t: 1, v: 0 },
+          ],
+          py: [
+            { t: 0, v: 0 },
+            { t: 0.35, v: -4 },
+            { t: 0.65, v: -4 },
+            { t: 1, v: 0 },
+          ],
+        },
+      ],
+    },
   },
 };
