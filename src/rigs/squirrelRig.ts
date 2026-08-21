@@ -81,7 +81,7 @@ export const squirrelRig: CreatureRig = {
       y: 4,
       z: 3,
       shapes: [{ kind: 'ellipse', x: 0, y: 0, rx: 2.6, ry: 3, fill: { color: NUT } }],
-      hideInClips: ['idle', 'walk', 'sleep', 'eat', 'social', 'sit'],
+      hideInClips: ['idle', 'walk', 'sleep', 'eat', 'social', 'sit', 'feedGive', 'feedTake'],
     },
     {
       id: 'earL',
@@ -278,6 +278,79 @@ export const squirrelRig: CreatureRig = {
       tracks: [
         { partId: 'body', sy: [{ t: 0, v: 0.85 }, { t: 1, v: 0.85 }], py: [{ t: 0, v: 3 }, { t: 1, v: 3 }] },
         { partId: 'tail', rot: [{ t: 0, v: 0.3 }, { t: 1, v: 0.3 }] },
+      ],
+    },
+    feedGive: {
+      // Played by the mother during a feeding interaction: a gentle downward
+      // lean of the head toward the kits — shallower than 'eat's graze dip
+      // (rot 0.5/py 3) and held, not bouncy, since this is nursing rather
+      // than nibbling (M13 task 12, modelled on rabbitRig.ts feedGive). The
+      // squirrel has no `muzzle` part, so the secondary flourish the rabbit
+      // gives its nose goes to `tail` instead — the plume settles into a
+      // raised, held curl while she nurses.
+      durationMs: 900,
+      tracks: [
+        {
+          partId: 'head',
+          rot: [
+            { t: 0, v: 0 },
+            { t: 0.35, v: 0.3 },
+            { t: 0.65, v: 0.3 },
+            { t: 1, v: 0 },
+          ],
+          py: [
+            { t: 0, v: 0 },
+            { t: 0.35, v: 2 },
+            { t: 0.65, v: 2 },
+            { t: 1, v: 0 },
+          ],
+        },
+        {
+          partId: 'tail',
+          rot: [
+            { t: 0, v: 0.3 },
+            { t: 0.35, v: 0.55 },
+            { t: 0.65, v: 0.55 },
+            { t: 1, v: 0.3 },
+          ],
+        },
+      ],
+    },
+    feedTake: {
+      // Played by the kit during a feeding interaction: the head stretches
+      // up from its (stage-scaled) resting height to meet the mother partway
+      // — the mirror of 'feedGive' (M13 task 12, modelled on rabbitRig.ts
+      // feedTake). The tail carries the kit's eagerness instead of a
+      // muzzle-nibble: a quick, low double-flick rather than the mother's
+      // held curl.
+      durationMs: 850,
+      tracks: [
+        {
+          partId: 'head',
+          rot: [
+            { t: 0, v: 0 },
+            { t: 0.35, v: -0.3 },
+            { t: 0.65, v: -0.3 },
+            { t: 1, v: 0 },
+          ],
+          py: [
+            { t: 0, v: 0 },
+            { t: 0.35, v: -3 },
+            { t: 0.65, v: -3 },
+            { t: 1, v: 0 },
+          ],
+        },
+        {
+          partId: 'tail',
+          rot: [
+            { t: 0, v: 0 },
+            { t: 0.3, v: -0.3 },
+            { t: 0.38, v: 0 },
+            { t: 0.46, v: -0.3 },
+            { t: 0.54, v: 0 },
+            { t: 1, v: 0 },
+          ],
+        },
       ],
     },
   },
