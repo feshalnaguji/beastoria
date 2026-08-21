@@ -27,9 +27,18 @@
 import { describe, expect, it } from 'vitest';
 import { applyActivity, idOffsetAngle, socializeRing } from '../src/sim/behaviors';
 import { getClock } from '../src/sim/clock';
+import { familySystem } from '../src/sim/family';
 import { moveToward, wanderStep } from '../src/sim/movement';
+import { tick } from '../src/sim/Sim';
 import { speedFor } from '../src/sim/species';
-import { createWorld, type Creature, type SpeciesId, type Vec2, type WorldState } from '../src/sim/state';
+import {
+  createWorld,
+  type Creature,
+  type Family,
+  type SpeciesId,
+  type Vec2,
+  type WorldState,
+} from '../src/sim/state';
 import { isWater, nearestRestable, POND } from '../src/sim/valley';
 
 /** Mirrors the constant in behaviors.ts (module-private by design). */
@@ -287,4 +296,190 @@ describe('no creature walks on water', () => {
     // And once ashore, nearestRestable confirms it is genuinely legal land.
     expect(isWater(nearestRestable('land', c.pos))).toBe(false);
   });
+});
+
+/**
+ * M13 Task 1 (RED): the measured 'gather' freeze. `'gather'` (state.ts's
+ * ActivityId union) serves three purposes: (1) a baby leashed back toward
+ * its family's home/feeding parent, (2) parents pottering during 'nesting',
+ * (3) kin keeping a mourning vigil around a passing elder. behaviors.ts's
+ * `case 'gather'` (~707-713) just walks toward the target with no arrival
+ * check, and family.ts's baby-leash assignment (~528-547) only ever WRITES
+ * `'gather'` when the child isn't already in it — there is no counterpart
+ * that ever reads "arrived, release" for cases (1)/(2). Case (3) is the one
+ * deliberate exception: it is supposed to hold for the full
+ * PASS_GATHER_TICKS and is released explicitly by removeCreature
+ * (family.ts:291-296) once the memorial forms. A prior exploration (not
+ * committed as a test) measured ~25% of the population permanently frozen
+ * in 'gather' over a 30,000-tick run, with streaks up to ~28,000 ticks.
+ *
+ * 1a and 1c are expected to FAIL right now — that failure IS the bug this
+ * task exists to pin down. Task 2 (a different implementer) makes them
+ * green. 1b is a regression pin for the mourning vigil, which is NOT
+ * broken, and is expected to PASS as-is.
+ */
+describe('M13: the gather freeze bug (Thread 4)', () => {
+  /** Literal copy of family.ts's module-private constant (same convention
+   * as tests/pouch.test.ts): an accidental change to the real value should
+   * fail a test here, not silently reshape what "vigil" means. */
+  const PASS_GATHER_TICKS = 200;
+  /** Generous cap: a real cross-valley chase is a few hundred ticks; the
+   * measured bug produced streaks up to ~28,000. */
+  const MAX_GATHER_STREAK = 1200;
+
+  function bareWorld(seed: number): WorldState {
+    const state = createWorld(seed);
+    state.creatures = [];
+    state.families = [];
+    for (const h of state.homes) h.familyId = null;
+    return state;
+  }
+
+  /**
+   * A minimal rabbit family already in 'rearing', its home claimed, with one
+   * baby positioned WELL WITHIN BABY_LEASH of the home — i.e. already
+   * "arrived" — for test 1a to latch into 'gather' by hand and watch whether
+   * the family system ever lets it back out.
+   */
+  function rearingBabyWorld(seed: number): {
+    state: WorldState;
+    mother: Creature;
+    father: Creature;
+    baby: Creature;
+    fam: Family;
+  } {
+    const state = bareWorld(seed);
+    const home = state.homes.find((h) => h.kind === 'burrow');
+    if (!home) throw new Error('no burrow home in this valley');
+
+    const mother = makeCreature(1, 'rabbit', { ...home.pos });
+    mother.sex = 'f';
+    const father = makeCreature(2, 'rabbit', { x: home.pos.x + 10, y: home.pos.y });
+    father.sex = 'm';
+    // 20 units from home: comfortably inside BABY_LEASH (140) — "arrived".
+    const baby = makeCreature(3, 'rabbit', { x: home.pos.x + 20, y: home.pos.y });
+    baby.stage = 'baby';
+
+    const fam: Family = {
+      id: state.nextId++,
+      species: 'rabbit',
+      parentIds: [mother.id, father.id],
+      childIds: [baby.id],
+      homeId: home.id,
+      phase: 'rearing',
+      phaseTicks: 0,
+      dutyParent: 0,
+    };
+    state.families.push(fam);
+    mother.familyId = fam.id;
+    father.familyId = fam.id;
+    baby.familyId = fam.id;
+    home.familyId = fam.id;
+    state.creatures.push(mother, father, baby);
+    return { state, mother, father, baby, fam };
+  }
+
+  /**
+   * Two rabbits (one about to pass) sharing a real Family entry in
+   * state.families — required for removeCreature's mourner-release loop
+   * (family.ts:291-296) to have anything to look up: that loop is gated
+   * behind `fam` actually being found in state.families, not merely on
+   * matching familyId.
+   */
+  function mourningWorld(seed: number): { state: WorldState; elder: Creature; kin: Creature; fam: Family } {
+    const state = bareWorld(seed);
+    const elder = makeCreature(1, 'rabbit', { x: 2000, y: 1500 });
+    elder.ageTicks = elder.lifespanTicks + 1; // crosses the passing threshold on the next tick
+    const kin = makeCreature(2, 'rabbit', { x: 2050, y: 1500 }); // well inside PASS_GATHER_RANGE (700)
+
+    const fam: Family = {
+      id: state.nextId++,
+      species: 'rabbit',
+      parentIds: [elder.id, kin.id],
+      childIds: [],
+      homeId: null,
+      phase: 'emptyNest',
+      phaseTicks: 0,
+      dutyParent: 0,
+    };
+    state.families.push(fam);
+    elder.familyId = fam.id;
+    kin.familyId = fam.id;
+    state.creatures.push(elder, kin);
+    return { state, elder, kin, fam };
+  }
+
+  it('1a) a baby already arrived within the leash stays latched in gather forever [EXPECTED RED]', () => {
+    const { state, baby } = rearingBabyWorld(9);
+    baby.activity = { id: 'gather', ticks: 5, minTicks: 30, targetPos: { ...baby.pos } };
+
+    familySystem(state);
+
+    // This is the bug: nothing in family.ts's baby-leash code (nor
+    // behaviors.ts's 'gather' case) ever releases an already-arrived baby.
+    // Once Task 2 fixes it, this assertion should pass.
+    expect(baby.activity.id).not.toBe('gather');
+  });
+
+  it('1b) the mourning vigil latches for its full PASS_GATHER_TICKS and is released only when the memorial forms [PIN — must stay green]', () => {
+    const { state, elder, kin } = mourningWorld(4);
+
+    tick(state, []); // tick 1: elder crosses the passing threshold; kin latches into 'gather'
+    expect(elder.activity.id).toBe('pass');
+    expect(kin.activity.id).toBe('gather');
+    expect(kin.activity.minTicks).toBe(PASS_GATHER_TICKS);
+
+    // Well short of the full vigil: kin must still be latched.
+    for (let t = 0; t < 150; t++) tick(state, []); // total 151 ticks: elder.activity.ticks = 151 < 200
+    expect(state.creatures.includes(elder)).toBe(true);
+    expect(kin.activity.id).toBe('gather');
+
+    // Carry the vigil past PASS_GATHER_TICKS: the elder's passing completes
+    // and removeCreature releases the mourner.
+    for (let t = 0; t < 60; t++) tick(state, []); // total 211 ticks, past the 201 needed to complete
+    expect(state.creatures.includes(elder)).toBe(false);
+    expect(kin.activity.id).not.toBe('gather');
+  });
+
+  it(
+    '1c) property: no creature spends an unbounded streak in a non-vigil gather over a long run [EXPECTED RED]',
+    () => {
+      const seeds = [11, 23, 37];
+      const TICKS = 30000;
+      const perSeedResults: { seed: number; maxStreak: number; endFraction: number }[] = [];
+
+      for (const seed of seeds) {
+        const state = createWorld(seed);
+        const streaks = new Map<number, number>();
+        let maxStreak = 0;
+
+        for (let t = 0; t < TICKS; t++) {
+          tick(state, []);
+          for (const c of state.creatures) {
+            const nonVigilGather = c.activity.id === 'gather' && c.activity.minTicks < PASS_GATHER_TICKS;
+            if (nonVigilGather) {
+              const next = (streaks.get(c.id) ?? 0) + 1;
+              streaks.set(c.id, next);
+              if (next > maxStreak) maxStreak = next;
+            } else if (streaks.has(c.id)) {
+              streaks.set(c.id, 0);
+            }
+          }
+        }
+
+        const total = state.creatures.length;
+        const stuckAtEnd = state.creatures.filter(
+          (c) => c.activity.id === 'gather' && c.activity.minTicks < PASS_GATHER_TICKS,
+        ).length;
+        const endFraction = total === 0 ? 0 : stuckAtEnd / total;
+        perSeedResults.push({ seed, maxStreak, endFraction });
+      }
+
+      for (const { seed, maxStreak, endFraction } of perSeedResults) {
+        expect(maxStreak, `seed ${seed}: max non-vigil gather streak`).toBeLessThan(MAX_GATHER_STREAK);
+        expect(endFraction, `seed ${seed}: fraction still stuck in gather at the end`).toBeLessThan(0.05);
+      }
+    },
+    120000,
+  );
 });
