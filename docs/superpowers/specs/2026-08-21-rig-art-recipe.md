@@ -188,6 +188,12 @@ hock. Rotation happens around the part's attach point, so a two-part limb *bends
 one-ellipse stub can only *swing*. Single stub ellipses are the reason every quadruped in the
 valley currently walks the same way.
 
+**Rotation sign, once, because it trips everyone.** Pixi's `+rotation` is clockwise (screen `+y` is
+down), so for a part whose mass hangs **down** from its pivot — every leg — `+rot` swings the far end
+**rearward** (`−x`), and for a part whose mass rises **up** from its pivot — every ear — the same
+`+rot` swings the tip **forward** (`+x`). Legs and ears therefore read with opposite signs in the
+same clip. Write the convention into a comment in each rig you author.
+
 **The rule, part B — gait character, not a generic trot.** Rabbits, hares and kangaroos **bound**:
 both hind legs move together, hind feet swing past the forefeet, and there is a flight phase. Deer
 **trot**: diagonal pairs, no flight phase, minimal vertical travel. Small birds **hop**: both feet
@@ -301,7 +307,43 @@ most easily drops on the floor:
   up and forward. If the head is restructured into several parts, reproduce the gesture on whatever
   part now plays the head's role — never leave a track pointing at a part id that no longer exists,
   and never quietly delete the clip.
-- **`food` is carry-only.** The carried-morsel part stays hidden in every clip but `carry` via
-  `hideInClips` — including the new `feedGive` / `feedTake`, so a nursing mother is never drawn
-  holding a berry in her mouth.
+- **The `food` prop's visibility depends on the species' `feedMode`** — this one is *not* a blanket
+  rule, and getting it backwards is an easy, invisible mistake. See the table below.
 - **All four life stages styled**, with every `partScale` key naming a real part.
+
+### The `food` prop and `hideInClips` — conditioned on `feedMode`
+
+The carried-morsel part is hidden during `carry`'s siblings via `hideInClips`, but **whether it
+shows during `feedGive` is decided by the species' `reproduction.feedMode` in `src/sim/species.ts`,
+not by a universal rule.** The reason is that `feedGive` means a different physical moment for each
+mode:
+
+| `feedMode` | species | `feedGive` is… | `food` during `feedGive` | `food` during `feedTake` |
+| --- | --- | --- | --- | --- |
+| `nurse` | rabbit, deer, squirrel, kangaroo | the **nursing hold** — milk, no morsel | **hidden** | **hidden** |
+| `carry` | robin, duck, owl, dodo, phoenix | the **delivery hold** — the morsel being handed over | **visible** | **hidden** |
+| `self` | koi, frog, turtle | never plays (see below) | n/a — keep carry-only | n/a |
+
+So the `hideInClips` list differs by mode:
+
+```ts
+// nurse-mode rig (a doe must never nurse with a berry in her mouth):
+hideInClips: ['idle', 'walk', 'sleep', 'eat', 'social', 'sit', 'feedGive', 'feedTake'],
+
+// carry-mode rig (the morsel IS the feeding beat — hiding it is backwards):
+hideInClips: ['idle', 'walk', 'sleep', 'eat', 'social', 'sit', 'feedTake'],
+```
+
+Both lists still hide the prop during `feedTake`, because `feedTake` is played by the **baby**, and
+the baby is never the one holding food.
+
+**Why `self`-mode species don't need to care.** `Renderer.ts` computes
+`giving = view.nursing || (feedMode === 'carry' && activityId === 'feedYoung' && step === 3)`, so a
+`self`-mode species can never satisfy either branch and never plays `feedGive` at all. Those rigs
+need not author the feed clips; if they do, leave the prop carry-only.
+
+**A limit worth knowing before you reach for it.** `hideInClips` is keyed by *clip*, not by
+`step` — so it cannot express "visible while the parent offers the morsel, gone the instant the
+young one takes it." If a future task wants the morsel to vanish mid-hold, that is a renderer-side
+per-frame override, of the kind `Renderer.ts` already applies to keep a flying carrier's food
+visible during `flap`. Do not try to encode it in the rig.
