@@ -18,6 +18,7 @@ import {
 } from './behaviors';
 import { TICKS_PER_DAY } from './clock';
 import { emit } from './events';
+import { turnToward } from './movement';
 import { nextRange } from './rng';
 import { landingMediumOf, SPECIES } from './species';
 import {
@@ -25,6 +26,7 @@ import {
   type Creature,
   type Family,
   type Home,
+  type Vec2,
   type WorldState,
 } from './state';
 import { spawnCreature } from './state';
@@ -104,6 +106,244 @@ function inGrazeWindow(tick: number, joeyId: number): boolean {
   return (tick + idHash(joeyId)) % POUCH_GRAZE_PERIOD < POUCH_GRAZE_TICKS;
 }
 
+/* ------------------------- pouch mount/dismount errand (M13) ------------------------- */
+/*
+ * Before this, `stepPouch` flipped `joey.carriedBy` the instant distance
+ * <= MOUNT_RANGE (mount) or the graze window opened (dismount) — no
+ * intermediate state either way, so the joey visibly teleported into and
+ * out of the pouch. This section gives both transitions a real, multi-tick
+ * errand — a 'mount' activity id (state.ts) the joey occupies while walking
+ * the last stretch in, pausing, and climbing aboard, and, symmetrically,
+ * while playing a climb-out lead-in before the actual release.
+ *
+ * The dismount itself is preserved bit-for-bit: it still fires on the exact
+ * idHash-phased tick inGrazeWindow already pinned (tests/pouch.test.ts:230-
+ * 254) — the lead-in only adds a visible cue in the ticks immediately
+ * before that tick, never moves the release itself.
+ */
+
+/**
+ * How close the joey must get to its flank point behind its mother's heel
+ * before the climb-in settles (step 0 -> step 1). Well inside MOUNT_RANGE
+ * (60), which stays the radius the WHOLE errand begins at — this is just
+ * "close enough to actually reach up and climb aboard".
+ */
+const CLIMB_RANGE = 18;
+/** Step 1's stationary hold before carriedBy actually flips (M13). */
+const MOUNT_SETTLE_TICKS = 10;
+/**
+ * Step 3's stationary hold once aboard, before resolving to the ordinary
+ * steady riding state (M13) — ~600ms at 1x, matching the render ease; the
+ * eventual end state (still carried, activity 'idle') is exactly today's
+ * old instant-flip end state, just reached a beat later.
+ */
+const MOUNT_RIDE_IN_TICKS = 6;
+/**
+ * How many ticks before the joey's own idHash-phased graze window it plays
+ * a visible "about to climb out" cue, while still fully carried (M13).
+ */
+const DISMOUNT_LEAD_TICKS = 10;
+/**
+ * Safety ceiling on step 0 (the approach): past this many ticks of chasing
+ * a moving flank point, mount anyway if still in reach, rather than let the
+ * errand itself prevent a ride that would have happened under the old
+ * instant-flip code (M13). Step 1 (settle) has no such ceiling of its own —
+ * it always resolves in exactly MOUNT_SETTLE_TICKS once entered, so nothing
+ * downstream of this ceiling can stall indefinitely either.
+ */
+const MOUNT_MAX_TICKS = 120;
+/**
+ * Turn rate (rad/tick) bringing the joey's heading into line with its
+ * mother's during the approach — same gentle rate as behaviors.ts's
+ * FEED_TURN — so there is no visible flip-pop the instant it reparents into
+ * the pouch (the render side depends on the heading already matching hers).
+ */
+const MOUNT_TURN_RATE = 0.12;
+/**
+ * How far behind/below the mother the joey's climb-in flank point sits —
+ * inside CLIMB_RANGE, so simply reaching the (constantly re-derived) flank
+ * point is what satisfies the step 0 -> 1 gate.
+ */
+const FLANK_DIST = 12;
+
+/**
+ * Is this joey in its "about to climb out" lead-in right now — the
+ * DISMOUNT_LEAD_TICKS immediately before its own idHash-phased graze window
+ * (inGrazeWindow) next opens? A pure-arithmetic sibling of inGrazeWindow:
+ * same deterministic phase arithmetic, checking a window shifted earlier.
+ * The two windows never overlap ([period - lead, period) vs [0, graze)), so
+ * a joey is never in both at once, and this draws nothing from the RNG.
+ */
+function inDismountLeadIn(tick: number, joeyId: number): boolean {
+  const phase = (tick + idHash(joeyId)) % POUCH_GRAZE_PERIOD;
+  return phase >= POUCH_GRAZE_PERIOD - DISMOUNT_LEAD_TICKS;
+}
+
+/**
+ * The point just behind/below the mother's heel a climbing-in joey walks
+ * toward — rotated by her heading so it always reads as "behind her",
+ * re-derived every tick since she moves, clamped to legal ground the same
+ * way every other pouch/leash target in this file is.
+ */
+function flankTarget(mother: Creature): Vec2 {
+  const angle = mother.heading + Math.PI * 0.85;
+  const raw = {
+    x: mother.pos.x + Math.cos(angle) * FLANK_DIST,
+    y: mother.pos.y + Math.sin(angle) * FLANK_DIST,
+  };
+  return nearestRestable(landingMediumOf(mother.species), raw);
+}
+
+/**
+ * Actually climb aboard: sets the carry link and moves into the brief
+ * ride-in settle (step 3) — the eventual steady state ('idle', still
+ * carried — today's old end state) is reached once MOUNT_RIDE_IN_TICKS
+ * elapse (stepMounted, below). Draw-free.
+ */
+function mountNow(joey: Creature, mother: Creature): void {
+  joey.carriedBy = mother.id;
+  joey.activity = { id: 'mount', step: 3, ticks: 0, minTicks: 0 };
+}
+
+/**
+ * Release a joey from the mount errand — whether it was already riding, or
+ * still walking the climb-in — back to a free 'idle'. Used wherever the
+ * errand needs to give up cleanly: grown up, mother passing, or (critically)
+ * no living mother left at all to ever complete it — the same freeze class
+ * Thread 4 fixed for 'gather'. 'mount' is in FAMILY_ACTIVITIES too, so
+ * nothing else would ever rescue a joey stranded mid-errand.
+ */
+function releasePouchErrand(joey: Creature): void {
+  if (isCarried(joey)) {
+    dismount(joey);
+    return;
+  }
+  if (joey.activity.id === 'mount') {
+    joey.activity = { id: 'idle', ticks: 0, minTicks: 0 };
+  }
+}
+
+/**
+ * Steps 0 (approach) and 1 (settle) — not yet carried. Every call to this
+ * function is one tick of progress, counted directly against
+ * `joey.activity.ticks` here rather than borrowed from behaviors.ts's own
+ * generic per-tick increment: this errand must advance correctly even when
+ * exercised through familySystem alone, as tests/pouch.test.ts's RNG-draw
+ * suite does (it never calls applyActivity). In ordinary gameplay,
+ * applyActivity's unconditional top-of-function increment also touches this
+ * same field once more per tick — harmless double-counting against a
+ * duration threshold, not a correctness issue; it only means the errand
+ * runs somewhat faster than the raw constants alone would suggest.
+ */
+function stepApproach(
+  joey: Creature,
+  mother: Creature,
+  grazing: boolean,
+  motherIsFeeding: boolean,
+): void {
+  joey.activity.ticks++;
+  const d = Math.hypot(joey.pos.x - mother.pos.x, joey.pos.y - mother.pos.y);
+
+  // Rare aborts, all draw-free: her own graze window opened mid-approach
+  // (don't fight the ordinary graze/leash logic for it — let it take over),
+  // or she has drifted well out of reach.
+  if (grazing || d > MOUNT_RANGE * 2) {
+    onFoot(joey, mother, grazing, motherIsFeeding);
+    return;
+  }
+
+  if (joey.activity.step === 1) {
+    // Settle: stationary, always resolves in exactly MOUNT_SETTLE_TICKS —
+    // no further distance check, since a joey that got this close doesn't
+    // get bumped back out by her taking one more step meanwhile.
+    if (joey.activity.ticks >= MOUNT_SETTLE_TICKS) mountNow(joey, mother);
+    return;
+  }
+
+  // Step 0: the ceiling guarantees the errand can never PREVENT a ride that
+  // would have happened under the old instant-flip code.
+  if (joey.activity.ticks > MOUNT_MAX_TICKS) {
+    if (d <= MOUNT_RANGE) mountNow(joey, mother);
+    else onFoot(joey, mother, grazing, motherIsFeeding);
+    return;
+  }
+
+  // Re-derive the flank point every tick (she moves), and bring the joey's
+  // heading into line with hers during the approach so there is no visible
+  // flip-pop at the instant of reparenting into the pouch.
+  joey.activity.targetPos = flankTarget(mother);
+  joey.heading = turnToward(joey.heading, mother.heading, MOUNT_TURN_RATE);
+  if (d <= CLIMB_RANGE) {
+    joey.activity.step = 1;
+    joey.activity.ticks = 0;
+  }
+}
+
+/**
+ * Steps 2 (climb-out lead-in) and 3 (ride-in), plus the ordinary steady
+ * riding state in between ('idle', still carried) — all while already
+ * carried.
+ */
+function stepMounted(state: WorldState, joey: Creature, grazing: boolean): void {
+  // The graze window opening ends the ride, completely unchanged from
+  // before: on precisely this idHash-phased tick, whatever step the
+  // lead-in was in, with no sim-side position jump — the visible descent
+  // is entirely a render ease, never a change to this tick.
+  if (grazing) {
+    dismount(joey);
+    return;
+  }
+
+  if (joey.activity.id === 'mount' && joey.activity.step === 3) {
+    // Ride-in settle before resolving to the ordinary steady state —
+    // reached ~1.6s after the errand began in total, matching today's old
+    // instant-flip end state exactly (still carried, activity 'idle').
+    if (joey.activity.ticks >= MOUNT_RIDE_IN_TICKS) {
+      joey.activity = { id: 'idle', ticks: 0, minTicks: 0 };
+    }
+    return;
+  }
+
+  if (joey.activity.id === 'mount' && joey.activity.step === 2) return; // already in the lead-in
+
+  // Not yet in the lead-in: is it time? A pure phase check against her own
+  // upcoming graze window — no ticks bookkeeping needed here at all.
+  if (inDismountLeadIn(state.tick, joey.id)) {
+    joey.activity = { id: 'mount', step: 2, ticks: 0, minTicks: 0 };
+  }
+}
+
+/**
+ * On foot: anchored on the mother, with three radii — see the call sites
+ * for what each means. Also the one place that releases a stale 'mount'
+ * errand id that isn't going anywhere (an approach aborted by a graze
+ * window opening, or a distance blowout).
+ */
+function onFoot(joey: Creature, mother: Creature, grazing: boolean, motherIsFeeding: boolean): void {
+  const landing = landingMediumOf(joey.species);
+  const radius = motherIsFeeding ? FEED_CONTACT_RANGE : grazing ? GRAZE_LEASH : MOUNT_RANGE;
+  const d = Math.hypot(joey.pos.x - mother.pos.x, joey.pos.y - mother.pos.y);
+  if (d > radius) {
+    const target = motherIsFeeding
+      ? feedContactRing(mother.pos, joey.id, landing)
+      : nearestRestable(landing, { x: mother.pos.x, y: mother.pos.y });
+    // Re-targeted EVERY tick (unlike the nest leash, which only fires on
+    // crossing the radius): the anchor is a creature that moves, and a joey
+    // chasing where its mother stood a minute ago would never arrive.
+    joey.activity = {
+      id: 'gather',
+      ticks: joey.activity.id === 'gather' ? joey.activity.ticks : 0,
+      minTicks: 0,
+      targetPos: target,
+    };
+  } else if (joey.activity.id === 'gather' || joey.activity.id === 'mount') {
+    // Arrived, or a 'mount' errand that aborted somewhere it doesn't need
+    // to chase from. Explicitly released — nothing else ever lets either
+    // latch out on its own.
+    joey.activity = { id: 'idle', ticks: 0, minTicks: 0 };
+  }
+}
+
 export function familySystem(state: WorldState): void {
   handlePassings(state);
   formPairs(state);
@@ -151,10 +391,11 @@ function dismount(joey: Creature): void {
 
 /**
  * One joey's ride, evaluated once per tick during its family's 'rearing'
- * phase. Mounts, dismounts, and (on foot) leashes the joey to its MOTHER
- * rather than to the nest — the nest is irrelevant while she is carrying it
- * across the valley. Every branch is pure arithmetic on positions, ticks and
- * ids: no RNG draws anywhere on this path.
+ * phase. Mounts (via the multi-tick climb-in errand above), dismounts, and
+ * (on foot) leashes the joey to its MOTHER rather than to the nest — the
+ * nest is irrelevant while she is carrying it across the valley. Every
+ * branch is pure arithmetic on positions, ticks and ids: no RNG draws
+ * anywhere on this path.
  */
 function stepPouch(
   state: WorldState,
@@ -166,54 +407,57 @@ function stepPouch(
     joey.carriedBy = null;
     return;
   }
-  // Grown out of the pouch, or the mother is passing: back on its own feet.
+  // Grown out of the pouch, or the mother is passing: back on its own feet,
+  // whether it was already riding or still mid-errand toward her.
   if (joey.stage !== 'baby' || mother.activity.id === 'pass') {
-    if (isCarried(joey)) dismount(joey);
+    releasePouchErrand(joey);
     return;
   }
 
   const grazing = inGrazeWindow(state.tick, joey.id);
 
   if (isCarried(joey)) {
-    if (joey.carriedBy === mother.id && !grazing) return; // riding on
-    dismount(joey); // the graze window opened (or somebody else had it)
+    if (joey.carriedBy === mother.id) {
+      stepMounted(state, joey, grazing);
+      return;
+    }
+    // An invalid carry link (a stale/ghost id — only the mother ever
+    // legitimately carries): a data-integrity correction, not a genuine
+    // fresh climb-in, so it is fixed directly rather than played as the
+    // visible errand — mirrors the old instant-flip behavior for exactly
+    // this case, which the pinned ghost-link tests hold to one tick.
+    const d = Math.hypot(joey.pos.x - mother.pos.x, joey.pos.y - mother.pos.y);
+    if (!grazing && d <= MOUNT_RANGE) {
+      joey.carriedBy = mother.id;
+      joey.activity = { id: 'idle', ticks: 0, minTicks: 0 };
+    } else {
+      dismount(joey);
+    }
+    return;
+  }
+
+  if (joey.activity.id === 'mount') {
+    stepApproach(joey, mother, grazing, motherIsFeeding);
+    return;
   }
 
   const d = Math.hypot(joey.pos.x - mother.pos.x, joey.pos.y - mother.pos.y);
   if (!grazing && d <= MOUNT_RANGE) {
-    joey.carriedBy = mother.id;
-    // Same draw-free reset as dismount: while carried, selectBehavior returns
-    // immediately, so 'idle' is simply what the joey is doing up there.
-    joey.activity = { id: 'idle', ticks: 0, minTicks: 0 };
+    if (d <= CLIMB_RANGE) {
+      // Already right at her side (e.g. a joey that never left her heel
+      // through a graze cycle): nothing to visibly walk, so it climbs
+      // aboard directly rather than opening an errand with no approach to
+      // show — the errand exists to make a real walk-in visible, not to
+      // impose a settle delay where there was never any distance to close.
+      mountNow(joey, mother);
+    } else {
+      // Begin the climb-in errand (M13) — no more instant flip.
+      joey.activity = { id: 'mount', step: 0, ticks: 0, minTicks: 0, targetPos: flankTarget(mother) };
+    }
     return;
   }
 
-  // On foot. Anchored on the mother, with three radii:
-  //  - she is holding a feeding meeting: the tight contact ring, exactly as
-  //    the ordinary baby leash does, so the joey is fed rather than watching;
-  //  - grazing: GRAZE_LEASH, room to potter and forage around her feet;
-  //  - otherwise: MOUNT_RANGE — it wants back in, so it beelines to her.
-  const landing = landingMediumOf(joey.species);
-  const radius = motherIsFeeding ? FEED_CONTACT_RANGE : grazing ? GRAZE_LEASH : MOUNT_RANGE;
-  if (d > radius) {
-    const target = motherIsFeeding
-      ? feedContactRing(mother.pos, joey.id, landing)
-      : nearestRestable(landing, { x: mother.pos.x, y: mother.pos.y });
-    // Re-targeted EVERY tick (unlike the nest leash, which only fires on
-    // crossing the radius): the anchor is a creature that moves, and a joey
-    // chasing where its mother stood a minute ago would never arrive.
-    joey.activity = {
-      id: 'gather',
-      ticks: joey.activity.id === 'gather' ? joey.activity.ticks : 0,
-      minTicks: 0,
-      targetPos: target,
-    };
-  } else if (joey.activity.id === 'gather') {
-    // Arrived. Explicitly released, because nothing else ever lets a baby out
-    // of 'gather' — selectBehavior skips family activities, and the 'gather'
-    // case in applyActivity has no exit of its own.
-    joey.activity = { id: 'idle', ticks: 0, minTicks: 0 };
-  }
+  onFoot(joey, mother, grazing, motherIsFeeding);
 }
 
 /* ------------------------------ passing ------------------------------ */
@@ -565,6 +809,23 @@ function stepFamily(state: WorldState, fam: Family): void {
       if (carrier) {
         for (const child of children) {
           stepPouch(state, child, carrier, deliveringParent !== undefined);
+        }
+      } else if (rep.pouchCarry === true) {
+        // No living mother to carry these joeys (M13). In the ordinary case
+        // stepPouch's own top-of-function 'pass' check already released any
+        // joey well before her passing finished (mother.activity.id ===
+        // 'pass' fires the same tick, while she is still a parent and this
+        // branch's sibling above still runs) — but a joey could in
+        // principle be left mid 'mount' errand at the exact moment the
+        // family loses its only female parent by some other path. Without
+        // this, it would be stranded: 'mount' is in FAMILY_ACTIVITIES too,
+        // so selectBehavior alone would never rescue it — the exact freeze
+        // class Thread 4 fixed for 'gather'. Draw-free.
+        for (const child of children) {
+          if (child.activity.id === 'mount' || isCarried(child)) {
+            child.carriedBy = null;
+            child.activity = { id: 'idle', ticks: 0, minTicks: 0 };
+          }
         }
       }
 

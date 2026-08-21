@@ -121,6 +121,12 @@ export function creatureDoing(c: Creature, presentation: Presentation | undefine
           return 'out finding food for the little ones';
       }
     }
+    case 'mount':
+      // M13: the joey's real climb-in/climb-out errand (family.ts). Step 2
+      // is the climb-out lead-in — still carried, but on its way down —
+      // every other step (0 approach, 1 settle, 3 ride-in) reads as
+      // climbing in.
+      return c.activity.step === 2 ? 'climbing out of the pouch' : 'climbing into the pouch';
     case 'brood':
       return 'keeping the eggs warm';
     case 'gestate':

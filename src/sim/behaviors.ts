@@ -305,7 +305,7 @@ export function decayNeeds(state: WorldState): void {
  * ANY family-latching activity generically (today only 'gather' realistically
  * needs it, but this stays correct if a future latch — e.g. a pouch-mount
  * transition — joins the set without a matching update here). */
-export const FAMILY_ACTIVITIES = new Set<ActivityId>(['court', 'brood', 'gestate', 'feedYoung', 'gather', 'pass']);
+export const FAMILY_ACTIVITIES = new Set<ActivityId>(['court', 'brood', 'gestate', 'feedYoung', 'gather', 'pass', 'mount']);
 
 export function selectBehavior(state: WorldState, c: Creature, clock: Clock): void {
   // A passenger doesn't choose where to go (M12): a joey in the pouch must
@@ -788,6 +788,22 @@ export function applyActivity(
     case 'pass':
       // Stillness. The world gathers around them.
       break;
+
+    case 'mount': {
+      // family.ts (M13) owns every transition of this errand — this
+      // executor only walks the approach (step 0) toward the flank point
+      // family.ts refreshes every tick, mirroring the 'gather' case above.
+      // Step 1 (settle) is stationary — nothing to do here, family.ts
+      // tracks its own duration. Steps 2 (climb-out lead-in) and 3
+      // (ride-in) never reach this switch at all: by then the joey is
+      // carried, and the isCarried branch above already returned before
+      // this point in the function.
+      if (c.activity.step === 0) {
+        const target = c.activity.targetPos;
+        if (target) moveToward(c, target, speedFor(c.species, c.stage), medium, landing);
+      }
+      break;
+    }
 
     default: {
       // Exhaustiveness net (M13 Task 0): a compile error here means a new

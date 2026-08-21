@@ -470,6 +470,18 @@ describe('the pouch is hers alone — no father ever carries the joey', () => {
     expect(fam.parentIds).toEqual([father.id]);
     expect(joey.stage).toBe('baby');
 
+    // M13 safeguard: a joey somehow left mid "mount" with no living mother
+    // to ever complete the errand must be released, not stuck — 'mount' is
+    // in FAMILY_ACTIVITIES too, so selectBehavior alone would never rescue
+    // it (the exact freeze class Thread 4 fixed for 'gather'). By this point
+    // the family has no female parent at all (only the father survives), so
+    // this exercises the "no carrier" branch directly rather than relying
+    // on it never actually being reached.
+    joey.activity = { id: 'mount', step: 0, ticks: 0, minTicks: 0 };
+    localTick(state);
+    expect(joey.activity.id).not.toBe('mount');
+    expect(joey.carriedBy).toBeNull();
+
     // Now keep the father glued to the joey's side — closer than MOUNT_RANGE
     // every single tick — so the test cannot pass merely because they never
     // happened to meet.

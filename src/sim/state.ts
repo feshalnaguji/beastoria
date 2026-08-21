@@ -57,7 +57,11 @@ export type ActivityId =
   | 'gestate'
   | 'feedYoung'
   | 'gather'
-  | 'pass';
+  | 'pass'
+  // M13: a marsupial joey's real, multi-tick climb-in/climb-out errand
+  // (family.ts's pouch-mount system) — replaces the old instant carriedBy
+  // flip. See Activity.step's own doc for the four sub-steps.
+  | 'mount';
 
 export interface Activity {
   id: ActivityId;
@@ -70,7 +74,9 @@ export interface Activity {
   /**
    * Sub-step within multi-leg activities. feedYoung carry mode: 0 seek food,
    * 1 pickup pause, 2 carry home, 3 deliver. feedYoung nurse mode: 0 travel
-   * home, 1 nursing hold.
+   * home, 1 nursing hold. mount (M13, family.ts): 0 approach (not yet
+   * carried), 1 settle (not yet carried), 2 climb-out lead-in (still
+   * carried — plays before the real dismount), 3 ride-in (just carried).
    */
   step?: number | undefined;
 }
