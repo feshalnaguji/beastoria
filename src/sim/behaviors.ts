@@ -57,7 +57,7 @@ export function isMourningGather(activity: Creature['activity']): boolean {
  * beyond any real errand (a few hundred ticks at most) but comfortably under
  * the property test's 1200-tick ceiling.
  */
-const GATHER_MAX_TICKS = 900;
+export const GATHER_MAX_TICKS = 900;
 /**
  * Progress-bail window for a stalled socialize/court approach (M10): a
  * checkpoint of the creature's own position taken every this-many ticks,

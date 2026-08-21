@@ -6,7 +6,7 @@
 import { SAVE_VERSION, type SaveFile } from './schema';
 import type { HomeKind, Vec2, WorldState } from '../sim/state';
 import { DREY_SITES, FROG_SPAWN_CLUMPS, TURTLE_SAND_NESTS, SHADE_SCRAPES } from '../sim/valley';
-import { isMourningGather } from '../sim/behaviors';
+import { isMourningGather, GATHER_MAX_TICKS } from '../sim/behaviors';
 
 /**
  * M10 added three home kinds (drey/spawnClump/sandNest) but SAVE_VERSION
@@ -83,15 +83,24 @@ export function migrate(raw: unknown): SaveFile | null {
   // activity before the leash bug was fixed would remain frozen forever even
   // after loading into fixed code, because the fixed leash logic only
   // re-evaluates *babies inside a rearing family* — a latched juvenile or
-  // family-less adult would otherwise stay in 'gather' indefinitely. Normalize
-  // every non-vigil gather (minTicks < 200, minTicks:0 feed-hold anchors
-  // included) unconditionally: the mourning vigil 'gather' is protected via
-  // isMourningGather(), and the self-heal goal requires immediate release on
-  // load regardless of tick count. Same defensive data normalization shape as
-  // carriedBy above: pure data placement, zero RNG draws, idempotent across
-  // repeated migrate() calls.
+  // family-less adult would otherwise stay in 'gather' indefinitely. Use the
+  // sim's own GATHER_MAX_TICKS (900) as the exact threshold: the fixed 'gather'
+  // executor has a hard backstop that force-releases every non-mourning gather
+  // by ticks >= GATHER_MAX_TICKS (behaviors.ts line 774), meaning no valid/fresh
+  // world can ever produce a saved non-mourning gather at that tick count — it's
+  // structurally impossible. Therefore, any loaded creature with ticks >=
+  // GATHER_MAX_TICKS in a non-vigil gather is pre-fix stale data that needs
+  // healing. This boundary preserves round-trip fidelity for legitimate
+  // short-lived gathers while catching every genuinely-stale one. Mourning vigil
+  // is protected via isMourningGather(). Same defensive data normalization shape
+  // as carriedBy above: pure data placement, zero RNG draws, idempotent.
   for (const c of save.sim.creatures) {
-    if (c.activity?.id === 'gather' && !isMourningGather(c.activity)) {
+    if (
+      c.activity?.id === 'gather' &&
+      typeof c.activity.ticks === 'number' &&
+      c.activity.ticks >= GATHER_MAX_TICKS &&
+      !isMourningGather(c.activity)
+    ) {
       c.activity = { id: 'idle', ticks: 0, minTicks: 0 };
     }
   }
