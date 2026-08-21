@@ -715,6 +715,18 @@ export function applyActivity(
     case 'pass':
       // Stillness. The world gathers around them.
       break;
+
+    default: {
+      // Exhaustiveness net (M13 Task 0): a compile error here means a new
+      // ActivityId was added to state.ts without a matching case above. No
+      // runtime throw — unlike feedMode's assertNever — because a
+      // forward-compatible save carrying an activity id from a future
+      // version must never crash the tick loop; it just falls through as a
+      // silent no-op for this tick.
+      const _exhaustive: never = c.activity.id;
+      void _exhaustive;
+      break;
+    }
   }
 }
 
