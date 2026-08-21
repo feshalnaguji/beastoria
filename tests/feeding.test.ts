@@ -239,8 +239,22 @@ describe('feeding-hold facing (M12): parent and baby turn to meet', () => {
   });
 });
 
+/**
+ * The ring sits at 0.6 x FEED_CONTACT_RANGE (behaviors.ts's feedContactRing,
+ * M12 fix round), not on the boundary itself — a review finding caught that
+ * a ring target sitting exactly on FEED_CONTACT_RANGE made feeding a
+ * gathered baby a coin-flip on float round-off after moveToward's exact
+ * arrival snap. Pinned here so a regression to the boundary-exact radius
+ * fails structurally rather than on the luck of one seed's geometry.
+ */
+const FEED_CONTACT_RING_RADIUS = FEED_CONTACT_RANGE * 0.6;
+/** How far inside the feed gate the ring must land to count as "comfortably
+ * inside" for these tests — well short of the ~16-unit margin the 0.6
+ * multiplier actually leaves, so this never flakes on legal-ground clamping. */
+const RING_MARGIN = 5;
+
 describe('feeding contact ring (M12): eligible-but-not-in-contact babies get pulled in before being fed', () => {
-  it('(b) a baby at distance 70 — inside FEED_RANGE, outside FEED_CONTACT_RANGE — is not fed until pulled to a ring point within FEED_CONTACT_RANGE', () => {
+  it('(b) a baby at distance 70 — inside FEED_RANGE, outside FEED_CONTACT_RANGE — is not fed until pulled to a ring point comfortably inside FEED_CONTACT_RANGE', () => {
     const { state, fam, holder } = reachNurseStep(8, 2); // the nursing step: feeding is live
     const babies = state.creatures.filter((c) => fam.childIds.includes(c.id));
     const baby = babies[0];
@@ -257,23 +271,33 @@ describe('feeding contact ring (M12): eligible-but-not-in-contact babies get pul
     expect(baby.activity.id).toBe('gather'); // pulled toward the contact ring
     const target = baby.activity.targetPos;
     if (!target) throw new Error('no gather target');
-    expect(Math.hypot(target.x - holder.pos.x, target.y - holder.pos.y)).toBeLessThanOrEqual(
-      FEED_CONTACT_RANGE,
-    );
+    const targetDist = Math.hypot(target.x - holder.pos.x, target.y - holder.pos.y);
+    // Structurally inside the gate — not merely <= FEED_CONTACT_RANGE
+    // (which the old boundary-exact ring also satisfied "on the luck of
+    // float round-off"), but clear of it by a real margin.
+    expect(targetDist).toBeLessThanOrEqual(FEED_CONTACT_RING_RADIUS + 1e-6);
+    expect(targetDist).toBeLessThanOrEqual(FEED_CONTACT_RANGE - RING_MARGIN);
 
-    // She holds still (the nursing step never moves); the baby closes the
-    // gap under its own gather movement and gets relief before the hold ends.
-    let fed = false;
-    let closedIn = false;
-    for (let i = 0; i < 200 && holder.activity.id === 'feedYoung'; i++) {
-      const beforeTick = baby.needs.hunger;
+    // She holds still (the nursing step never moves); run until the baby
+    // arrives at the ring under its own gather movement (moveToward's exact
+    // snap on arrival), then assert deterministically — not "eventually
+    // across a loose scan" — that it lands strictly inside the gate and is
+    // fed on the very next nursing tick.
+    let arrived = false;
+    for (let i = 0; i < 200 && !arrived; i++) {
       tick(state, []);
       const dist = Math.hypot(baby.pos.x - holder.pos.x, baby.pos.y - holder.pos.y);
-      if (dist <= FEED_CONTACT_RANGE) closedIn = true;
-      if (baby.needs.hunger < beforeTick - 1e-9) fed = true;
+      if (dist <= FEED_CONTACT_RING_RADIUS + 1e-6) arrived = true;
     }
-    expect(closedIn).toBe(true);
-    expect(fed).toBe(true);
+    expect(arrived).toBe(true);
+    const finalDist = Math.hypot(baby.pos.x - holder.pos.x, baby.pos.y - holder.pos.y);
+    expect(finalDist).toBeLessThanOrEqual(FEED_CONTACT_RANGE - RING_MARGIN); // structurally inside the gate
+    expect(holder.activity.id).toBe('feedYoung'); // still mid-hold
+    expect(holder.activity.step).toBe(2); // still the nursing step
+
+    const beforeFeed = baby.needs.hunger;
+    tick(state, []);
+    expect(baby.needs.hunger).toBeLessThan(beforeFeed); // fed deterministically, in contact
   });
 });
 
@@ -380,23 +404,32 @@ describe('nurse leash tightens during the hold (M11, retightened M12)', () => {
     expect(baby.activity.id).toBe('gather'); // the tightened leash catches the straggler
     const target = baby.activity.targetPos;
     if (!target) throw new Error('no gather target');
-    expect(Math.hypot(target.x - holder.pos.x, target.y - holder.pos.y)).toBeLessThanOrEqual(
-      FEED_CONTACT_RANGE,
-    );
+    const targetDist = Math.hypot(target.x - holder.pos.x, target.y - holder.pos.y);
+    // Structurally inside the gate (see FEED_CONTACT_RING_RADIUS above), not
+    // merely <= FEED_CONTACT_RANGE — a ring sitting exactly on the boundary
+    // made the feed that follows a coin-flip on float round-off.
+    expect(targetDist).toBeLessThanOrEqual(FEED_CONTACT_RING_RADIUS + 1e-6);
+    expect(targetDist).toBeLessThanOrEqual(FEED_CONTACT_RANGE - RING_MARGIN);
 
-    // She holds still (established above); the baby closes the gap under
-    // its own gather movement and gets relief before the hold ends.
-    let fed = false;
-    let closedIn = false;
-    for (let i = 0; i < 200 && holder.activity.id === 'feedYoung'; i++) {
-      const before = baby.needs.hunger;
+    // She holds still (established above); run until the baby arrives at
+    // the ring under its own gather movement, then assert deterministically
+    // that it lands strictly inside the gate and is fed on the very next
+    // nursing tick — not "eventually fed across a loose scan".
+    let arrived = false;
+    for (let i = 0; i < 200 && !arrived; i++) {
       tick(state, []);
       const dist = Math.hypot(baby.pos.x - holder.pos.x, baby.pos.y - holder.pos.y);
-      if (dist <= FEED_CONTACT_RANGE) closedIn = true;
-      if (baby.needs.hunger < before - 1e-9) fed = true;
+      if (dist <= FEED_CONTACT_RING_RADIUS + 1e-6) arrived = true;
     }
-    expect(closedIn).toBe(true);
-    expect(fed).toBe(true);
+    expect(arrived).toBe(true);
+    const finalDist = Math.hypot(baby.pos.x - holder.pos.x, baby.pos.y - holder.pos.y);
+    expect(finalDist).toBeLessThanOrEqual(FEED_CONTACT_RANGE - RING_MARGIN);
+    expect(holder.activity.id).toBe('feedYoung'); // still mid-hold
+    expect(holder.activity.step).toBe(2); // still the nursing step
+
+    const beforeFeed = baby.needs.hunger;
+    tick(state, []);
+    expect(baby.needs.hunger).toBeLessThan(beforeFeed); // fed deterministically, in contact
   });
 });
 
@@ -678,6 +711,11 @@ describe('carry delivery (steps 3-4): sequenced, ranged, reported, and lingered'
     expect(babyB.activity.id).toBe('gather'); // the tightened delivery leash catches it
     const target = babyB.activity.targetPos;
     if (!target) throw new Error('no gather target');
+    // Unlike the land-only rabbit tests above, a robin's home can sit near
+    // the shore, so nearestRestable's legal-ground clamp can legitimately
+    // push this target beyond FEED_CONTACT_RING_RADIUS (feedContactRing's
+    // own documented caveat) — assert only the actual feed-gate bound here,
+    // which the clamp itself is designed to respect.
     expect(Math.hypot(target.x - feeder.pos.x, target.y - feeder.pos.y)).toBeLessThanOrEqual(
       FEED_CONTACT_RANGE,
     );

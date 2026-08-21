@@ -160,19 +160,29 @@ export function socializeRing(partnerPos: Vec2, id: number, landing: Medium): Ve
 }
 
 /**
- * The point on a ring of radius FEED_CONTACT_RANGE around `parentPos` a
- * baby heads for during a feeding hold (M12) — modelled line-for-line on
- * socializeRing above: a deterministic per-id angle (idOffsetAngle), zero
- * RNG draws, so siblings spread around the parent instead of stacking on
- * one point. Clamped to legal ground for the same reason socializeRing is —
- * a raw ring point can fall in the water for a parent standing close to
- * shore. Replaces family.ts's old two-draw ±25/±18 re-gather scatter for
- * the in-hold case specifically.
+ * The point on a ring around `parentPos` a baby heads for during a feeding
+ * hold (M12) — modelled line-for-line on socializeRing above: a
+ * deterministic per-id angle (idOffsetAngle), zero RNG draws, so siblings
+ * spread around the parent instead of stacking on one point. Clamped to
+ * legal ground for the same reason socializeRing is — a raw ring point can
+ * fall in the water for a parent standing close to shore. Replaces
+ * family.ts's old two-draw ±25/±18 re-gather scatter for the in-hold case
+ * specifically.
+ *
+ * The ring sits at 0.6 × FEED_CONTACT_RANGE, not exactly on it (review
+ * finding, M12 fix round): `gather`'s moveToward snaps a baby's position
+ * exactly onto this target on arrival, and float round-off after that snap
+ * put the raw point outside the `<= FEED_CONTACT_RANGE` feed gate on
+ * roughly half of sampled angles — a baby could walk to the ring, arrive,
+ * and still never be fed. 0.6 leaves ~16 units of margin against that,
+ * exactly the way socializeRing itself never sits its ring on SOCIAL_RANGE
+ * (it uses SOCIAL_RANGE * 0.45).
  */
 export function feedContactRing(parentPos: Vec2, babyId: number, landing: Medium): Vec2 {
+  const ringRadius = FEED_CONTACT_RANGE * 0.6;
   const raw = {
-    x: parentPos.x + Math.cos(idOffsetAngle(babyId)) * FEED_CONTACT_RANGE,
-    y: parentPos.y + Math.sin(idOffsetAngle(babyId)) * FEED_CONTACT_RANGE,
+    x: parentPos.x + Math.cos(idOffsetAngle(babyId)) * ringRadius,
+    y: parentPos.y + Math.sin(idOffsetAngle(babyId)) * ringRadius,
   };
   return nearestRestable(landing, raw);
 }
