@@ -105,34 +105,30 @@ v1 (two open tabs overwrite each other's timeline harmlessly).
   could look un-fed), baby leash tightens during any active feed/nurse hold so little
   ones visibly gather in, a new kangaroo species (12 total) with a rig-art pouch/joey
   shown during her nurse hold, an amber/milk-white feed-mote effect and step-aware
-  inspect-card text so every feeding is a moment you can watch; 174 tests)
-- **Status: v1.3 shipped and live-reviewed (2026-08-20).** M11 candidate items
-  (raw-point carry foraging, instant aggregate feeding, unwatched nursing, missing
-  kangaroo) shipped, but the live review found the feeding beats still don't read
-  well and the kangaroo/joey behavior isn't accurate. M12 candidate open per that
-  review — see below. v2 Caretaker World stays next-after-that (only once the user
-  decides to proceed; feeding, care, unlocking families).
-- **M12 candidate (from 2026-08-20 live review, not yet planned/branched):**
-  (1) feeding still doesn't read well despite M11's mote/glyph work — user's own
-  words: "feeding is not that good"; needs a fresh look at what's actually
-  unconvincing (pacing? the mote itself? clip readability?) rather than assuming
-  M11's specific mechanism was the whole fix; (2) kangaroo/joey behavior is not
-  accurate — user specifically flagged babies appearing to go toward/into the
-  pouch, which M11 deliberately did NOT build (the joey is static rig art gated to
-  the mother's 'sit' clip only; the real baby kangaroo is a separate Creature that
-  walks/gathers/feeds normally and is pulled inward by the nurse-hold leash to
-  within 60 units of her — likely reads as "climbing into the pocket" without
-  actually doing so, or the two — real baby + decorative joey glyph — visually
-  conflict/duplicate). Needs a real design decision: keep joey purely decorative
-  and fix the collision/reading with the real baby, or reconsider actual
-  pouch-carry (M10/M11 explicitly ruled this out as a new system — re-litigate only
-  with fresh justification); (3) general ask, not kangaroo-specific: animal rigs
-  should be "a bit more realistic and better looking and recognizable" — likely
-  spans multiple/all 12 species, needs scoping (which species first, what
-  "recognizable" means — silhouette clarity? color accuracy? proportions?) before
-  any plan is written. Needs superpowers:brainstorming before any plan is written.
-- **Awaiting user review:** perf with 12 species population (not yet explicitly
-  confirmed either way in the 2026-08-20 review).
+  inspect-card text so every feeding is a moment you can watch; 174 tests), M12
+  (v1.4: feeding legibility via feedContactRing (mother and baby < 40 units) +
+  turnToward facing + four-beat pacing (30/90/40 ticks settle/nurse/linger) +
+  longer head-anchored mote bursts (3-mote staggered, 900ms) + beat-aware
+  inspect-card text; real kangaroo pouch-carry sim system (`Creature.carriedBy`,
+  zero-draw mount/dismount/graze-window transitions, position-derived rendering
+  via Pixi reparenting into pouch rig part, decorative joey deleted); written
+  reviewed rig-art recipe (silhouette/markings/shading/motion as four checkable
+  dimensions, proved on rabbit/deer/robin/kangaroo); 213 tests)
+- **Status: v1.4 shipped and verified (2026-08-21).** M12 closed three threads:
+  feeding now reads legibly, kangaroo joey rides in actual pouch (not decorative
+  art), four species rigs meet a documented bar. v2 Caretaker World stays next
+  (only once user decides; feeding, care, unlocking families).
+- **M13 candidate (next scoping decision):** apply the reviewed rig-art recipe
+  (docs/superpowers/specs/2026-08-21-rig-art-recipe.md) to the remaining eight
+  species (squirrel, frog, turtle, duck, owl, dodo, phoenix, koi). **Backlog item
+  (pre-existing, out of M12 scope, not blocking):** kangaroo population hardCap
+  (8) and SHADE_SCRAPES home-site count (3) are mismatched (predates M12, noted
+  during planning, explicitly ruled out of scope per pouch-carry being independent
+  of home-site balance) — consider for M13 or later when touching kangaroo balance.
+- **Open item awaiting user verification:** mobile perf with the richer/heavier
+  rig art has NOT yet been confirmed on a real device — this is reserved for the
+  user's own physical-device check before v1.4 is considered fully closed out (same
+  policy as M2/M3 testing per CLAUDE.md).
 - Live: https://feshalnaguji.github.io/beastoria/ · repo: feshalnaguji/beastoria
   (GitHub Pages auto-deploys main; CI runs tests+build)
 
