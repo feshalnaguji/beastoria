@@ -305,12 +305,21 @@ describe('feeding contact ring consumes zero RNG draws (M12)', () => {
   it('(d) the RNG stream is byte-identical across a re-gather trigger', () => {
     const { state, fam, holder } = reachNurseStep(8, 2);
     const babies = state.creatures.filter((c) => fam.childIds.includes(c.id));
-    // Zero out every need for every family member so ordinary utility
-    // behavior selection has nothing that would make anyone switch off
-    // their current activity this tick — isolates the RNG assertion to
-    // exactly the leash's own re-gather trigger (which must draw nothing).
+    // Zero out every need for the CHILDREN under test only — not the whole
+    // family — so ordinary utility behavior selection has nothing that would
+    // make either baby switch off its current activity this tick: isolates
+    // the RNG assertion to exactly the leash's own re-gather trigger (which
+    // must draw nothing). Deliberately excludes the parents (M13 finding):
+    // zeroing a PARENT's needs — e.g. a father with no feeding duty in nurse
+    // mode, free to live an ordinary life — can independently complete
+    // whatever he's mid-activity on (his own needs reading <= SATISFIED) and
+    // draw RNG from a codepath this test has nothing to do with, which is
+    // exactly what "every family member" used to paper over: a pre-M13
+    // father was permanently latched in 'gather' from the nest-building
+    // freeze bug, so he could never be mid-anything to begin with. Now that
+    // he's correctly freed, zeroing his needs is no longer a safe no-op.
     for (const c of state.creatures) {
-      if (c.familyId === fam.id) {
+      if (fam.childIds.includes(c.id)) {
         c.needs.hunger = 0;
         c.needs.rest = 0;
         c.needs.social = 0;

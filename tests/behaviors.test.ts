@@ -4,9 +4,10 @@
  * flicker between activities thanks to hysteresis.
  */
 import { describe, expect, it } from 'vitest';
+import { isMourningGather } from '../src/sim/behaviors';
 import { TICKS_PER_DAY } from '../src/sim/clock';
 import { tick } from '../src/sim/Sim';
-import { createWorld, type Creature, type WorldState } from '../src/sim/state';
+import { createWorld, type Creature, type Family, type WorldState } from '../src/sim/state';
 
 function runTicks(state: WorldState, n: number): void {
   for (let i = 0; i < n; i++) tick(state, []);
@@ -121,5 +122,80 @@ describe('behavior selection', () => {
       }
     }
     expect(switches).toBeLessThan(12);
+  });
+});
+
+/**
+ * M13 Task 2 (2a): a live regression pin for the shared discriminator.
+ * `isMourningGather` and family.ts's `PASS_GATHER_TICKS` are defined from the
+ * same `MOURNING_GATHER_MIN_TICKS` constant already, so they cannot drift
+ * apart in the source — but nothing previously asserted that the discriminator
+ * actually recognizes what `handlePassings` (family.ts) really assigns to a
+ * mourning kin. This drives the real code path (Sim.tick, not a hand-built
+ * activity literal) so a future change to either side — the vigil's own
+ * `minTicks`, or the discriminator's threshold — fails here first.
+ */
+describe('isMourningGather (M13): matches what handlePassings actually assigns', () => {
+  it('is true for the mourning vigil a kin is latched into when an elder passes', () => {
+    const state = createWorld(9);
+    state.creatures = [];
+    state.families = [];
+
+    const elder: Creature = {
+      id: state.nextId++,
+      species: 'rabbit',
+      sex: 'f',
+      familyId: null,
+      pos: { x: 2000, y: 1500 },
+      heading: 0,
+      stage: 'adult',
+      ageTicks: 20001,
+      lifespanTicks: 20000, // already past its lifespan: passes on the next tick
+      needs: { hunger: 0.2, rest: 0.2, social: 0.2 },
+      activity: { id: 'idle', ticks: 0, minTicks: 0 },
+    };
+    const kin: Creature = {
+      id: state.nextId++,
+      species: 'rabbit',
+      sex: 'm',
+      familyId: null,
+      pos: { x: 2050, y: 1500 }, // well within family.ts's PASS_GATHER_RANGE
+      heading: 0,
+      stage: 'adult',
+      ageTicks: 5000,
+      lifespanTicks: 20000,
+      needs: { hunger: 0.2, rest: 0.2, social: 0.2 },
+      activity: { id: 'idle', ticks: 0, minTicks: 0 },
+    };
+    const fam: Family = {
+      id: state.nextId++,
+      species: 'rabbit',
+      parentIds: [elder.id, kin.id],
+      childIds: [],
+      homeId: null,
+      phase: 'emptyNest',
+      phaseTicks: 0,
+      dutyParent: 0,
+    };
+    state.families.push(fam);
+    elder.familyId = fam.id;
+    kin.familyId = fam.id;
+    state.creatures.push(elder, kin);
+
+    tick(state, []); // elder crosses the passing threshold; kin latches into the vigil
+
+    expect(elder.activity.id).toBe('pass');
+    expect(kin.activity.id).toBe('gather');
+    // The live check: exactly what handlePassings assigned reads as a
+    // mourning vigil, not one of 'gather's two other, much shorter reuses.
+    expect(isMourningGather(kin.activity)).toBe(true);
+  });
+
+  it('is false for a fresh idle activity and for gather\'s two other, much shorter reuses', () => {
+    expect(isMourningGather({ id: 'idle', ticks: 0, minTicks: 1000 })).toBe(false);
+    // Nest-building potter / baby leash minTicks (30 and 0) — both well
+    // under MOURNING_GATHER_MIN_TICKS (200).
+    expect(isMourningGather({ id: 'gather', ticks: 0, minTicks: 30 })).toBe(false);
+    expect(isMourningGather({ id: 'gather', ticks: 0, minTicks: 0 })).toBe(false);
   });
 });
