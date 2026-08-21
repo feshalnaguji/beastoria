@@ -508,8 +508,17 @@ function stepFamily(state: WorldState, fam: Family): void {
       // it is leashed to her, not to the scrape. So a joey is governed
       // entirely by stepPouch and skips the nest leash below. Everything
       // here is draw-free.
+      //
+      // Deliberately NO `?? parents[0]` fallback, unlike the nurse-feeder and
+      // brood-sitter selections elsewhere in this file: a pouch is not a duty
+      // that can be handed over. `rearing` only ends when there are no
+      // children left or every child has grown up, so a family whose mother
+      // has passed stays in `rearing` with the father still on the parent
+      // list — and that fallback would have put the joey in HIS pouch.
+      // Undefined here instead means a motherless joey falls through to the
+      // ordinary nest leash below, which is the right home for it.
       const carrier =
-        rep.pouchCarry === true ? (parents.find((p) => p.sex === 'f') ?? parents[0]) : undefined;
+        rep.pouchCarry === true ? parents.find((p) => p.sex === 'f') : undefined;
       if (carrier) {
         for (const child of children) {
           stepPouch(state, child, carrier, deliveringParent !== undefined);

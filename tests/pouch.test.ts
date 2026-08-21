@@ -427,6 +427,61 @@ describe('e) a carried joey always eventually gets out (no permanent freeze)', (
   });
 });
 
+describe('the pouch is hers alone — no father ever carries the joey', () => {
+  it('a motherless joey never mounts its surviving father, and falls back to the nest leash', () => {
+    // `rearing` only ends when there are no children left or every child has
+    // grown up, so a family whose mother passes stays in `rearing` with the
+    // father still on the parent list. A `?? parents[0]` fallback in the
+    // carrier selection — the idiom the nurse-feeder and brood-sitter
+    // selections in this file legitimately use — would have handed him the
+    // pouch. A pouch is not a duty that can be handed over.
+    const { state, mother, joey, fam } = joeyWorld(9);
+    const home = state.homes.find((h) => h.id === fam.homeId);
+    if (!home) throw new Error('no home');
+
+    const father = spawnCreature(state, 'kangaroo', { x: mother.pos.x + 30, y: mother.pos.y }, 0.5);
+    father.sex = 'm';
+    father.familyId = fam.id;
+    fam.parentIds.push(father.id);
+
+    for (let t = 0; t < 30 && joey.carriedBy === null; t++) localTick(state);
+    expect(joey.carriedBy).toBe(mother.id); // aboard, before we take her away
+
+    mother.ageTicks = mother.lifespanTicks + 1;
+    for (let t = 0; t < PASS_GATHER_TICKS + 20; t++) localTick(state);
+    expect(state.creatures.some((c) => c.id === mother.id)).toBe(false);
+    // The family survives him: still rearing, still holding the joey.
+    expect(state.families.some((f) => f.id === fam.id)).toBe(true);
+    expect(fam.parentIds).toEqual([father.id]);
+    expect(joey.stage).toBe('baby');
+
+    // Now keep the father glued to the joey's side — closer than MOUNT_RANGE
+    // every single tick — so the test cannot pass merely because they never
+    // happened to meet.
+    let closeTicks = 0;
+    for (let t = 0; t < 1500; t++) {
+      father.pos = { x: joey.pos.x + 20, y: joey.pos.y };
+      localTick(state);
+      if (Math.hypot(father.pos.x - joey.pos.x, father.pos.y - joey.pos.y) <= MOUNT_RANGE) {
+        closeTicks++;
+      }
+      expect(joey.carriedBy).toBeNull(); // never climbs into his pouch
+    }
+    expect(closeTicks).toBeGreaterThan(1000); // and it really was in reach throughout
+
+    // Falls back to the ordinary nest leash, which is the right home for a
+    // motherless baby: put it out past BABY_LEASH and the nest — not the
+    // father — calls it back.
+    joey.pos = { x: home.pos.x + 600, y: home.pos.y };
+    joey.activity = { id: 'idle', ticks: 0, minTicks: 0 };
+    localTick(state);
+    expect(joey.activity.id).toBe('gather');
+    const target = joey.activity.targetPos;
+    if (!target) throw new Error('no leash target');
+    expect(Math.hypot(target.x - home.pos.x, target.y - home.pos.y)).toBeLessThan(70);
+  });
+});
+
 describe('and it happens in an ordinary valley, not just a hand-built one', () => {
   it('a joey is riding in a plain createWorld run, through the real Sim.tick pipeline', () => {
     // Everything above drives a deliberately-tiny world through a local
