@@ -301,19 +301,34 @@ describe('d) the pouch draws nothing from the RNG stream', () => {
     // passings due, both members already in a family so formPairs finds
     // nobody eligible, no clutch to roll — so any movement in state.rng can
     // only have come from the pouch code under test.
+    //
+    // Task 7 (M13): the loop below starts from a fresh joeyWorld — joey is
+    // not yet carried on the first iteration — so this window already covers
+    // the very FIRST mount, not merely the re-mounts that follow subsequent
+    // graze windows. `firstMountTick` makes that explicit rather than relying
+    // on `mounts >= 3` to imply it: the eventual real mount/dismount errand
+    // (not yet implemented — today's flip is instant) must stay draw-free
+    // from its very first ride onward, and this is the assertion that holds
+    // it to that standard immediately.
     const before = [...state.rng];
     let mounts = 0;
     let dismounts = 0;
     let carried = false;
+    let firstMountTick = -1;
     for (let i = 0; i < 2000; i++) {
       state.tick++;
       familySystem(state);
       const now = joey.carriedBy !== null && joey.carriedBy !== undefined;
-      if (now && !carried) mounts++;
+      if (now && !carried) {
+        mounts++;
+        if (firstMountTick < 0) firstMountTick = i;
+      }
       if (!now && carried) dismounts++;
       carried = now;
     }
-    // Not a vacuous pass: the run really did cycle through the transitions.
+    // Not a vacuous pass: the run really did cycle through the transitions,
+    // and the very first one of them is inside the window this test checks.
+    expect(firstMountTick).toBeGreaterThanOrEqual(0);
     expect(mounts).toBeGreaterThanOrEqual(3);
     expect(dismounts).toBeGreaterThanOrEqual(3);
     expect([...state.rng]).toEqual(before);
@@ -516,5 +531,101 @@ describe('the mechanical reason this exists', () => {
     // It falls out of the old 140-unit nest leash in well under two seconds
     // of a mother travelling flat out (10 ticks = 1s at 1x).
     expect((mother - joey) * 20).toBeGreaterThan(GRAZE_LEASH * 0.5);
+  });
+});
+
+/**
+ * M13 Task 7 (RED): a visible mount/dismount transition.
+ *
+ * Today `stepPouch` in src/sim/family.ts flips `joey.carriedBy` the instant
+ * distance <= MOUNT_RANGE (mount) or the graze window opens (dismount) — no
+ * intermediate state either way, so the joey appears to teleport into and
+ * out of the pouch. The fix (a later task) gives both transitions a real,
+ * multi-tick errand: an `'mount'` activity id that the joey occupies while
+ * walking the last stretch in, pausing, and climbing aboard — and,
+ * symmetrically, while climbing OUT before the actual release. `'mount'`
+ * does not exist as an Activity id yet (see src/sim/behaviors.ts), so these
+ * tests compare `activity.id` `as string` against it — the same type-safe
+ * workaround tests/family.test.ts already uses for `'gestate'` before that
+ * id existed.
+ *
+ * These tests encode the DESIRED behavior and are expected to fail against
+ * today's sim (see the per-test comments for which ones and why). Task 8
+ * (a different implementer) makes them pass; this task must not touch
+ * src/sim/family.ts.
+ */
+const MOUNT_MAX_TICKS = 150;
+
+describe('f) M13 Task 7: an intermediate "mount" errand replaces the instant flip', () => {
+  it('7a: a "mount" errand is observed at some tick before the joey is ever aboard', () => {
+    const { state, mother, joey } = joeyWorld(3);
+    expect(dist(joey, mother)).toBeLessThanOrEqual(MOUNT_RANGE); // starts in reach
+
+    let sawMountErrand = false;
+    let mounted = -1;
+    for (let t = 0; t < 30 && mounted < 0; t++) {
+      localTick(state);
+      if ((joey.activity.id as string) === 'mount') sawMountErrand = true;
+      if (joey.carriedBy === mother.id) mounted = state.tick;
+    }
+    // Sanity: it did mount today (just instantly) — this much still holds.
+    expect(mounted).toBeGreaterThan(0);
+    // EXPECTED TO FAIL today: stepPouch flips carriedBy directly from
+    // whatever the joey was doing (typically 'idle') with no 'mount' step
+    // ever appearing on any earlier tick.
+    expect(sawMountErrand).toBe(true);
+  });
+
+  it('7b: no "mount" streak ever exceeds a generous ceiling (freeze guard, applied prospectively)', () => {
+    // The same class of bug Thread 4 fixed for 'gather' (babies permanently
+    // parked with no exit condition), guarded here BEFORE 'mount' is even
+    // implemented. Note: this test cannot meaningfully fail yet — 'mount'
+    // never occurs in today's sim, so the streak is always 0 and the bound
+    // is trivially satisfied. It is a forward-looking guard, not a
+    // bug-exposure test: once Task 8 lands, this is the test that would
+    // catch a mount errand with no exit condition.
+    const { state, joey } = joeyWorld(9);
+    let streak = 0;
+    let longestStreak = 0;
+    for (let t = 0; t < 4000; t++) {
+      localTick(state);
+      if (joey.stage !== 'baby') break; // grown up: no longer the case under test
+      if ((joey.activity.id as string) === 'mount') {
+        streak++;
+      } else {
+        streak = 0;
+      }
+      longestStreak = Math.max(longestStreak, streak);
+    }
+    expect(longestStreak).toBeLessThan(MOUNT_MAX_TICKS);
+  });
+
+  it('7c: a climb-out lead-in precedes the release, which still lands on the exact idHash-phased tick', () => {
+    const { state, mother, joey } = joeyWorld(3);
+    for (let t = 0; t < 30 && joey.carriedBy === null; t++) localTick(state);
+    expect(joey.carriedBy).toBe(mother.id);
+
+    let firstDismount = -1;
+    let sawLeadIn = false;
+    for (let t = 0; t < POUCH_GRAZE_PERIOD + 50 && firstDismount < 0; t++) {
+      localTick(state);
+      // A lead-in tick: still aboard, but already in the 'mount' errand that
+      // precedes the actual release.
+      if (joey.carriedBy === mother.id && (joey.activity.id as string) === 'mount') {
+        sawLeadIn = true;
+      }
+      if (joey.carriedBy === null) firstDismount = state.tick;
+    }
+    expect(firstDismount).toBeGreaterThan(0);
+    // The pinned contract this must NOT weaken: the ACTUAL dismount — the
+    // tick carriedBy really clears — still lands exactly on the idHash-
+    // phased tick the existing test at pouch.test.ts:230-254 locks in. A
+    // lead-in that fired but let the real release drift off-phase would
+    // fail here just as surely as no lead-in at all.
+    expect(predictGraze(firstDismount, joey.id)).toBe(true);
+    expect(predictGraze(firstDismount - 1, joey.id)).toBe(false);
+    // EXPECTED TO FAIL today: dismount is instant, so no 'mount' lead-in
+    // ever appears on a tick before the release.
+    expect(sawLeadIn).toBe(true);
   });
 });
