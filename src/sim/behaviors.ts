@@ -9,6 +9,7 @@ import { moveToward, turnToward, wanderStep } from './movement';
 import { nextRange } from './rng';
 import { landingMediumOf, SPECIES, speedFor } from './species';
 import {
+  isCarried,
   WORLD_HEIGHT,
   WORLD_WIDTH,
   type ActivityId,
@@ -201,6 +202,12 @@ function applyFeedFacing(state: WorldState, parent: Creature): void {
     if (other.familyId === null || other.familyId !== parent.familyId || other.stage !== 'baby') {
       continue;
     }
+    // A baby riding in the pouch (M12) shares its mother's exact position, so
+    // there is no bearing between them to turn along — atan2(0, 0) is 0, and
+    // facing it would slowly swing her round to due east for the whole hold.
+    // It still FEEDS (the step-2 loop below has no such guard; distance 0 is
+    // comfortably inside FEED_CONTACT_RANGE) — it just isn't turned toward.
+    if (isCarried(other)) continue;
     const d = Math.hypot(other.pos.x - parent.pos.x, other.pos.y - parent.pos.y);
     if (d <= FEED_RANGE && d < nearestDist) {
       nearestDist = d;
@@ -265,6 +272,11 @@ export function decayNeeds(state: WorldState): void {
 const FAMILY_ACTIVITIES = new Set<ActivityId>(['court', 'brood', 'feedYoung', 'gather', 'pass']);
 
 export function selectBehavior(state: WorldState, c: Creature, clock: Clock): void {
+  // A passenger doesn't choose where to go (M12): a joey in the pouch must
+  // never pick 'forage' or 'wander', both of which would try to walk it
+  // somewhere its carrier isn't. Returning before scoreActivities also means
+  // a carried creature draws nothing from the RNG stream at all.
+  if (isCarried(c)) return;
   if (FAMILY_ACTIVITIES.has(c.activity.id)) return;
 
   // An unattached phoenix that has strayed out of the grove drops everything
@@ -318,6 +330,37 @@ export function applyActivity(
   scratch?: TickScratch,
 ): void {
   c.activity.ticks++;
+
+  // Carried creatures ride (M12). Their position is DERIVED from the carrier
+  // rather than steered, so the movement switch below is skipped entirely —
+  // but `activity.ticks` above and decayNeeds (its own pass in Sim.ts) keep
+  // running, because a joey in the pouch still gets hungry and is still
+  // nursed. Zero RNG draws on this path.
+  //
+  // Ordering: Sim.ts walks `state.creatures` in array order, and that array
+  // is always sorted ascending by id (spawnCreature pushes with a
+  // monotonically-increasing nextId; removal splices, which preserves
+  // relative order; nothing sorts or re-inserts). A carrier is always born
+  // before its rider, so it is always EARLIER in the array and has already
+  // taken this tick's step by the time we get here — the rider reads a
+  // current position, never a one-tick-stale one.
+  if (isCarried(c)) {
+    const carrier = state.creatures.find((o) => o.id === c.carriedBy);
+    if (carrier) {
+      // Field-by-field, never `c.pos = carrier.pos`: aliasing one Vec2 across
+      // two creatures would survive into the save file as a shared reference
+      // JSON silently duplicates, and would make either one's next step move
+      // both.
+      c.pos.x = carrier.pos.x;
+      c.pos.y = carrier.pos.y;
+      c.heading = carrier.heading;
+    }
+    // A missing carrier is not fixed up here — family.ts owns the link and
+    // clears it the same tick (releaseStrandedRiders); this pass only ever
+    // reads it.
+    return;
+  }
+
   const p = SPECIES[c.species];
   const medium = p.medium;
   const landing = landingMediumOf(c.species);

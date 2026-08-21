@@ -5,7 +5,7 @@
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { tick } from '../src/sim/Sim';
-import { createWorld } from '../src/sim/state';
+import { createWorld, spawnCreature, type Family, type WorldState } from '../src/sim/state';
 import { migrate } from '../src/persist/migrations';
 import { SAVE_VERSION } from '../src/persist/schema';
 import { clearSave, loadSave, resumeSaves, saveWorld, suppressSaves } from '../src/persist/store';
@@ -13,6 +13,41 @@ import fixtureV1 from './fixtures/save-v1.json';
 
 function runTicks(state: ReturnType<typeof createWorld>, n: number): void {
   for (let i = 0; i < n; i++) tick(state, []);
+}
+
+/**
+ * A world holding one kangaroo family in 'rearing', the mother and her joey
+ * standing together at the shade scrape — everything the pouch (M12) needs to
+ * be mid-ride. Used only by the carriedBy round-trip tests below; the full
+ * behavioral coverage lives in tests/pouch.test.ts.
+ */
+function midRideWorld(seed: number): { state: WorldState; motherId: number; joeyId: number } {
+  const state = createWorld(seed);
+  state.creatures = [];
+  state.families = [];
+  for (const h of state.homes) h.familyId = null;
+  const home = state.homes.find((h) => h.kind === 'shadeScrape');
+  if (!home) throw new Error('no shade scrape');
+  const mother = spawnCreature(state, 'kangaroo', { ...home.pos }, 0.5);
+  mother.sex = 'f';
+  const joey = spawnCreature(state, 'kangaroo', { x: home.pos.x + 15, y: home.pos.y }, 0.02);
+  const fam: Family = {
+    id: state.nextId++,
+    species: 'kangaroo',
+    parentIds: [mother.id],
+    childIds: [joey.id],
+    homeId: home.id,
+    phase: 'rearing',
+    phaseTicks: 0,
+    dutyParent: 0,
+  };
+  state.families.push(fam);
+  mother.familyId = fam.id;
+  joey.familyId = fam.id;
+  home.familyId = fam.id;
+  for (let i = 0; i < 30 && joey.carriedBy === null; i++) tick(state, []);
+  if (joey.carriedBy !== mother.id) throw new Error('joey never mounted');
+  return { state, motherId: mother.id, joeyId: joey.id };
 }
 
 beforeEach(async () => {
@@ -220,6 +255,75 @@ describe('migrations', () => {
     expect(save.sim.nextId).toBeGreaterThan(priorNextId);
     const allIds = save.sim.homes.map((h) => h.id);
     expect(new Set(allIds).size).toBe(allIds.length); // ids stay unique across the whole array
+  });
+
+  it('M12: normalises a missing carriedBy to null rather than rejecting', () => {
+    // The frozen v1 fixture predates the pouch entirely — not one of its
+    // creatures carries the key. Same defensive shape as the
+    // lastWandererTick default above: a save written before the field
+    // existed must load, not be thrown away.
+    const raw = JSON.parse(JSON.stringify(fixtureV1)) as {
+      sim: { creatures: { carriedBy?: number | null }[] };
+    };
+    expect(raw.sim.creatures.length).toBeGreaterThan(0);
+    expect(raw.sim.creatures.every((c) => c.carriedBy === undefined)).toBe(true);
+
+    const save = migrate(raw);
+    expect(save).not.toBeNull();
+    if (!save) throw new Error('save missing');
+    for (const c of save.sim.creatures) expect(c.carriedBy).toBeNull();
+  });
+
+  it('M12: cuts a carriedBy naming an id that is no longer in creatures', () => {
+    // The orphaned-reference guard. A dangling carrier id would leave the
+    // rider with its behavior selection switched off and nothing to derive a
+    // position from — frozen where it stood, forever.
+    const raw = JSON.parse(JSON.stringify(fixtureV1)) as {
+      sim: { creatures: { id: number; carriedBy?: number | null }[] };
+    };
+    const [first, second] = raw.sim.creatures;
+    if (!first || !second) throw new Error('fixture needs two creatures');
+    first.carriedBy = 987654321; // nobody
+    second.carriedBy = second.id; // itself, which is nobody either
+
+    const save = migrate(raw);
+    expect(save).not.toBeNull();
+    if (!save) throw new Error('save missing');
+    expect(save.sim.creatures[0]?.carriedBy).toBeNull();
+    expect(save.sim.creatures[1]?.carriedBy).toBeNull();
+  });
+
+  it('M12: a carriedBy naming a creature that IS in the save is left alone', () => {
+    // Kills the mutant that "guards" by clearing every link unconditionally,
+    // which would silently unload every pouch on every load.
+    const raw = JSON.parse(JSON.stringify(fixtureV1)) as {
+      sim: { creatures: { id: number; carriedBy?: number | null }[] };
+    };
+    const [carrier, rider] = raw.sim.creatures;
+    if (!carrier || !rider) throw new Error('fixture needs two creatures');
+    rider.carriedBy = carrier.id;
+
+    const save = migrate(raw);
+    expect(save?.sim.creatures[1]?.carriedBy).toBe(carrier.id);
+  });
+
+  it('M12: a save taken mid-ride loads and the joey is still being carried', async () => {
+    const { state, motherId, joeyId } = midRideWorld(4);
+    await saveWorld(state, 0);
+    const save = await loadSave();
+    if (!save) throw new Error('save missing');
+
+    const resumed = save.sim;
+    const loadedJoey = resumed.creatures.find((c) => c.id === joeyId);
+    const loadedMother = resumed.creatures.find((c) => c.id === motherId);
+    expect(loadedJoey?.carriedBy).toBe(motherId); // the link survived JSON
+    if (!loadedJoey || !loadedMother) throw new Error('lost a kangaroo');
+
+    // ...and the ride continues from where it left off: still aboard, still
+    // exactly where she is.
+    for (let i = 0; i < 20; i++) tick(resumed, []);
+    expect(loadedJoey.carriedBy).toBe(motherId);
+    expect(loadedJoey.pos).toEqual(loadedMother.pos);
   });
 
   it('loadSave survives a corrupt stored value', async () => {

@@ -1,0 +1,465 @@
+/**
+ * M12 Task 4: the joey really rides.
+ *
+ * Before this task a kangaroo baby was an ordinary Creature merely leashed
+ * near its home. That could never work: an adult kangaroo moves 9 units/tick
+ * (the valley's fastest) and the baby stage multiplier is 0.55, so a joey
+ * manages 4.95 — it crossed the 140-unit baby leash in about 1.6 seconds
+ * every time its mother set off. This file pins the real thing: it mounts
+ * when it is near her, its position IS hers while it rides, it hops out on a
+ * deterministic graze window and climbs back in, it is put down when it grows
+ * up, and — the load-bearing constraint — none of those transitions ever
+ * touches the sim's RNG stream.
+ *
+ * Pinned numeric contract (same convention as tests/feeding.test.ts): the
+ * constants below are literal copies of the module-private ones in
+ * src/sim/family.ts, not imports of them, so an accidental change to those
+ * fails a test here instead of silently reshaping the game.
+ */
+import { describe, expect, it } from 'vitest';
+import { applyActivity, decayNeeds, idHash, selectBehavior } from '../src/sim/behaviors';
+import { getClock } from '../src/sim/clock';
+import { familySystem } from '../src/sim/family';
+import { ageCreatures } from '../src/sim/lifecycle';
+import { tick } from '../src/sim/Sim';
+import { speedFor } from '../src/sim/species';
+import {
+  createWorld,
+  spawnCreature,
+  type Creature,
+  type Family,
+  type WorldState,
+} from '../src/sim/state';
+
+/** How close a joey must be to its mother to climb in (family.ts). */
+const MOUNT_RANGE = 60;
+/** The graze window: POUCH_GRAZE_TICKS out of every POUCH_GRAZE_PERIOD. */
+const POUCH_GRAZE_PERIOD = 600;
+const POUCH_GRAZE_TICKS = 120;
+/** How far a grazing joey may potter from its mother (= BABY_LEASH). */
+const GRAZE_LEASH = 140;
+/** Ticks a passing takes to complete (family.ts's PASS_GATHER_TICKS). */
+const PASS_GATHER_TICKS = 200;
+
+/**
+ * The graze window as family.ts computes it — pure arithmetic on the tick
+ * count and the joey's own id, phased by `idHash` so two joeys never hop out
+ * on the same tick. Reproduced here (using the same exported `idHash`) so the
+ * tests can predict transitions exactly.
+ */
+function predictGraze(tick: number, joeyId: number): boolean {
+  return (tick + idHash(joeyId)) % POUCH_GRAZE_PERIOD < POUCH_GRAZE_TICKS;
+}
+
+/**
+ * Sim.tick's pipeline minus regulatePopulation. The wanderer failsafe would
+ * otherwise flood these deliberately-tiny worlds with one arrival per species
+ * (every species is below its floor once the starting cast is cleared), which
+ * has nothing to do with the pouch and buries the signal. Order is otherwise
+ * identical to src/sim/Sim.ts, including familySystem running BEFORE
+ * applyActivity — the ordering the position derivation depends on.
+ */
+function localTick(state: WorldState): void {
+  state.tick++;
+  const clock = getClock(state.tick);
+  decayNeeds(state);
+  ageCreatures(state);
+  for (const c of state.creatures) selectBehavior(state, c, clock);
+  familySystem(state);
+  for (const c of state.creatures) applyActivity(state, c, clock);
+}
+
+interface JoeyWorld {
+  state: WorldState;
+  mother: Creature;
+  joey: Creature;
+  fam: Family;
+}
+
+/**
+ * A valley containing exactly one kangaroo family in 'rearing': a mother at
+ * her shade scrape and one joey a few paces away, well inside MOUNT_RANGE.
+ * `idBump` burns that many ids before the joey is spawned, which shifts its
+ * `idHash` phase — the handle the phasing test pulls on.
+ */
+function joeyWorld(seed: number, idBump = 0): JoeyWorld {
+  const state = createWorld(seed);
+  state.creatures = [];
+  state.families = [];
+  for (const h of state.homes) h.familyId = null;
+  const home = state.homes.find((h) => h.kind === 'shadeScrape');
+  if (!home) throw new Error('no shade scrape');
+
+  const mother = spawnCreature(state, 'kangaroo', { ...home.pos }, 0.5);
+  mother.sex = 'f';
+  state.nextId += idBump;
+  const joey = spawnCreature(state, 'kangaroo', { x: home.pos.x + 20, y: home.pos.y }, 0.02);
+  joey.sex = 'm';
+
+  // The array is sorted ascending by id and the mother is always born first,
+  // so applyActivity reaches her before the joey and the joey reads THIS
+  // tick's position, never a stale one. Asserted rather than assumed — the
+  // whole position-derivation design rests on it.
+  expect(joey.id).toBeGreaterThan(mother.id);
+  expect(state.creatures.indexOf(joey)).toBeGreaterThan(state.creatures.indexOf(mother));
+  expect(mother.stage).toBe('adult');
+  expect(joey.stage).toBe('baby');
+
+  const fam: Family = {
+    id: state.nextId++,
+    species: 'kangaroo',
+    parentIds: [mother.id],
+    childIds: [joey.id],
+    homeId: home.id,
+    phase: 'rearing',
+    phaseTicks: 0,
+    dutyParent: 0,
+  };
+  state.families.push(fam);
+  mother.familyId = fam.id;
+  joey.familyId = fam.id;
+  home.familyId = fam.id;
+  return { state, mother, joey, fam };
+}
+
+function dist(a: Creature, b: Creature): number {
+  return Math.hypot(a.pos.x - b.pos.x, a.pos.y - b.pos.y);
+}
+
+describe('a) the joey mounts, and rides exactly where its mother goes', () => {
+  it('climbs in within a handful of ticks and its position is hers, every tick, while she travels', () => {
+    const { state, mother, joey } = joeyWorld(3);
+    expect(dist(joey, mother)).toBeLessThanOrEqual(MOUNT_RANGE); // starts in reach
+
+    let mounted = -1;
+    for (let t = 0; t < 30 && mounted < 0; t++) {
+      localTick(state);
+      if (joey.carriedBy === mother.id) mounted = state.tick;
+    }
+    expect(mounted).toBeGreaterThan(0);
+
+    // Now watch a long stretch of her day. Every tick the joey is aboard, its
+    // position must be hers EXACTLY — this is the assertion that fails today,
+    // when a joey at 4.95 units/tick simply cannot follow a mother at 9.
+    let carriedTicks = 0;
+    let travelled = 0;
+    let prev = { ...mother.pos };
+    for (let t = 0; t < 400; t++) {
+      localTick(state);
+      travelled += Math.hypot(mother.pos.x - prev.x, mother.pos.y - prev.y);
+      prev = { ...mother.pos };
+      if (joey.carriedBy === mother.id) {
+        carriedTicks++;
+        expect(joey.pos.x).toBe(mother.pos.x);
+        expect(joey.pos.y).toBe(mother.pos.y);
+        expect(joey.heading).toBe(mother.heading);
+      }
+    }
+    expect(carriedTicks).toBeGreaterThan(200); // it really did spend the day aboard
+    expect(travelled).toBeGreaterThan(200); // and she really did go somewhere
+  });
+
+  it('does not alias positions: the two creatures keep their own Vec2 objects', () => {
+    // `joey.pos = mother.pos` would look identical to the test above and be a
+    // real bug — one shared object across two creatures, silently duplicated
+    // by the save's JSON round-trip and moved by either one's next step.
+    const { state, mother, joey } = joeyWorld(3);
+    for (let t = 0; t < 30 && joey.carriedBy === null; t++) localTick(state);
+    expect(joey.carriedBy).toBe(mother.id);
+    expect(joey.pos).not.toBe(mother.pos);
+    mother.pos.x += 500;
+    expect(joey.pos.x).not.toBe(mother.pos.x);
+  });
+
+  it('a riding joey still gets hungry and is still nursed', () => {
+    const { state, mother, joey } = joeyWorld(3);
+    for (let t = 0; t < 30 && joey.carriedBy === null; t++) localTick(state);
+    expect(joey.carriedBy).toBe(mother.id);
+
+    // Needs keep decaying aboard (decayNeeds is its own pass, untouched by
+    // the movement bypass), and activity.ticks keeps counting.
+    joey.needs.hunger = 0.2;
+    const ticksBefore = joey.activity.ticks;
+    for (let t = 0; t < 40; t++) localTick(state);
+    expect(joey.needs.hunger).toBeGreaterThan(0.2);
+    expect(joey.activity.ticks).toBeGreaterThan(ticksBefore);
+
+    // And a hungry joey in the pouch is fed: at distance 0 it is comfortably
+    // inside FEED_CONTACT_RANGE, so the nursing step relieves it.
+    joey.needs.hunger = 0.95;
+    let relieved = false;
+    let peak = joey.needs.hunger;
+    for (let t = 0; t < 1200 && !relieved; t++) {
+      localTick(state);
+      if (joey.needs.hunger < peak - 0.01) relieved = true;
+      peak = Math.max(peak, joey.needs.hunger);
+    }
+    expect(relieved).toBe(true);
+  });
+});
+
+describe('b) the joey is put down when it grows up', () => {
+  it('dismounts on reaching juvenile and moves on its own feet again', () => {
+    const { state, mother, joey } = joeyWorld(3);
+    for (let t = 0; t < 30 && joey.carriedBy === null; t++) localTick(state);
+    expect(joey.carriedBy).toBe(mother.id);
+
+    // Two ticks short of the baby/juvenile boundary.
+    joey.ageTicks = Math.floor(joey.lifespanTicks * 0.1) - 2;
+    for (let t = 0; t < 5; t++) localTick(state);
+    expect(joey.stage).toBe('juvenile');
+    expect(joey.carriedBy).toBeNull();
+
+    // Ordinary movement resumed: it goes its own way rather than sitting
+    // frozen wherever it was set down.
+    const setDownAt = { ...joey.pos };
+    let ownMovement = 0;
+    let prev = { ...joey.pos };
+    for (let t = 0; t < 150; t++) {
+      localTick(state);
+      ownMovement += Math.hypot(joey.pos.x - prev.x, joey.pos.y - prev.y);
+      prev = { ...joey.pos };
+      expect(joey.carriedBy).toBeNull(); // never climbs back in as a juvenile
+    }
+    expect(ownMovement).toBeGreaterThan(20);
+    expect(Math.hypot(joey.pos.x - setDownAt.x, joey.pos.y - setDownAt.y)).toBeGreaterThan(0);
+  });
+});
+
+describe('c) the graze window: it hops out to feed itself, then climbs back in', () => {
+  it('dismounts exactly on its own idHash-phased window, and remounts after it', () => {
+    const { state, mother, joey } = joeyWorld(3);
+    for (let t = 0; t < 30 && joey.carriedBy === null; t++) localTick(state);
+    expect(joey.carriedBy).toBe(mother.id);
+
+    let firstDismount = -1;
+    for (let t = 0; t < POUCH_GRAZE_PERIOD + 50 && firstDismount < 0; t++) {
+      localTick(state);
+      if (joey.carriedBy === null) firstDismount = state.tick;
+    }
+    expect(firstDismount).toBeGreaterThan(0);
+    // It hopped out on precisely the tick the pinned formula says, phase and
+    // all — not on some other cadence that merely happens to end the ride.
+    expect(predictGraze(firstDismount, joey.id)).toBe(true);
+    expect(predictGraze(firstDismount - 1, joey.id)).toBe(false);
+
+    // It stays out for the window, then gets back in.
+    let remounted = -1;
+    for (let t = 0; t < POUCH_GRAZE_PERIOD && remounted < 0; t++) {
+      localTick(state);
+      if (joey.carriedBy === mother.id) remounted = state.tick;
+    }
+    expect(remounted).toBeGreaterThan(firstDismount);
+    expect(remounted - firstDismount).toBeGreaterThanOrEqual(POUCH_GRAZE_TICKS);
+  });
+
+  it('is phased per joey — two joeys with different ids graze at different times', () => {
+    const a = joeyWorld(3, 0);
+    const b = joeyWorld(3, 7); // same world, a joey with a different id
+    expect(b.joey.id).not.toBe(a.joey.id);
+
+    const firstGrazeOf = (w: JoeyWorld): number => {
+      for (let t = 0; t < 30 && w.joey.carriedBy === null; t++) localTick(w.state);
+      expect(w.joey.carriedBy).toBe(w.mother.id);
+      for (let t = 0; t < POUCH_GRAZE_PERIOD + 50; t++) {
+        localTick(w.state);
+        if (w.joey.carriedBy === null) return w.state.tick;
+      }
+      throw new Error('never grazed');
+    };
+
+    expect(firstGrazeOf(a)).not.toBe(firstGrazeOf(b));
+  });
+
+  it('a grazing joey stays within a leash of its mother rather than being left behind', () => {
+    const { state, mother, joey } = joeyWorld(3);
+    let sawGrazing = false;
+    let worst = 0;
+    for (let t = 0; t < 2500; t++) {
+      localTick(state);
+      if (joey.carriedBy === null && joey.stage === 'baby') {
+        sawGrazing = true;
+        worst = Math.max(worst, dist(joey, mother));
+      }
+    }
+    expect(sawGrazing).toBe(true);
+    // The leash pulls it back toward her every tick it is beyond the radius;
+    // a mother at 9 units/tick can outrun a joey at 4.95 for a moment, so the
+    // bound is the leash plus a generous overshoot allowance — the point is
+    // that it is bounded at all, which the old nest-anchored leash was not.
+    expect(worst).toBeLessThan(GRAZE_LEASH * 6);
+  });
+});
+
+describe('d) the pouch draws nothing from the RNG stream', () => {
+  it('2000 ticks of mounts, graze windows and remounts leave state.rng untouched', () => {
+    const { state, mother, joey } = joeyWorld(5);
+    joey.ageTicks = 0;
+    joey.pos = { x: mother.pos.x, y: mother.pos.y }; // stationary: pure transition exercise
+
+    // In this world familySystem itself is draw-free by construction — no
+    // passings due, both members already in a family so formPairs finds
+    // nobody eligible, no clutch to roll — so any movement in state.rng can
+    // only have come from the pouch code under test.
+    const before = [...state.rng];
+    let mounts = 0;
+    let dismounts = 0;
+    let carried = false;
+    for (let i = 0; i < 2000; i++) {
+      state.tick++;
+      familySystem(state);
+      const now = joey.carriedBy !== null && joey.carriedBy !== undefined;
+      if (now && !carried) mounts++;
+      if (!now && carried) dismounts++;
+      carried = now;
+    }
+    // Not a vacuous pass: the run really did cycle through the transitions.
+    expect(mounts).toBeGreaterThanOrEqual(3);
+    expect(dismounts).toBeGreaterThanOrEqual(3);
+    expect([...state.rng]).toEqual(before);
+  });
+
+  it('the on-foot chase re-targets every tick and still draws nothing', () => {
+    // Kills the obvious mutant: a chase target scattered with nextRange, the
+    // way the ordinary nest leash's re-gather used to be.
+    const { state, mother, joey } = joeyWorld(5);
+    joey.ageTicks = 0;
+    joey.pos = { x: mother.pos.x + 500, y: mother.pos.y }; // far out of reach, never arrives
+
+    const before = [...state.rng];
+    for (let i = 0; i < 500; i++) {
+      state.tick++;
+      familySystem(state);
+    }
+    expect(joey.activity.id).toBe('gather'); // it is being called back
+    expect(joey.carriedBy).toBeNull();
+    expect([...state.rng]).toEqual(before);
+  });
+
+  it('growing up and being stranded are draw-free too', () => {
+    const { state, mother, joey } = joeyWorld(5);
+    joey.pos = { x: mother.pos.x, y: mother.pos.y };
+    state.tick++;
+    familySystem(state);
+    expect(joey.carriedBy).toBe(mother.id);
+
+    const before = [...state.rng];
+    joey.stage = 'juvenile';
+    state.tick++;
+    familySystem(state);
+    expect(joey.carriedBy).toBeNull();
+
+    // ...and the stranded-rider backstop (family gone out from under it).
+    joey.stage = 'baby';
+    joey.carriedBy = mother.id;
+    joey.familyId = null;
+    state.tick++;
+    familySystem(state);
+    expect(joey.carriedBy).toBeNull();
+    expect([...state.rng]).toEqual(before);
+  });
+});
+
+describe('e) a carried joey always eventually gets out (no permanent freeze)', () => {
+  it('never rides for longer than one graze period, and gets back in again', () => {
+    const { state, mother, joey } = joeyWorld(9);
+    let streak = 0;
+    let longestStreak = 0;
+    let mounts = 0;
+    let carried = false;
+    for (let t = 0; t < 4000; t++) {
+      localTick(state);
+      if (joey.stage !== 'baby') break; // grown up: no longer the case under test
+      const now = joey.carriedBy === mother.id;
+      if (now && !carried) mounts++;
+      carried = now;
+      streak = now ? streak + 1 : 0;
+      longestStreak = Math.max(longestStreak, streak);
+    }
+    expect(mounts).toBeGreaterThanOrEqual(2); // rides, gets out, rides again
+    expect(longestStreak).toBeGreaterThan(0);
+    expect(longestStreak).toBeLessThan(POUCH_GRAZE_PERIOD);
+  });
+
+  it('a joey whose mother passes is set down and walks again', () => {
+    const { state, mother, joey } = joeyWorld(9);
+    for (let t = 0; t < 30 && joey.carriedBy === null; t++) localTick(state);
+    expect(joey.carriedBy).toBe(mother.id);
+
+    mother.ageTicks = mother.lifespanTicks + 1; // her time has come
+    for (let t = 0; t < PASS_GATHER_TICKS + 20; t++) localTick(state);
+    expect(state.creatures.some((c) => c.id === mother.id)).toBe(false);
+    expect(joey.carriedBy).toBeNull();
+
+    // A generous horizon on purpose: an orphaned baby is a free agent again,
+    // and a free agent legitimately stands still for a long stretch while it
+    // eats out a forage target. What is being ruled out is a PERMANENT
+    // freeze, not stillness.
+    let moved = 0;
+    let prev = { ...joey.pos };
+    for (let t = 0; t < 1000; t++) {
+      localTick(state);
+      moved += Math.hypot(joey.pos.x - prev.x, joey.pos.y - prev.y);
+      prev = { ...joey.pos };
+    }
+    expect(moved).toBeGreaterThan(20); // not frozen where she left it
+    expect(joey.activity.id).not.toBe('gather'); // and not stuck in a family duty
+  });
+
+  it('a carry link naming a creature that no longer exists is cut, not chased', () => {
+    const { state, mother, joey } = joeyWorld(9);
+    // Out of reach of its mother, so nothing can re-mount it this tick and
+    // the assertion is about the ghost link alone.
+    joey.pos = { x: mother.pos.x + 500, y: mother.pos.y };
+    joey.carriedBy = 999999; // a ghost
+    state.tick++;
+    familySystem(state);
+    expect(joey.carriedBy).toBeNull();
+  });
+
+  it('a ghost link on a joey standing right beside its mother resolves to HER, never the ghost', () => {
+    const { state, mother, joey } = joeyWorld(9);
+    joey.carriedBy = 999999;
+    state.tick++;
+    familySystem(state);
+    expect(joey.carriedBy).not.toBe(999999);
+    expect(joey.carriedBy).toBe(mother.id);
+  });
+});
+
+describe('and it happens in an ordinary valley, not just a hand-built one', () => {
+  it('a joey is riding in a plain createWorld run, through the real Sim.tick pipeline', () => {
+    // Everything above drives a deliberately-tiny world through a local
+    // pipeline. This drives the real one, with all twelve species and the
+    // population regulator running, to prove the feature is actually
+    // reachable: the starting cast's kangaroo pair courts, nests, births a
+    // joey, and it climbs in. (Measured across seeds 1/7/11/23/42, the first
+    // ride happens between ticks 1400 and 1800; the 6000-tick budget here is
+    // generous headroom, not a tight fit.)
+    const state = createWorld(1);
+    let rider: Creature | undefined;
+    for (let t = 0; t < 6000 && !rider; t++) {
+      tick(state, []);
+      rider = state.creatures.find((c) => c.species === 'kangaroo' && c.carriedBy != null);
+    }
+    expect(rider).toBeDefined();
+    if (!rider) throw new Error('nobody rode');
+    const carrier = state.creatures.find((c) => c.id === rider.carriedBy);
+    expect(carrier).toBeDefined();
+    expect(carrier?.species).toBe('kangaroo');
+    expect(carrier?.sex).toBe('f'); // her pouch, not his
+    expect(rider.stage).toBe('baby');
+    expect(rider.pos).toEqual(carrier?.pos);
+  });
+});
+
+describe('the mechanical reason this exists', () => {
+  it('a joey on foot cannot keep up with its own mother', () => {
+    const mother = speedFor('kangaroo', 'adult');
+    const joey = speedFor('kangaroo', 'baby');
+    expect(joey).toBeLessThan(mother);
+    // It falls out of the old 140-unit nest leash in well under two seconds
+    // of a mother travelling flat out (10 ticks = 1s at 1x).
+    expect((mother - joey) * 20).toBeGreaterThan(GRAZE_LEASH * 0.5);
+  });
+});

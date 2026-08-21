@@ -6,12 +6,13 @@
  * for creatures with family duties. Family-directed activities are released
  * back to 'idle' when the duty ends.
  */
-import { FEED_CONTACT_RANGE, feedContactRing, idOffsetAngle } from './behaviors';
+import { FEED_CONTACT_RANGE, feedContactRing, idHash, idOffsetAngle } from './behaviors';
 import { TICKS_PER_DAY } from './clock';
 import { emit } from './events';
 import { nextRange } from './rng';
 import { landingMediumOf, SPECIES } from './species';
 import {
+  isCarried,
   type Creature,
   type Family,
   type Home,
@@ -47,12 +48,160 @@ const PASS_GATHER_TICKS = 200;
 const PASS_GATHER_RANGE = 700;
 const MEMORIAL_TICKS = 2 * TICKS_PER_DAY;
 
+/* --------------------------- pouch-carry (M12) --------------------------- */
+
+/**
+ * How close a joey must be to its mother to climb into the pouch. Sits
+ * between the two radii this file already lives by: FEED_CONTACT_RANGE (40 —
+ * "touching, close enough to nurse") and BABY_LEASH (140 — "somewhere in the
+ * yard"). 60 reads as "right at her side" — near enough that the mount looks
+ * like a reach-and-climb rather than a teleport across the meadow, but loose
+ * enough that a joey doesn't have to thread a needle to get aboard. It is
+ * also the radius M11 used for its nurse-gather ring, i.e. the distance this
+ * codebase already calls "gathered in".
+ */
+const MOUNT_RANGE = 60;
+/**
+ * The graze window: every POUCH_GRAZE_PERIOD ticks a joey hops out for
+ * POUCH_GRAZE_TICKS ticks to feed itself, then climbs back in. 600/120 is
+ * one minute of real time at 1x with a twelve-second break in it — an
+ * occasional pause from riding, not a way of life: a kangaroo baby stage
+ * lasts ~3360 ticks (33600 mean lifespan × 0.1), so a joey grazes about five
+ * or six times in its whole infancy and spends 80% of it aboard.
+ *
+ * Phased by `idHash(joey.id)` so two joeys in the valley never hop out on
+ * the same tick — the same draw-free trick the feed-mote stagger and the
+ * socialize ring already use. Nothing here consults the RNG.
+ */
+const POUCH_GRAZE_PERIOD = 600;
+const POUCH_GRAZE_TICKS = 120;
+/**
+ * How far a grazing joey may potter from its mother before it is called
+ * back. Same distance as BABY_LEASH — "in the yard" — but anchored on HER
+ * rather than on the nest, because while she is carrying it around the
+ * valley the nest is nowhere near either of them.
+ */
+const GRAZE_LEASH = BABY_LEASH;
+
+/**
+ * Is this joey in its graze window right now? Pure arithmetic on the tick
+ * count and the joey's own id — deterministic, replay-safe, and (the point)
+ * completely free of RNG draws.
+ */
+function inGrazeWindow(tick: number, joeyId: number): boolean {
+  return (tick + idHash(joeyId)) % POUCH_GRAZE_PERIOD < POUCH_GRAZE_TICKS;
+}
+
 export function familySystem(state: WorldState): void {
   handlePassings(state);
   formPairs(state);
   for (const fam of state.families) stepFamily(state, fam);
   cleanupFamilies(state);
+  releaseStrandedRiders(state);
   state.memorials = state.memorials.filter((m) => state.tick - m.tick < MEMORIAL_TICKS);
+}
+
+/**
+ * The pouch's backstop: any carry link that no longer makes sense is cut.
+ * stepFamily's rearing case only ever sees families that still exist and are
+ * still rearing, so a link can outlive its own preconditions — a family
+ * dissolving with both members alive (cleanupFamilies), a carrier removed
+ * mid-ride, a rider aged out on a tick its family didn't step. Without this,
+ * such a joey would be glued to a creature forever with its own behavior
+ * selection switched off: a permanent freeze, exactly the failure class
+ * tests/stuck.test.ts exists for. Draw-free.
+ */
+function releaseStrandedRiders(state: WorldState): void {
+  for (const rider of state.creatures) {
+    if (!isCarried(rider)) continue;
+    const carrier = state.creatures.find((o) => o.id === rider.carriedBy);
+    const valid =
+      carrier !== undefined &&
+      carrier.id !== rider.id &&
+      rider.familyId !== null &&
+      rider.familyId === carrier.familyId &&
+      rider.stage === 'baby' &&
+      SPECIES[rider.species].reproduction.pouchCarry === true;
+    if (!valid) dismount(rider);
+  }
+}
+
+/** Put a rider back on its own feet, free to choose again next tick. */
+function dismount(joey: Creature): void {
+  joey.carriedBy = null;
+  if (joey.activity.id === 'pass') return; // nothing interrupts a passing
+  // Released to 'idle' with no minimum, not left in whatever it was doing
+  // when it climbed in: 'idle' is a free-agent activity, so selectBehavior
+  // takes it back over on the very next tick and it wanders off to graze.
+  // Assignment, not startActivity() — no RNG draw.
+  joey.activity = { id: 'idle', ticks: 0, minTicks: 0 };
+}
+
+/**
+ * One joey's ride, evaluated once per tick during its family's 'rearing'
+ * phase. Mounts, dismounts, and (on foot) leashes the joey to its MOTHER
+ * rather than to the nest — the nest is irrelevant while she is carrying it
+ * across the valley. Every branch is pure arithmetic on positions, ticks and
+ * ids: no RNG draws anywhere on this path.
+ */
+function stepPouch(
+  state: WorldState,
+  joey: Creature,
+  mother: Creature,
+  motherIsFeeding: boolean,
+): void {
+  if (joey.activity.id === 'pass') {
+    joey.carriedBy = null;
+    return;
+  }
+  // Grown out of the pouch, or the mother is passing: back on its own feet.
+  if (joey.stage !== 'baby' || mother.activity.id === 'pass') {
+    if (isCarried(joey)) dismount(joey);
+    return;
+  }
+
+  const grazing = inGrazeWindow(state.tick, joey.id);
+
+  if (isCarried(joey)) {
+    if (joey.carriedBy === mother.id && !grazing) return; // riding on
+    dismount(joey); // the graze window opened (or somebody else had it)
+  }
+
+  const d = Math.hypot(joey.pos.x - mother.pos.x, joey.pos.y - mother.pos.y);
+  if (!grazing && d <= MOUNT_RANGE) {
+    joey.carriedBy = mother.id;
+    // Same draw-free reset as dismount: while carried, selectBehavior returns
+    // immediately, so 'idle' is simply what the joey is doing up there.
+    joey.activity = { id: 'idle', ticks: 0, minTicks: 0 };
+    return;
+  }
+
+  // On foot. Anchored on the mother, with three radii:
+  //  - she is holding a feeding meeting: the tight contact ring, exactly as
+  //    the ordinary baby leash does, so the joey is fed rather than watching;
+  //  - grazing: GRAZE_LEASH, room to potter and forage around her feet;
+  //  - otherwise: MOUNT_RANGE — it wants back in, so it beelines to her.
+  const landing = landingMediumOf(joey.species);
+  const radius = motherIsFeeding ? FEED_CONTACT_RANGE : grazing ? GRAZE_LEASH : MOUNT_RANGE;
+  if (d > radius) {
+    const target = motherIsFeeding
+      ? feedContactRing(mother.pos, joey.id, landing)
+      : nearestRestable(landing, { x: mother.pos.x, y: mother.pos.y });
+    // Re-targeted EVERY tick (unlike the nest leash, which only fires on
+    // crossing the radius): the anchor is a creature that moves, and a joey
+    // chasing where its mother stood a minute ago would never arrive.
+    joey.activity = {
+      id: 'gather',
+      ticks: joey.activity.id === 'gather' ? joey.activity.ticks : 0,
+      minTicks: 0,
+      targetPos: target,
+    };
+  } else if (joey.activity.id === 'gather') {
+    // Arrived. Explicitly released, because nothing else ever lets a baby out
+    // of 'gather' — selectBehavior skips family activities, and the 'gather'
+    // case in applyActivity has no exit of its own.
+    joey.activity = { id: 'idle', ticks: 0, minTicks: 0 };
+  }
 }
 
 /* ------------------------------ passing ------------------------------ */
@@ -124,6 +273,14 @@ function rebirth(state: WorldState, elder: Creature): void {
 
 function removeCreature(state: WorldState, c: Creature): void {
   state.creatures.splice(state.creatures.indexOf(c), 1);
+  // Nobody rides a creature that no longer exists (M12). Done before the
+  // familyId early-return below, because a carry link can outlive the family
+  // that created it — and done here as well as in releaseStrandedRiders so
+  // the dangling id never survives even a single tick, let alone into a save.
+  c.carriedBy = null;
+  for (const rider of state.creatures) {
+    if (rider.carriedBy === c.id) dismount(rider);
+  }
   if (c.familyId === null) return;
   const fam = state.families.find((f) => f.id === c.familyId);
   if (!fam) return;
@@ -345,9 +502,24 @@ function stepFamily(state: WorldState, fam: Family): void {
       // (M12) — zero RNG draws — replacing the old two-draw ±25/±18
       // scatter; the out-of-hold fallback to home below is untouched.
       const leashRadius = deliveringParent ? FEED_CONTACT_RANGE : BABY_LEASH;
+
+      // The pouch (M12): for a marsupial, the mother replaces the nest as the
+      // baby's whole world — she carries it, and when it is on its own feet
+      // it is leashed to her, not to the scrape. So a joey is governed
+      // entirely by stepPouch and skips the nest leash below. Everything
+      // here is draw-free.
+      const carrier =
+        rep.pouchCarry === true ? (parents.find((p) => p.sex === 'f') ?? parents[0]) : undefined;
+      if (carrier) {
+        for (const child of children) {
+          stepPouch(state, child, carrier, deliveringParent !== undefined);
+        }
+      }
+
       if (leashAnchor) {
         for (const child of children) {
           if (child.stage !== 'baby') continue;
+          if (carrier) continue; // stepPouch above owns this one
           const d = Math.hypot(child.pos.x - leashAnchor.x, child.pos.y - leashAnchor.y);
           if (d > leashRadius && child.activity.id !== 'gather') {
             child.activity = {

@@ -3,7 +3,7 @@
  * home kinds and movement media consistent with the valley.
  */
 import { describe, expect, it } from 'vitest';
-import { SPECIES } from '../src/sim/species';
+import { SPECIES, speedFor } from '../src/sim/species';
 import {
   canOccupy,
   DREY_SITES,
@@ -81,6 +81,23 @@ describe('species registry', () => {
     expect(SPECIES.kangaroo.voice.rate).toBe(0); // silent by design
     const speeds = Object.values(SPECIES).map((p) => p.speed);
     expect(SPECIES.kangaroo.speed).toBe(Math.max(...speeds)); // the valley's quickest
+  });
+
+  it('M12: the kangaroo is the valley\'s only pouch-carrier, and the only one that needs to be', () => {
+    expect(SPECIES.kangaroo.reproduction.pouchCarry).toBe(true);
+    for (const id of ALL) {
+      if (id === 'kangaroo') continue;
+      expect(SPECIES[id].reproduction.pouchCarry).toBeUndefined();
+    }
+    // Pouch-carry is a nursing mammal's arrangement — it rides on the same
+    // mother-centred feeding flow.
+    expect(SPECIES.kangaroo.reproduction.feedMode).toBe('nurse');
+    // And the mechanical reason it exists at all: a joey on foot moves at
+    // 0.55 of its mother's 9 units/tick, so it can never keep up with the
+    // valley's fastest adult — it fell out of the 140-unit baby leash in
+    // about a second and a half, every time she set off.
+    expect(speedFor('kangaroo', 'baby')).toBeLessThan(speedFor('kangaroo', 'adult'));
+    expect(SPECIES.kangaroo.speed - speedFor('kangaroo', 'baby')).toBeGreaterThan(4);
   });
 
   it('M10: squirrel darts, frog is a silent-croaking chorus, turtle is silent and slowest', () => {

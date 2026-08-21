@@ -41,6 +41,20 @@ export interface SpeciesParams {
      *   graze passively instead.
      */
     feedMode: 'nurse' | 'carry' | 'self';
+    /**
+     * Marsupials (M12): a baby of this species genuinely rides in its
+     * mother's pouch — it mounts when it is within MOUNT_RANGE of her, is
+     * carried wherever she goes, and hops out on a deterministic graze
+     * window to feed itself before climbing back in (family.ts). Data, not
+     * a species-specific branch, so a second marsupial is a one-line
+     * addition. Kangaroo only today.
+     *
+     * Why it exists at all: an adult kangaroo moves 9 units/tick — the
+     * valley's fastest — and the baby stage multiplier is 0.55, so a joey
+     * on foot manages 4.95 and can never keep up with its own mother. It
+     * crossed the 140-unit baby leash in about 1.6 seconds, every time.
+     */
+    pouchCarry?: true;
   };
   population: { floor: number; softCap: number; hardCap: number };
   /** How the species MOVES: koi water-only, ducks amphibious, birds by air. */
@@ -354,6 +368,7 @@ export const SPECIES: Record<SpeciesId, SpeciesParams> = {
       broodTicks: 700,
       cooldownTicks: 2400,
       feedMode: 'nurse',
+      pouchCarry: true, // the joey really rides (M12)
     },
     population: { floor: 2, softCap: 5, hardCap: 8 },
     medium: 'land',

@@ -59,6 +59,25 @@ export function migrate(raw: unknown): SaveFile | null {
   if (typeof save.sim.lastWandererTick !== 'object' || save.sim.lastWandererTick === null) {
     save.sim.lastWandererTick = {};
   }
+  // M12 pouch-carry (Creature.carriedBy). Same defensive shape as the
+  // lastWandererTick default above — a new optional field, so SAVE_VERSION
+  // stays 1 and the STEPS chain stays empty. Two jobs: normalise a missing
+  // or non-numeric value to null (every pre-M12 save), and cut any link
+  // naming an id that is not in this save's `creatures` — the
+  // orphaned-reference guard. A dangling id would leave a joey with its
+  // behavior selection switched off and no carrier to derive a position
+  // from: frozen where it stood, forever. Pure data, zero RNG draws, and
+  // idempotent across repeated migrate() calls.
+  const liveCreatureIds = new Set(save.sim.creatures.map((c) => c.id));
+  for (const c of save.sim.creatures) {
+    if (
+      typeof c.carriedBy !== 'number' ||
+      c.carriedBy === c.id ||
+      !liveCreatureIds.has(c.carriedBy)
+    ) {
+      c.carriedBy = null;
+    }
+  }
   // M10 defensive top-up (see NEW_HOME_SITE_GROUPS above): if a save has no
   // home of a given new kind at all, seed it from the same static sites
   // createWorld() would have used. Kind-presence (not exact count) is the

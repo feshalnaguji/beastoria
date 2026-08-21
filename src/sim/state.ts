@@ -92,6 +92,24 @@ export interface Creature {
   lifespanTicks: number;
   needs: Needs;
   activity: Activity;
+  /**
+   * Pouch-carry (M12): the id of the creature currently carrying this one, or
+   * `null` when it walks on its own feet. The rider holds the link, not the
+   * carrier, so "at most one carrier" is structural rather than an invariant
+   * something has to police; a carried creature still keeps its own activity
+   * and needs (a joey in the pouch still gets hungry and is still nursed),
+   * which is why this is a field and not an `Activity` id.
+   *
+   * Optional so a pre-M12 save without the key loads unchanged; the migration
+   * chain normalises a missing value to `null` and clears any link naming an
+   * id that is no longer in `creatures` (persist/migrations.ts).
+   */
+  carriedBy?: number | null;
+}
+
+/** Is this creature currently being carried by another? (M12 pouch-carry.) */
+export function isCarried(c: Creature): boolean {
+  return c.carriedBy !== null && c.carriedBy !== undefined;
 }
 
 export type FamilyPhase =
@@ -312,6 +330,10 @@ export function spawnCreature(
       social: nextRange(rng, 0, 0.3),
     },
     activity: { id: 'idle', ticks: 0, minTicks: 0 },
+    // Explicit null rather than left undefined: JSON.stringify drops
+    // undefined-valued keys, so a live world and its save round-trip would
+    // otherwise disagree on whether the key exists at all.
+    carriedBy: null,
   };
   state.creatures.push(creature);
   return creature;
