@@ -111,6 +111,102 @@ describe('pairing and the family FSM', () => {
     expect(state.eventLog.some((e) => e.kind === 'hatched')).toBe(true);
   });
 
+  // --- M13 Thread 1: live-birth gestation should not be shown as egg-brooding.
+  // These pin the DESIRED behavior (a mammal mother lives her ordinary life for
+  // the first ~70% of gestation, then settles home under a new 'gestate'
+  // activity for the final ~30%) — the sim doesn't have this distinction yet,
+  // so 4a/4b/4c are expected to FAIL until family.ts is changed (a later task).
+
+  it('4a: a live-birth mother lives her ordinary life through early gestation (no brood pin)', () => {
+    const state = pairWorld(8, 'rabbit');
+    runUntilPhase(state, 'expecting', 6000);
+    const fam = state.families[0];
+    if (!fam || !fam.clutch) throw new Error('no clutch');
+    const broodTicks = fam.clutch.broodTicksLeft;
+    const lateThreshold = 0.3 * broodTicks;
+    const seenActivities = new Set<string>();
+    let iterations = 0;
+    while (fam.clutch && fam.clutch.broodTicksLeft > lateThreshold && iterations < broodTicks + 10) {
+      tick(state, []);
+      iterations++;
+      const mother = fam.parentIds
+        .map((id) => state.creatures.find((c) => c.id === id))
+        .find((c) => c?.sex === 'f');
+      if (!mother) throw new Error('mother missing');
+      expect(mother.activity.id).not.toBe('brood');
+      seenActivities.add(mother.activity.id);
+    }
+    // She should be genuinely living her life via normal utility selection,
+    // not merely "unpinned but stuck" — expect at least 2 distinct free
+    // activities (forage/nap/wander/idle/socialize) across the window.
+    expect(seenActivities.size).toBeGreaterThanOrEqual(2);
+  });
+
+  it('4b: in the final 30% of gestation she settles home under a new "gestate" activity', () => {
+    const state = pairWorld(8, 'rabbit');
+    runUntilPhase(state, 'expecting', 6000);
+    const fam = state.families[0];
+    if (!fam || !fam.clutch) throw new Error('no clutch');
+    const broodTicks = fam.clutch.broodTicksLeft;
+    const lateThreshold = 0.3 * broodTicks;
+    const home = state.homes.find((h) => h.id === fam.homeId);
+    if (!home) throw new Error('no home');
+    let sawLatePhase = false;
+    let lastDist = Infinity;
+    for (let i = 0; i < broodTicks + 50 && fam.clutch; i++) {
+      tick(state, []);
+      if (!fam.clutch) break;
+      if (fam.clutch.broodTicksLeft <= lateThreshold) {
+        sawLatePhase = true;
+        const mother = fam.parentIds
+          .map((id) => state.creatures.find((c) => c.id === id))
+          .find((c) => c?.sex === 'f');
+        if (!mother) throw new Error('mother missing');
+        expect(mother.activity.id as string).toBe('gestate');
+        lastDist = Math.hypot(mother.pos.x - home.pos.x, mother.pos.y - home.pos.y);
+      }
+    }
+    expect(sawLatePhase).toBe(true);
+    expect(lastDist).toBeLessThan(40);
+  });
+
+  it('4c: the father never sits brood/gestate duty, and duty never rotates for a live-birth family', () => {
+    const state = pairWorld(8, 'rabbit');
+    runUntilPhase(state, 'expecting', 6000);
+    const fam = state.families[0];
+    if (!fam || !fam.clutch) throw new Error('no clutch');
+    const broodTicks = fam.clutch.broodTicksLeft;
+    const initialDutyParent = fam.dutyParent;
+    for (let i = 0; i < broodTicks + 50 && fam.clutch; i++) {
+      tick(state, []);
+      const father = fam.parentIds
+        .map((id) => state.creatures.find((c) => c.id === id))
+        .find((c) => c?.sex === 'm');
+      if (!father) throw new Error('father missing');
+      expect(father.activity.id).not.toBe('brood');
+      expect(father.activity.id as string).not.toBe('gestate');
+      expect(fam.dutyParent).toBe(initialDutyParent);
+    }
+  });
+
+  it('4d: a live birth emits "born" and never "eggLaid"', () => {
+    const state = pairWorld(8, 'rabbit');
+    runUntilPhase(state, 'rearing', 6000);
+    expect(state.eventLog.some((e) => e.kind === 'born')).toBe(true);
+    expect(state.eventLog.some((e) => e.kind === 'eggLaid')).toBe(false);
+  });
+
+  it('4e: a robin (egg-layer) is never seen in the live-birth "gestate" activity', () => {
+    const state = pairWorld(8, 'robin');
+    for (let i = 0; i < 6000; i++) {
+      tick(state, []);
+      for (const c of state.creatures) {
+        expect(c.activity.id as string).not.toBe('gestate');
+      }
+      if (state.families[0]?.phase === 'rearing') break;
+    }
+  });
+
   it('hungry babies get fed by a parent (feedYoung reduces their hunger)', () => {
     const state = pairWorld();
     runUntilPhase(state, 'rearing', 6000);
