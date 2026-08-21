@@ -6,6 +6,7 @@
 import { SAVE_VERSION, type SaveFile } from './schema';
 import type { HomeKind, Vec2, WorldState } from '../sim/state';
 import { DREY_SITES, FROG_SPAWN_CLUMPS, TURTLE_SAND_NESTS, SHADE_SCRAPES } from '../sim/valley';
+import { MOURNING_GATHER_MIN_TICKS } from '../sim/behaviors';
 
 /**
  * M10 added three home kinds (drey/spawnClump/sandNest) but SAVE_VERSION
@@ -76,6 +77,30 @@ export function migrate(raw: unknown): SaveFile | null {
       !liveCreatureIds.has(c.carriedBy)
     ) {
       c.carriedBy = null;
+    }
+  }
+  // M13 defensive normalization: a creature latched in a non-vigil 'gather'
+  // activity before the leash bug was fixed would remain frozen forever even
+  // after loading into fixed code, because the fixed leash logic only
+  // re-evaluates *babies inside a rearing family* — a latched juvenile or
+  // family-less adult would otherwise stay in 'gather' indefinitely. Only
+  // nesting-phase gathers (minTicks >= 30, not MOURNING_GATHER_MIN_TICKS, so
+  // minTicks < MOURNING_GATHER_MIN_TICKS catches all non-vigil types including
+  // nest-building and feeding-hold anchors) that have ticks near or exceeding
+  // 500 are normalized, assuming creatures fresher than that have not yet hit
+  // pathological stuck states. The mourning vigil 'gather'
+  // (minTicks >= MOURNING_GATHER_MIN_TICKS) is never touched. Same defensive
+  // data normalization shape as carriedBy above: pure data placement, zero RNG
+  // draws, idempotent across repeated migrate() calls.
+  for (const c of save.sim.creatures) {
+    if (
+      c.activity?.id === 'gather' &&
+      typeof c.activity.minTicks === 'number' &&
+      typeof c.activity.ticks === 'number' &&
+      c.activity.minTicks < MOURNING_GATHER_MIN_TICKS &&
+      c.activity.ticks >= 500
+    ) {
+      c.activity = { id: 'idle', ticks: 0, minTicks: 0 };
     }
   }
   // M10 defensive top-up (see NEW_HOME_SITE_GROUPS above): if a save has no
