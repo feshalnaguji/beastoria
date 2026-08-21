@@ -19,7 +19,7 @@ import {
   type WorldState,
 } from '../sim/state';
 import { isWater } from '../sim/valley';
-import { FEED_RANGE, type Feeding } from '../sim/behaviors';
+import { FEED_CONTACT_RANGE, FEED_RANGE, type Feeding } from '../sim/behaviors';
 import type { ClipName, CreatureRig } from '../rigs/format';
 import { ALL_RIGS } from '../rigs/allRigs';
 import { Camera } from './Camera';
@@ -60,6 +60,11 @@ interface CreatureView {
     sleep: BakedFrame;
     carry: BakedFrame;
     sit: BakedFrame;
+    /** M12 task 3: single mid-pose bakes, present only for the four
+     * Thread-C rigs (rabbit/deer/robin/kangaroo) that define these clips —
+     * mirrors the flap/swim existence guard above. */
+    feedGive?: BakedFrame;
+    feedTake?: BakedFrame;
   };
   label: Text;
   species: SpeciesId;
@@ -123,6 +128,12 @@ interface CreatureView {
    * FEED_RANGE of its family's nursing mother — reads as snuggled in
    * ('eat' clip) regardless of its own activity. */
   nursed: boolean;
+  /** M12 task 3: true this sync while this baby is within
+   * FEED_CONTACT_RANGE of its family's parent currently in the "actual
+   * feeding is happening" step (nurse step 2 or carry step 3) — tighter
+   * and mode-agnostic compared to `nursed` above, which is nurse-only and
+   * uses the wider FEED_RANGE. Drives feedTake clip selection. */
+  feedContact: boolean;
   /** M11: ms remaining on a "just got fed" hold, set to FED_HOLD_MS by
    * onFeedings() the instant this baby is named in a Feeding, then decayed
    * every rendered frame. While > 0 the baby reads 'eat' and shows the
@@ -266,6 +277,12 @@ const FED_HOLD_MS = 1200;
  * vocabulary: amber for a carried mouthful, milk-white for a suckle. */
 const FEED_MOTE_TINT_CARRY = 0xe8a53c;
 const FEED_MOTE_TINT_NURSE = 0xf7f3e8;
+/** M12 task 3: a Feeding now spawns a small burst rather than one mote, so
+ * the moment reads as a flourish instead of a single blink — staggered by
+ * FEED_MOTE_BURST_STAGGER_MS apiece (see Ambient's FeedMote.delayMs) so the
+ * 3 trail rather than overlap. */
+const FEED_MOTE_BURST_COUNT = 3;
+const FEED_MOTE_BURST_STAGGER_MS = 90;
 /** Hatch/birth emergence: scale (and, for births, a small outward slide)
  * eases in over this long, then the view settles into normal rendering. */
 const EMERGE_MS = 900;
@@ -299,6 +316,22 @@ function isNursed(c: Creature, nursingMotherPos: Map<number, Vec2>): boolean {
   const m = nursingMotherPos.get(c.familyId);
   if (!m) return false;
   return Math.hypot(c.pos.x - m.x, c.pos.y - m.y) <= FEED_RANGE;
+}
+
+/** M12 task 3: true while this baby sits within FEED_CONTACT_RANGE of its
+ * family's parent currently in the "actual feeding is happening" step —
+ * nurse mode's step 2 (the nursing hold itself) or carry mode's step 3
+ * (the delivery hold) — built from `feedGivingPos`, a per-family map of
+ * that parent's position (both modes, unlike `nursingMotherPos` above
+ * which is nurse-only), computed once per sync in sync(). Tighter than
+ * `isNursed`'s FEED_RANGE on purpose: this gates the feedTake reaching-up
+ * pose, which should only show when the two are actually close enough to
+ * be touching, not merely "nearby". */
+function inFeedContact(c: Creature, feedGivingPos: Map<number, Vec2>): boolean {
+  if (c.stage !== 'baby' || c.familyId === null) return false;
+  const p = feedGivingPos.get(c.familyId);
+  if (!p) return false;
+  return Math.hypot(c.pos.x - p.x, c.pos.y - p.y) <= FEED_CONTACT_RANGE;
 }
 
 /** Activity labels this close to a home carrying a family label are hidden
@@ -379,6 +412,13 @@ export class Renderer {
   /** Reused every frame's swimming check — avoids allocating a Vec2 literal
    * per creature per frame just to call isWater(). */
   private readonly scratchPos: Vec2 = { x: 0, y: 0 };
+  /** Reused by onFeedings() (M12 task 3) to compute each feeding's parent/
+   * baby head points without allocating a Vec2 literal per event — mutated
+   * in place, then read immediately by spawnFeedMote (which copies the
+   * values out), so it's safe to reuse across both creatures in one feeding
+   * and across every feeding in the same call. */
+  private readonly scratchHeadA: Vec2 = { x: 0, y: 0 };
+  private readonly scratchHeadB: Vec2 = { x: 0, y: 0 };
 
   /** Show per-creature activity labels (toggled from the DevPanel). Off by
    * default (M10 task 4) — the glyph/pose vocabulary reads without text. */
@@ -516,14 +556,31 @@ export class Renderer {
     return { airborne: view.airborneNow, swimming: view.swimmingState };
   }
 
+  /** M12 task 3: this view's approximate head point (world px), reusing the
+   * same per-species crown offset (LABEL_HEIGHT) already used for label/
+   * glyph placement — see positionLabel() and render()'s crownX/crownY —
+   * rather than inventing a new head anchor. Writes into `out` and returns
+   * it (no allocation); `out` must not be retained past the call, since
+   * onFeedings() below reuses the same scratch Vec2 for every feeding in
+   * one call. */
+  private headPos(view: CreatureView, out: Vec2): Vec2 {
+    const scale = rigFor(view.species).stages[view.stage].scale;
+    out.x = view.curr.x + view.broodOffsetX;
+    out.y = view.curr.y + view.broodOffsetY + LABEL_HEIGHT[view.species] * scale;
+    return out;
+  }
+
   /**
    * M11: main.ts calls this once per tick, right after sync(state), with
    * that tick's TickOutput.feedings — the transient "this baby just got
    * fed" beats (one per sequenced carry delivery, one per staggered nurse
-   * suckle beat). For each, spawns a mote arcing from the parent's view to
-   * the baby's view (tinted by the PARENT's feedMode, so a carry delivery
-   * always arcs amber and a nurse suckle always arcs milk-white) and starts
-   * the baby's FED_HOLD_MS "just fed" hold (see CreatureView.fedMs). Missing
+   * suckle beat). For each, spawns a burst of FEED_MOTE_BURST_COUNT motes
+   * (M12 task 3, up from one) arcing from the parent's head to the baby's
+   * head (up from body-centre to body-centre — see headPos()), staggered by
+   * FEED_MOTE_BURST_STAGGER_MS apiece so the burst trails rather than
+   * overlaps, tinted by the PARENT's feedMode (so a carry delivery always
+   * arcs amber and a nurse suckle always arcs milk-white), and starts the
+   * baby's FED_HOLD_MS "just fed" hold (see CreatureView.fedMs). Missing
    * views (a feeding whose parent or baby left state.creatures between the
    * tick and this call) are skipped — transient like vocalizations, an
    * unwatched feed leaves no trace.
@@ -537,7 +594,11 @@ export class Renderer {
         SPECIES[parentView.species].reproduction.feedMode === 'nurse'
           ? FEED_MOTE_TINT_NURSE
           : FEED_MOTE_TINT_CARRY;
-      this.ambient.spawnFeedMote(parentView.curr, babyView.curr, tint);
+      const from = this.headPos(parentView, this.scratchHeadA);
+      const to = this.headPos(babyView, this.scratchHeadB);
+      for (let i = 0; i < FEED_MOTE_BURST_COUNT; i++) {
+        this.ambient.spawnFeedMote(from, to, tint, i * FEED_MOTE_BURST_STAGGER_MS);
+      }
       babyView.fedMs = FED_HOLD_MS;
     }
   }
@@ -550,18 +611,27 @@ export class Renderer {
 
     // Nurse holds (M10 task 4): a first pass so every baby's per-creature
     // check below can look its own family's currently-nursing mother up in
-    // O(1) rather than re-scanning state.creatures per baby.
+    // O(1) rather than re-scanning state.creatures per baby. M12 task 1
+    // renumbered feedYoung's nurse-mode steps (0 travel, 1 settle, 2
+    // nursing, 3 linger) — step 2 is the actual 90-tick nursing hold now,
+    // not step 1 (a review-flagged bug: left at step 1, the mother would
+    // read as "nursing" during the settle beat instead, and stand up out of
+    // the pose right when real nursing began).
     const nursingMotherPos = new Map<number, Vec2>();
     const nursingIds = new Set<number>();
+    // M12 task 3: a per-family map of whichever parent is currently in the
+    // "actual feeding is happening" step, both feed modes (nurse step 2,
+    // carry step 3) — feeds inFeedContact() below, which gates feedTake.
+    const feedGivingPos = new Map<number, Vec2>();
     for (const c of state.creatures) {
-      if (
-        c.familyId !== null &&
-        SPECIES[c.species].reproduction.feedMode === 'nurse' &&
-        c.activity.id === 'feedYoung' &&
-        c.activity.step === 1
-      ) {
+      if (c.familyId === null || c.activity.id !== 'feedYoung') continue;
+      const feedMode = SPECIES[c.species].reproduction.feedMode;
+      if (feedMode === 'nurse' && c.activity.step === 2) {
         nursingMotherPos.set(c.familyId, c.pos);
         nursingIds.add(c.id);
+        feedGivingPos.set(c.familyId, c.pos);
+      } else if (feedMode === 'carry' && c.activity.step === 3) {
+        feedGivingPos.set(c.familyId, c.pos);
       }
     }
 
@@ -589,6 +659,7 @@ export class Renderer {
       view.broodOffsetY = offset?.y ?? 0;
       view.nursing = nursingIds.has(c.id);
       view.nursed = isNursed(c, nursingMotherPos);
+      view.feedContact = inFeedContact(c, feedGivingPos);
     }
     // Creatures who have passed ease out instead of vanishing same-frame —
     // see this.fading, drained in render() (M9 task 5).
@@ -1069,6 +1140,23 @@ export class Renderer {
       view.lastY = y;
       view.odometer = (view.odometer + dispPx) % stride;
 
+      // M12 task 3: feedGive/feedTake selection, resolved here (not inside
+      // clipFor) because it needs this view's own rig — exactly the
+      // "does this rig define the clip" guard flap/swim already use above.
+      // `giving`: true while this creature (a parent) is in the "actual
+      // feeding is happening" step of feedYoung — nurse mode's step 2 (the
+      // nursing hold itself, same window view.nursing already flags) or
+      // carry mode's step 3 (the delivery hold). `feedGiving` only
+      // upgrades to the new clip when the rig actually authored it;
+      // otherwise the caller falls back to 'sit'/'eat' exactly as before
+      // (graceful fallback for the 8 of 12 species that don't define it yet).
+      const feedMode = speciesParams.reproduction.feedMode;
+      const giving =
+        view.nursing ||
+        (feedMode === 'carry' && view.activityId === 'feedYoung' && view.step === 3);
+      const feedGiving = giving && !!speciesRig.clips.feedGive;
+      const feedTaking = view.feedContact && !!speciesRig.clips.feedTake;
+
       // Single source of truth for which pose to show, shared by T2's live
       // rig and T1's baked-frame cascade below (M9 task 5's clipFor fix —
       // moving now outranks brood/nap, so a sitter still walking to the
@@ -1076,7 +1164,11 @@ export class Renderer {
       // nurse hold: the mother reads 'sit' (settled) and her snuggled-in
       // babies read 'eat', both computed once per sync in view.nursing/nursed.
       // M11 adds `fed`: any baby mid FED_HOLD_MS also reads 'eat', whether
-      // it was carry-delivered or nurse-suckled.
+      // it was carry-delivered or nurse-suckled. M12 task 3 reorders
+      // `nursing` above `moving` (a mother mid-settle micro-adjusting to
+      // face her baby is still genuinely stationary, so the old ordering
+      // cost her pose right on arrival) and layers feedGive/feedTake on top
+      // of the sit/eat poses they're replacing.
       const clip = clipFor(
         view.activityId,
         moving,
@@ -1086,6 +1178,8 @@ export class Renderer {
         view.nursing,
         view.nursed,
         fed,
+        feedGiving,
+        feedTaking,
       );
 
       if (tier === 2) {
@@ -1154,6 +1248,10 @@ export class Renderer {
             frame = view.frames.sleep;
           } else if (clip === 'eat') {
             frame = view.frames.eat;
+          } else if (clip === 'feedGive' && view.frames.feedGive) {
+            frame = view.frames.feedGive;
+          } else if (clip === 'feedTake' && view.frames.feedTake) {
+            frame = view.frames.feedTake;
           }
         }
         view.sprite.texture = frame.texture;
@@ -1385,6 +1483,7 @@ export class Renderer {
       swimAgreeCount: 0,
       nursing: false,
       nursed: false,
+      feedContact: false,
       fedMs: 0,
       emergeKind: undefined,
       emergeMs: 0,
@@ -1445,6 +1544,16 @@ export class Renderer {
     }
     if (rig.clips.swim) {
       frames.swim = [bakedFrame(this.app.renderer, rig, stage, 'swim', 0)];
+    }
+    // M12 task 3: same existence guard, for the two Thread-C feeding clips
+    // (rig.clips.feedGive/.feedTake — only rabbit/deer/robin/kangaroo define
+    // them today). Single mid-pose bakes, like eat/sleep/carry/sit above —
+    // these are held poses, not multi-frame cycles.
+    if (rig.clips.feedGive) {
+      frames.feedGive = bakedFrame(this.app.renderer, rig, stage, 'feedGive', 0.5);
+    }
+    if (rig.clips.feedTake) {
+      frames.feedTake = bakedFrame(this.app.renderer, rig, stage, 'feedTake', 0.5);
     }
     return frames;
   }
@@ -1517,7 +1626,7 @@ export class Renderer {
  * everything else — a passing elder is always at rest, per Task 3's
  * nearestRestable() landing guarantee — airborne/swimming come next.
  *
- * M9 task 5 fixes an ordering bug: `moving` now outranks brood/nap. Both
+ * M9 task 5 fixes an ordering bug: `moving` outranks brood/nap. Both
  * 'brood' and 'gather' walk to a target before settling (behaviors.ts:
  * "Walk to the clutch, then sit"), so a sitter or napper still covering
  * ground must read as walking, not as asleep mid-stride — only once they
@@ -1528,15 +1637,27 @@ export class Renderer {
  *
  * M10 task 4 adds the nurse hold, both stationary-only (already excluded
  * from `moving` since neither mother nor snuggled-in baby travels during a
- * hold): `nursing` (the mother, feedMode 'nurse' + activity 'feedYoung' step
- * 1) reads 'sit' instead of the generic 'eat' the old feedYoung fallback
- * gave her; `nursed` (a family baby within FEED_RANGE) reads 'eat'
- * regardless of its own activity — nursing wins even over its own nap/brood.
+ * hold): `nursing` (the mother, feedMode 'nurse' + activity 'feedYoung',
+ * M12 renumbering — step 2, the 90-tick nursing hold itself) reads 'sit'
+ * instead of the generic 'eat' the old feedYoung fallback gave her;
+ * `nursed` (a family baby within FEED_RANGE) reads 'eat' regardless of its
+ * own activity.
  *
  * M11 adds `fed`: any baby mid its own FED_HOLD_MS "just got fed" beat (see
  * CreatureView.fedMs) also reads 'eat', whether the feeding was a carry
  * delivery or a nurse suckle — same rank as `nursed`, since it's the same
  * "snuggled in and being fed" read.
+ *
+ * M12 task 3 reorders `nursing` above `moving` — a nursing/settling mother
+ * is genuinely stationary, but checking `moving` first cost her pose right
+ * on arrival and would have bitten the settle beat's facing micro-
+ * adjustments, so nursing is checked first on principle even though the
+ * two conditions rarely overlap in practice. It also layers `feedGive`
+ * (a parent, mid the "actual feeding is happening" step of either mode) and
+ * `feedTake` (a baby in contact during that same window) on top of the
+ * sit/eat poses they're replacing — both pre-resolved by the caller against
+ * the creature's own rig (graceful fallback: a rig that doesn't author
+ * these clips keeps getting 'sit'/'eat' exactly as before).
  */
 function clipFor(
   activityId: string,
@@ -1547,16 +1668,20 @@ function clipFor(
   nursing: boolean,
   nursed: boolean,
   fed: boolean,
+  feedGiving: boolean,
+  feedTaking: boolean,
 ): ClipName {
   if (activityId === 'pass') return 'sleep';
   if (airborne) return 'flap';
   if (swimming) return 'swim';
+  if (nursing) return feedGiving ? 'feedGive' : 'sit';
   if (moving) return activityId === 'feedYoung' && feedYoungStep === 2 ? 'carry' : 'walk';
-  if (nursing) return 'sit';
-  if (nursed || fed) return 'eat';
+  if (nursed || fed || feedTaking) return feedTaking ? 'feedTake' : 'eat';
   if (activityId === 'brood') return 'sit';
   if (activityId === 'nap') return 'sleep';
-  if (activityId === 'forage' || activityId === 'feedYoung') return 'eat';
+  if (activityId === 'forage' || activityId === 'feedYoung') {
+    return activityId === 'feedYoung' && feedGiving ? 'feedGive' : 'eat';
+  }
   if (activityId === 'socialize' || activityId === 'court') return 'social';
   return 'idle';
 }

@@ -80,23 +80,47 @@ export function creatureDoing(c: Creature, presentation: Presentation | undefine
       return 'looking for something tasty';
     case 'nap':
       return 'dozing';
-    case 'feedYoung':
-      // Nurse hold stays a single steady phrase (its step numbering means
-      // something different — see behaviors.ts). Carry mode's four steps
-      // (M11 renumbering) each earn their own words, so the text always
-      // matches what's on screen: out searching, then a pause at the food
-      // (still reads as "out finding" — the pause itself is wordless, shown
-      // by the 'eat'-clip head-dip, not by a text change), then the flight
-      // home, then the one-baby-at-a-time delivery hold.
-      if (SPECIES[c.species].reproduction.feedMode === 'nurse') return 'nursing the little ones';
+    case 'feedYoung': {
+      // Beat-aware text (M12 task 3): every step of feedYoung's holding
+      // sequence now earns its own words, so what's written always matches
+      // what's on screen — see src/sim/behaviors.ts's `case 'feedYoung'`
+      // for the authoritative step numbers this mirrors.
+      //
+      // Nurse mode (rabbit/deer/kangaroo — the mother, per family.ts's
+      // "the mother always nurses"): 0 travel home (the default fallback
+      // below — she hasn't arrived yet), 1 the settle beat (gathering in
+      // before the hold itself starts), 2 the 90-tick nursing hold (the
+      // actual feeding), 3 a satisfied linger after.
+      //
+      // Carry mode (bird species, four earlier steps unchanged from M11 +
+      // one new linger): 0 seek/1 pickup pause still share the wordless
+      // "out finding" fallback (the pause itself reads via the 'eat'-clip
+      // head-dip, not a text change), 2 carrying home, 3 the delivery hold,
+      // 4 (new) a satisfied linger — distinct from step 3's in-progress text
+      // so the words don't just repeat once the delivering is actually done.
+      if (SPECIES[c.species].reproduction.feedMode === 'nurse') {
+        switch (c.activity.step) {
+          case 1:
+            return 'gathering her little ones close';
+          case 2:
+            return 'nursing the little ones';
+          case 3:
+            return 'resting close, milk-warm and content';
+          default:
+            return 'heading home to her little ones';
+        }
+      }
       switch (c.activity.step) {
         case 2:
           return 'bringing food home';
         case 3:
           return 'feeding the little ones';
+        case 4:
+          return 'resting a moment, the delivery done';
         default:
           return 'out finding food for the little ones';
       }
+    }
     case 'brood':
       return 'keeping the eggs warm';
     case 'court':

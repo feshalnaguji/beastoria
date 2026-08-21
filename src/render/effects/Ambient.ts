@@ -49,12 +49,17 @@ const ZZZ_POOL_SIZE = 12;
 const ZZZ_LIFE_MS = 2000;
 const ZZZ_RISE_PX = 14;
 
-/** Feed motes (M11): a mote arcs from parent to baby at the exact moment of
- * feeding — one per sequenced carry delivery, one per staggered nurse
- * suckle beat. Short and frequent, so a small bounded pool (spawnHatch's
- * pattern) covers a whole family feeding without ever allocating. */
-const FEED_MOTE_POOL_SIZE = 12;
-const FEED_MOTE_MS = 500;
+/** Feed motes (M11, legibility pass M12 task 3): a small burst of motes
+ * arcs from parent to baby at the moment of feeding — one burst per
+ * sequenced carry delivery, one per staggered nurse suckle beat. Short and
+ * frequent, so a bounded pool (spawnHatch's pattern) covers a whole family
+ * feeding without ever allocating. Pool doubled (12 -> 24) to cover the
+ * 3-mote burst per event (Renderer.onFeedings) at the same headroom as
+ * before; radius and lifetime both grew so the moment reads clearly instead
+ * of flickering past. */
+const FEED_MOTE_POOL_SIZE = 24;
+const FEED_MOTE_MS = 900;
+const FEED_MOTE_RADIUS_PX = 5;
 
 // Meadow rejection zones — same padding as the ground painter's flower scatter.
 const POND_EDGE = { ...POND, rx: POND.rx * 1.15, ry: POND.ry * 1.15 };
@@ -129,6 +134,15 @@ interface FeedMote {
    * length so a short suckle and a long carry-delivery both read as a
    * gentle lift, not a fixed-height jump. */
   bowPx: number;
+  /** M12 task 3: ms remaining before this mote actually starts easing —
+   * lets a burst of 3 read as a small trailing flourish instead of 3 dots
+   * perfectly overlapping. Counted down in update(); the mote stays
+   * invisible while > 0, then starts its normal ageMs-driven ease the
+   * instant it hits 0 (any overflow from the frame that crossed 0 is
+   * folded straight into that first ageMs tick, so the delay never costs
+   * an extra idle frame). 0 for an un-staggered spawn (spawnHatch/spawnZ's
+   * single-shot pattern still needs zero code changes elsewhere). */
+  delayMs: number;
 }
 
 export class AmbientEffects {
@@ -296,10 +310,23 @@ export class AmbientEffects {
 
     // Feed motes: ease-out from parent to baby along a gentle, upward-bowed
     // arc (a parabola peaking at the midpoint), fading over the last 40% of
-    // their short life — see spawnFeedMote (M11).
+    // their short life — see spawnFeedMote (M11). M12 task 3: a mote spawned
+    // with a delay (part of a staggered burst) sits invisible until its
+    // delayMs counts down to 0, then starts easing exactly as before.
     for (const m of this.feedMotes) {
       if (!m.active) continue;
-      m.ageMs += dtMs;
+      if (m.delayMs > 0) {
+        m.delayMs -= dtMs;
+        if (m.delayMs > 0) continue;
+        // Crossed 0 this frame: reveal it and fold the overflow (how far
+        // past 0 delayMs went) into this frame's age, so the ease starts
+        // exactly on time rather than losing up to a frame to the delay.
+        m.sprite.visible = true;
+        m.ageMs = -m.delayMs;
+        m.delayMs = 0;
+      } else {
+        m.ageMs += dtMs;
+      }
       if (m.ageMs >= FEED_MOTE_MS) {
         m.active = false;
         m.sprite.visible = false;
@@ -380,21 +407,25 @@ export class AmbientEffects {
    * Starts (or restarts, via the rolling pool cursor) a feed mote arcing
    * from `from` to `to` — the moment of a feeding (M11). `tint` is amber for
    * a carried mouthful, milk-white for a suckle (Renderer picks the tint off
-   * the parent's own feedMode). Never allocates: recycles the oldest pooled
-   * sprite exactly like spawnHatch/spawnZ.
+   * the parent's own feedMode). `delayMs` (M12 task 3, default 0) staggers
+   * this mote's start within a burst — see FeedMote.delayMs; the sprite
+   * stays hidden at its spawn point until the delay elapses. Never
+   * allocates: recycles the oldest pooled sprite exactly like
+   * spawnHatch/spawnZ.
    */
-  spawnFeedMote(from: Vec2, to: Vec2, tint: number): void {
+  spawnFeedMote(from: Vec2, to: Vec2, tint: number, delayMs = 0): void {
     const m = this.feedMotes[this.feedMoteCursor];
     this.feedMoteCursor = (this.feedMoteCursor + 1) % FEED_MOTE_POOL_SIZE;
     if (!m) return;
     m.active = true;
     m.ageMs = 0;
+    m.delayMs = delayMs;
     m.fromX = from.x;
     m.fromY = from.y;
     m.toX = to.x;
     m.toY = to.y;
     m.bowPx = -Math.min(28, Math.hypot(to.x - from.x, to.y - from.y) * 0.35 + 6);
-    m.sprite.visible = true;
+    m.sprite.visible = delayMs <= 0;
     m.sprite.alpha = 1;
     m.sprite.tint = tint;
     m.sprite.position.set(from.x, from.y);
@@ -616,15 +647,32 @@ export class AmbientEffects {
   }
 
   /** A tiny baked dot, reused (tint-swapped per spawn) by every feed mote —
-   * amber for a carried mouthful, milk-white for a suckle (M11). */
+   * amber for a carried mouthful, milk-white for a suckle (M11; radius
+   * grown 3 -> 5px in M12 task 3 for legibility). */
   private buildFeedMotes(renderer: PixiRenderer): void {
-    const tex = this.bake(renderer, new Graphics().circle(3, 3, 3).fill(0xffffff), 6, 6);
+    const d = FEED_MOTE_RADIUS_PX * 2;
+    const tex = this.bake(
+      renderer,
+      new Graphics().circle(FEED_MOTE_RADIUS_PX, FEED_MOTE_RADIUS_PX, FEED_MOTE_RADIUS_PX).fill(0xffffff),
+      d,
+      d,
+    );
     for (let i = 0; i < FEED_MOTE_POOL_SIZE; i++) {
       const sprite = new Sprite(tex);
       sprite.anchor.set(0.5);
       sprite.visible = false;
       this.feedMoteLayer.addChild(sprite);
-      this.feedMotes.push({ sprite, active: false, ageMs: 0, fromX: 0, fromY: 0, toX: 0, toY: 0, bowPx: 0 });
+      this.feedMotes.push({
+        sprite,
+        active: false,
+        ageMs: 0,
+        fromX: 0,
+        fromY: 0,
+        toX: 0,
+        toY: 0,
+        bowPx: 0,
+        delayMs: 0,
+      });
     }
   }
 
