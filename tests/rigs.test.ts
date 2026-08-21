@@ -90,6 +90,45 @@ describe('rig coverage', () => {
 });
 
 /**
+ * The recipe's feedGive/feedTake and food-prop rules
+ * (docs/superpowers/specs/2026-08-21-rig-art-recipe.md:314-338), encoded as
+ * data assertions rather than left to eyeballing. RED as of M13 task 11:
+ * squirrel is a `feedMode: 'nurse'` species (src/sim/species.ts) that never
+ * got the M12-task-2 feedGive/feedTake treatment its nurse-mode siblings
+ * (rabbit, deer, kangaroo) did — squirrelRig.ts:84 defines neither clip nor
+ * lists them in the `food` part's hideInClips. Fixing the rig is a separate,
+ * later task (M13 task 12); these two tests only prove the gap exists.
+ */
+describe('recipe rule: feedGive/feedTake per feedMode', () => {
+  it('11a: every feedMode "nurse" species defines both feedGive and feedTake clips', () => {
+    for (const rig of ALL_RIGS) {
+      if (SPECIES[rig.species].reproduction.feedMode !== 'nurse') continue;
+      expect(rig.clips.feedGive, `${rig.species}.clips.feedGive`).toBeDefined();
+      expect(rig.clips.feedTake, `${rig.species}.clips.feedTake`).toBeDefined();
+    }
+  });
+
+  it("11b: the food prop's hideInClips follows the feedMode table (nurse hides both feed clips; carry hides feedTake but shows feedGive)", () => {
+    for (const rig of ALL_RIGS) {
+      const feedMode = SPECIES[rig.species].reproduction.feedMode;
+      if (feedMode === 'self') continue; // n/a per the recipe table
+      const food = rig.parts.find((p) => p.id === 'food');
+      if (!food) continue; // e.g. self-mode species need not author a food prop
+      const hidden = new Set(food.hideInClips ?? []);
+      if (feedMode === 'nurse') {
+        expect(hidden.has('feedGive'), `${rig.species} food hidden in feedGive`).toBe(true);
+        expect(hidden.has('feedTake'), `${rig.species} food hidden in feedTake`).toBe(true);
+      } else if (feedMode === 'carry' && rig.clips.feedGive) {
+        // Opt-in: a carry-mode rig need not define feedGive at all, but if
+        // it does, the morsel is the feeding beat and must stay visible.
+        expect(hidden.has('feedTake'), `${rig.species} food hidden in feedTake`).toBe(true);
+        expect(hidden.has('feedGive'), `${rig.species} food visible in feedGive`).toBe(false);
+      }
+    }
+  });
+});
+
+/**
  * The pouch render contract (M12 task 5/7): `Renderer.ts` reparents a riding
  * joey's whole view into the kangaroo rig's `pouch` part, between drawn
  * `pouchBack`/`pouchFront` walls, by id — with nothing in the type system
