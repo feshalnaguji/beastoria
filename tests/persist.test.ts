@@ -326,13 +326,13 @@ describe('migrations', () => {
     expect(loadedJoey.pos).toEqual(loadedMother.pos);
   });
 
-  it('M13: normalises a long-stuck non-vigil gather to idle rather than rejecting', () => {
+  it('M13: normalises every non-vigil gather to idle unconditionally on load', () => {
     // A creature latched in a non-vigil 'gather' before the leash bug was
     // fixed would remain frozen forever even after loading into fixed code.
-    // Only gathers with high ticks values (>= 500, indicating long stuck activity)
-    // are normalized, leaving fresh gathers (low ticks) untouched. The mourning
-    // vigil 'gather' is intentional (minTicks >= MOURNING_GATHER_MIN_TICKS) and
-    // must not be touched.
+    // Every non-vigil gather (minTicks < 200) is normalized unconditionally
+    // on load — including minTicks:0 feed-hold anchors that have no other exit
+    // path. The mourning vigil 'gather' is intentional (minTicks >= 200) and
+    // is protected by isMourningGather() — never normalized.
     const raw = JSON.parse(JSON.stringify(fixtureV1)) as {
       sim: {
         creatures: Array<{
@@ -343,12 +343,13 @@ describe('migrations', () => {
     };
     expect(raw.sim.creatures.length).toBeGreaterThan(2);
 
-    // Inject a long-stuck non-vigil gather (ticks >= 500, minTicks < 200)
+    // Inject a non-vigil gather with high ticks (ticks >= 500, minTicks < 200)
     const stuckCreature = raw.sim.creatures[0];
     if (!stuckCreature) throw new Error('fixture needs creatures');
     stuckCreature.activity = { id: 'gather', ticks: 600, minTicks: 30 };
 
-    // Inject a moderately-active non-vigil gather (ticks < 500, minTicks < 200) — should NOT be normalized
+    // Inject a non-vigil gather with moderate ticks (ticks < 500, minTicks < 200)
+    // — should STILL be normalized, as it has no exit path in the old sim
     const moderateCreature = raw.sim.creatures[1];
     if (!moderateCreature) throw new Error('fixture needs two creatures');
     moderateCreature.activity = { id: 'gather', ticks: 100, minTicks: 30 };
@@ -362,19 +363,19 @@ describe('migrations', () => {
     expect(save).not.toBeNull();
     if (!save) throw new Error('save missing');
 
-    // The stuck gather (ticks >= 500) is normalized to idle
-    const normalizedCreature = save.sim.creatures[0];
-    expect(normalizedCreature?.activity.id).toBe('idle');
-    expect(normalizedCreature?.activity.ticks).toBe(0);
-    expect(normalizedCreature?.activity.minTicks).toBe(0);
+    // The high-ticks gather is normalized to idle
+    const normalizedCreature1 = save.sim.creatures[0];
+    expect(normalizedCreature1?.activity.id).toBe('idle');
+    expect(normalizedCreature1?.activity.ticks).toBe(0);
+    expect(normalizedCreature1?.activity.minTicks).toBe(0);
 
-    // The moderate gather (ticks < 500) is left alone
-    const moderateCreatureAfter = save.sim.creatures[1];
-    expect(moderateCreatureAfter?.activity.id).toBe('gather');
-    expect(moderateCreatureAfter?.activity.ticks).toBe(100);
-    expect(moderateCreatureAfter?.activity.minTicks).toBe(30);
+    // The moderate-ticks gather is ALSO normalized (unconditional normalization)
+    const normalizedCreature2 = save.sim.creatures[1];
+    expect(normalizedCreature2?.activity.id).toBe('idle');
+    expect(normalizedCreature2?.activity.ticks).toBe(0);
+    expect(normalizedCreature2?.activity.minTicks).toBe(0);
 
-    // The mourning gather is left alone
+    // The mourning gather is left alone (protected by isMourningGather)
     const mourningCreatureAfter = save.sim.creatures[2];
     expect(mourningCreatureAfter?.activity.id).toBe('gather');
     expect(mourningCreatureAfter?.activity.ticks).toBe(600);
