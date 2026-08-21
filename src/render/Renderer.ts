@@ -247,7 +247,7 @@ const SPARKLE_EVENT_KINDS = new Set<SimEvent['kind']>(['paired', 'reborn']);
  * hatch crack overlay when phase leaves 'expecting' (M10 task 4). The three
  * live-birth homes (burrow/glade/drey) never draw eggs at all — nothing was
  * visible during 'expecting', so nothing needs replacing when it ends. */
-const EGG_HOME_KINDS: ReadonlySet<HomeKind> = new Set([
+export const EGG_HOME_KINDS: ReadonlySet<HomeKind> = new Set([
   'treeNest',
   'reedNest',
   'lilyPatch',
@@ -281,7 +281,7 @@ function nestVisualPoint(home: Home): Vec2 {
  * valley's readable vocabulary for its richest loops (M9 task 5). 'nurse'
  * joined in M10 task 4 — a soft milk-white droplet, replacing the amber
  * 'carry' dot specifically for nurse-feedMode mothers mid-hold. */
-type GlyphKind = 'forage' | 'nap' | 'court' | 'carry' | 'brood' | 'mourning' | 'nurse';
+type GlyphKind = 'forage' | 'nap' | 'court' | 'carry' | 'brood' | 'mourning' | 'nurse' | 'gestate';
 
 /** M11: how long a just-fed baby keeps reading as fed (clip 'eat', a
  * carry/nurse-tinted glyph — see fedGlyphFor) before decaying back to
@@ -805,7 +805,14 @@ export class Renderer {
   /** A brooding sitter at a treeNest home renders offset into the drawn
    * nest bowl (Renderer's own +38,+26 in syncHomes' 'treeNest' case) rather
    * than at the home's own point — every other home kind draws its nest
-   * right at home.pos, so no offset applies. */
+   * right at home.pos, so no offset applies.
+   *
+   * Deliberately 'brood'-only (M13): the caller only invokes this for
+   * `activity.id === 'brood'`, never 'gestate'. A gestating creature is
+   * always a live-birth mammal at a burrow/glade/drey/shadeScrape home —
+   * never a treeNest — so there is no twig bowl to nudge her into. Leaving
+   * 'gestate' out of this function is correct by design, not an oversight;
+   * do not extend the gate to cover it. */
   private broodOffsetFor(state: WorldState, c: Creature): Vec2 | undefined {
     if (c.familyId === null) return undefined;
     const fam = state.families.find((f) => f.id === c.familyId);
@@ -1531,7 +1538,8 @@ export class Renderer {
   /**
    * Draws one small, gentle activity glyph into glyphLayer — the valley's
    * readable vocabulary for forage/nap/court/carry/brood/mourning (M9 task
-   * 5). Called only for on-screen, alpha>0 views; glyphLayer.clear() runs
+   * 5), joined by 'gestate' for live-birth mothers (M13). Called only for
+   * on-screen, alpha>0 views; glyphLayer.clear() runs
    * once per frame in render(), so every call here is additive within the
    * frame. Shapes are deliberately simple (circle/ellipse/arc-stroke) —
    * small and desaturated, never saturated or fussy.
@@ -1555,6 +1563,15 @@ export class Renderer {
         break;
       case 'brood':
         g.ellipse(cx, cy, r * 0.62, r * 0.44).fill({ color: 0xf3e9d2, alpha: 0.85 * alpha });
+        break;
+      case 'gestate':
+        // A round warm-cream circle with a small inner dot — a little one
+        // within, not a clutch beneath (M13): deliberately round rather than
+        // egg-elliptical like 'brood' above, and warm cream rather than
+        // green like 'forage', so a gestating mammal never reads as
+        // egg-sitting or foraging at a glance.
+        g.circle(cx, cy, r * 0.5).fill({ color: 0xe8d9b5, alpha: 0.85 * alpha });
+        g.circle(cx, cy, r * 0.18).fill({ color: 0xc9a86a, alpha: 0.9 * alpha });
         break;
       case 'mourning':
         g.ellipse(cx, cy, r * 0.4, r * 0.64).fill({ color: 0xb3aebd, alpha: 0.75 * alpha });
@@ -1874,7 +1891,7 @@ function clipFor(
   if (nursing) return feedGiving ? 'feedGive' : 'sit';
   if (moving) return activityId === 'feedYoung' && feedYoungStep === 2 ? 'carry' : 'walk';
   if (nursed || fed || feedTaking) return feedTaking ? 'feedTake' : 'eat';
-  if (activityId === 'brood') return 'sit';
+  if (activityId === 'brood' || activityId === 'gestate') return 'sit';
   if (activityId === 'nap') return 'sleep';
   if (activityId === 'forage' || activityId === 'feedYoung') {
     return activityId === 'feedYoung' && feedGiving ? 'feedGive' : 'eat';
@@ -1911,6 +1928,8 @@ function glyphKindFor(
       return 'court';
     case 'brood':
       return 'brood';
+    case 'gestate':
+      return 'gestate';
     case 'feedYoung':
       if (SPECIES[species].reproduction.feedMode !== 'carry') return undefined;
       return step === 0 || step === 1 ? 'forage' : step === 2 || step === 3 ? 'carry' : undefined;

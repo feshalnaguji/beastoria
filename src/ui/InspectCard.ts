@@ -123,6 +123,8 @@ export function creatureDoing(c: Creature, presentation: Presentation | undefine
     }
     case 'brood':
       return 'keeping the eggs warm';
+    case 'gestate':
+      return 'resting close to home, her time coming soon';
     case 'court':
       return 'smitten';
     case 'gather':
@@ -155,6 +157,22 @@ function capitalize(s: string): string {
  * through the mother's own card. */
 function isCarryingJoey(state: WorldState, c: Creature): boolean {
   return state.creatures.some((rider) => rider.carriedBy === c.id);
+}
+
+/** M13: true for a live-birth mother whose family is in its 'expecting'
+ * phase — this covers her whole gestation, including the free-roaming early
+ * portion where her activity id is still whatever she's naturally doing
+ * (forage/wander/idle/etc, no override) and so creatureDoing reads through
+ * unchanged. Once family.ts actually drops her into the 'gestate' activity
+ * for the late-gestation homebound stretch, creatureDoing's own `case
+ * 'gestate'` already returns the specific text (see above) — callers must
+ * gate on `c.activity.id !== 'gestate'` before appending this suffix, or
+ * the two would double up. */
+function isExpectingMother(state: WorldState, c: Creature): boolean {
+  if (c.sex !== 'f' || c.familyId === null) return false;
+  if (SPECIES[c.species].reproduction.mode !== 'live') return false;
+  const fam = state.families.find((f) => f.id === c.familyId);
+  return fam?.phase === 'expecting';
 }
 
 export class InspectCard {
@@ -222,6 +240,12 @@ export class InspectCard {
     // only place this is ever visible — appended rather than replacing,
     // so whatever she's actually doing still reads first.
     if (isCarryingJoey(state, c)) doing += ', her joey riding along in the pouch';
+    // M13: a roaming live-birth mother earns the same suffix treatment —
+    // once she's actually in the 'gestate' activity, creatureDoing's own
+    // case already returns dedicated late-gestation text, so the suffix
+    // only fires for her free-roaming early phase (guarded here to avoid
+    // doubling up with that text).
+    if (c.activity.id !== 'gestate' && isExpectingMother(state, c)) doing += ', carrying young';
     this.doingEl.textContent = doing;
     this.root.style.display = 'block';
   }

@@ -413,6 +413,51 @@ describe('migrations', () => {
     expect(twice?.sim.creatures[0]?.activity).toEqual(once.sim.creatures[0]?.activity);
   });
 
+  it("M13: normalises a stale 'brood' activity to idle for live-birth species only", () => {
+    // A save written mid-gestation just before this milestone shipped would
+    // still carry the old egg-brooding activity id ('brood') on a live-birth
+    // mother — the sim now uses a distinct 'gestate' id for exactly this
+    // case (family.ts), so a pre-existing save predates that split. This
+    // self-heals on the very next tick regardless (overrideActivity only
+    // short-circuits when ids already match), but normalizing at load closes
+    // the one-tick cosmetic window where she'd render as egg-sitting.
+    // Egg-mode species keep 'brood' untouched — it's still their correct,
+    // current activity id.
+    const raw = JSON.parse(JSON.stringify(fixtureV1)) as {
+      sim: {
+        creatures: Array<{
+          id: number;
+          species: string;
+          activity: { id: string; ticks: number; minTicks: number; targetId?: number; targetPos?: { x: number; y: number } };
+        }>;
+      };
+    };
+
+    // Index 0 is a rabbit (live-birth) — stale 'brood' should normalize.
+    const rabbit = raw.sim.creatures[0];
+    if (!rabbit || rabbit.species !== 'rabbit') throw new Error('fixture layout changed');
+    rabbit.activity = { id: 'brood', ticks: 50, minTicks: 0 };
+
+    // Index 6 is a robin (egg-mode) — 'brood' is still correct, left alone.
+    const robin = raw.sim.creatures[6];
+    if (!robin || robin.species !== 'robin') throw new Error('fixture layout changed');
+    robin.activity = { id: 'brood', ticks: 50, minTicks: 0 };
+
+    const save = migrate(raw);
+    expect(save).not.toBeNull();
+    if (!save) throw new Error('save missing');
+
+    const rabbitAfter = save.sim.creatures.find((c) => c.id === rabbit.id);
+    expect(rabbitAfter?.activity.id).toBe('idle');
+    expect(rabbitAfter?.activity.ticks).toBe(0);
+    expect(rabbitAfter?.activity.minTicks).toBe(0);
+
+    const robinAfter = save.sim.creatures.find((c) => c.id === robin.id);
+    expect(robinAfter?.activity.id).toBe('brood');
+    expect(robinAfter?.activity.ticks).toBe(50);
+    expect(robinAfter?.activity.minTicks).toBe(0);
+  });
+
   it('loadSave survives a corrupt stored value', async () => {
     const { set } = await import('idb-keyval');
     await set('beastoria.save', { junk: true });

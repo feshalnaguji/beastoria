@@ -7,6 +7,7 @@ import { SAVE_VERSION, type SaveFile } from './schema';
 import type { HomeKind, Vec2, WorldState } from '../sim/state';
 import { DREY_SITES, FROG_SPAWN_CLUMPS, TURTLE_SAND_NESTS, SHADE_SCRAPES } from '../sim/valley';
 import { isMourningGather, GATHER_MAX_TICKS } from '../sim/behaviors';
+import { SPECIES } from '../sim/species';
 
 /**
  * M10 added three home kinds (drey/spawnClump/sandNest) but SAVE_VERSION
@@ -101,6 +102,22 @@ export function migrate(raw: unknown): SaveFile | null {
       c.activity.ticks >= GATHER_MAX_TICKS &&
       !isMourningGather(c.activity)
     ) {
+      c.activity = { id: 'idle', ticks: 0, minTicks: 0 };
+    }
+  }
+  // M13 defensive normalization: a save written mid-gestation just before
+  // this milestone shipped would still carry the old egg-brooding activity
+  // id ('brood') on a live-birth mother — the sim now uses a distinct
+  // 'gestate' id for exactly this case (family.ts), but a pre-existing save
+  // predates that split. This self-heals on the very next tick regardless
+  // (overrideActivity in family.ts only short-circuits when activity ids
+  // already match, so a mismatched stale id gets replaced immediately), but
+  // that leaves a one-tick cosmetic window where a loaded live-birth mother
+  // would render as egg-sitting. Normalizing here at load closes that window
+  // entirely. Same shape as the gather normalization above: pure data
+  // placement, zero RNG draws, idempotent, no SAVE_VERSION bump needed.
+  for (const c of save.sim.creatures) {
+    if (c.activity?.id === 'brood' && SPECIES[c.species].reproduction.mode === 'live') {
       c.activity = { id: 'idle', ticks: 0, minTicks: 0 };
     }
   }

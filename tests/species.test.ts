@@ -3,6 +3,7 @@
  * home kinds and movement media consistent with the valley.
  */
 import { describe, expect, it } from 'vitest';
+import { EGG_HOME_KINDS } from '../src/render/Renderer';
 import { SPECIES, speedFor } from '../src/sim/species';
 import {
   canOccupy,
@@ -110,6 +111,23 @@ describe('species registry', () => {
     expect(SPECIES.turtle.voice.rate).toBe(0); // silent by design
     const speeds = Object.values(SPECIES).map((p) => p.speed);
     expect(SPECIES.turtle.speed).toBe(Math.min(...speeds)); // the valley's slowest
+  });
+
+  it('M13: EGG_HOME_KINDS (Renderer.ts) agrees with reproduction.mode for every species', () => {
+    // Renderer.ts's EGG_HOME_KINDS is a second, hand-maintained source of
+    // truth for the egg/live-birth split (syncHomes draws eggs only for
+    // homes in that set), independent of species.ts's own reproduction.mode.
+    // The two currently agree for all twelve species; this pins that fact
+    // as a regression guard so future drift (a new species, or a changed
+    // homeKind) fails a test instead of silently mismatching sim and
+    // render — see tests/rigs.test.ts's identical pinning convention for
+    // the pouch contract.
+    for (const id of ALL) {
+      const p = SPECIES[id];
+      expect(EGG_HOME_KINDS.has(p.homeKind), `${id}: EGG_HOME_KINDS vs reproduction.mode`).toBe(
+        p.reproduction.mode === 'egg',
+      );
+    }
   });
 
   it('canOccupy: land avoids water, water requires it, amphibious goes anywhere', () => {
