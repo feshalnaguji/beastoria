@@ -25,7 +25,39 @@ const URGENT_MARGIN = 0.35;
 /** Needs below this are considered satisfied and end the activity. */
 const SATISFIED = 0.05;
 const SOCIAL_RANGE = 90;
-const ARRIVE_DIST = 10;
+export const ARRIVE_DIST = 10;
+/**
+ * How long a 'gather' latch's `minTicks` must be to count as the mourning
+ * vigil, as opposed to 'gather's two other, much shorter-lived reuses
+ * (nest-building potter, baby leash — both 30 or less). Exported so
+ * family.ts can define its own `PASS_GATHER_TICKS` in terms of this single
+ * source of truth instead of a second hand-copied literal, and so this
+ * file's own release backstop (the 'gather' case below) can hold the vigil
+ * while releasing everything else. Renderer.ts and InspectCard.ts already
+ * gate their own mourning-only presentation on this same value (today via
+ * their own hand-copied constants) — sharing the name here is what lets a
+ * future pass collapse those into an import instead of a third copy.
+ */
+export const MOURNING_GATHER_MIN_TICKS = 200;
+/**
+ * Is this activity a mourning vigil, as opposed to 'gather's two other
+ * reuses? A vigil is released only by family.ts's `removeCreature`, once
+ * the memorial forms — never by arrival or by this file's own timeout.
+ */
+export function isMourningGather(activity: Creature['activity']): boolean {
+  return activity.id === 'gather' && activity.minTicks >= MOURNING_GATHER_MIN_TICKS;
+}
+/**
+ * Belt-and-braces backstop for 'gather' (M13): every legitimate use is
+ * expected to release itself — the mourning vigil for its own
+ * MOURNING_GATHER_MIN_TICKS (via removeCreature), the nest-building potter
+ * and the baby leash on arrival (family.ts). This timeout exists only so no
+ * creature is EVER latched forever even if some future 'gather' use, or an
+ * unreachable target, slips past every other release path — 900 is well
+ * beyond any real errand (a few hundred ticks at most) but comfortably under
+ * the property test's 1200-tick ceiling.
+ */
+const GATHER_MAX_TICKS = 900;
 /**
  * Progress-bail window for a stalled socialize/court approach (M10): a
  * checkpoint of the creature's own position taken every this-many ticks,
@@ -268,8 +300,12 @@ export function decayNeeds(state: WorldState): void {
   }
 }
 
-/** Activities owned by family.ts — utility selection must not stomp them. */
-const FAMILY_ACTIVITIES = new Set<ActivityId>(['court', 'brood', 'feedYoung', 'gather', 'pass']);
+/** Activities owned by family.ts — utility selection must not stomp them.
+ * Exported so family.ts's own `releaseGathers` can release a creature from
+ * ANY family-latching activity generically (today only 'gather' realistically
+ * needs it, but this stays correct if a future latch — e.g. a pouch-mount
+ * transition — joins the set without a matching update here). */
+export const FAMILY_ACTIVITIES = new Set<ActivityId>(['court', 'brood', 'feedYoung', 'gather', 'pass']);
 
 export function selectBehavior(state: WorldState, c: Creature, clock: Clock): void {
   // A passenger doesn't choose where to go (M12): a joey in the pouch must
@@ -706,9 +742,42 @@ export function applyActivity(
 
     case 'gather': {
       // Go to a point and settle there (nest-building, mourning, baby leash).
+      // Movement always happens first (unconditionally) — the mourning
+      // vigil still needs to walk in to sit with the elder, exactly as
+      // before; only what happens AFTER moving differs.
       const target = c.activity.targetPos;
-      if (!target) break;
-      moveToward(c, target, speedFor(c.species, c.stage), medium, landing);
+      if (!target) {
+        // A vigil always carries a targetPos (handlePassings sets one); if
+        // one somehow didn't, don't touch it. Everything else with no
+        // target has nothing to do here — release rather than latch mute.
+        if (!isMourningGather(c.activity)) startActivity(state, c, 'idle');
+        break;
+      }
+      const remaining = moveToward(c, target, speedFor(c.species, c.stage), medium, landing);
+
+      // The vigil holds for its full duration regardless of arrival or
+      // ticks — released only by family.ts's removeCreature once the
+      // memorial forms.
+      if (isMourningGather(c.activity)) break;
+
+      // Belt-and-braces (M13): family.ts is expected to release every
+      // 'gather' it assigns on arrival (and does, for the nest-building
+      // potter and the baby leash's home-anchored case) — the "arrived"
+      // exit below is redundant insurance for those. The one deliberate
+      // exception is the baby leash's moving feed-hold anchor, which uses
+      // minTicks 0 specifically so it is NOT released here while a feeding
+      // hold is active (family.ts re-targets it every tick instead) — the
+      // hold is bounded and ends on its own. `remaining < 0` (a refused
+      // snap onto an illegal target) and the GATHER_MAX_TICKS timeout both
+      // release unconditionally, so nothing can ever be latched forever.
+      const arrived = remaining >= 0 && remaining <= ARRIVE_DIST && c.activity.minTicks > 0;
+      const stuck = remaining < 0 || c.activity.ticks >= GATHER_MAX_TICKS;
+      if (arrived || stuck) {
+        // startActivity, not a bare assignment: converts to 'wander' for a
+        // flier that cannot legally rest exactly where it stands, instead
+        // of stranding it in an illegal 'idle'.
+        startActivity(state, c, 'idle');
+      }
       break;
     }
 

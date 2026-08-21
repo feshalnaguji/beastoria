@@ -6,7 +6,16 @@
  * for creatures with family duties. Family-directed activities are released
  * back to 'idle' when the duty ends.
  */
-import { FEED_CONTACT_RANGE, feedContactRing, idHash, idOffsetAngle } from './behaviors';
+import {
+  ARRIVE_DIST,
+  FAMILY_ACTIVITIES,
+  FEED_CONTACT_RANGE,
+  feedContactRing,
+  idHash,
+  idOffsetAngle,
+  isMourningGather,
+  MOURNING_GATHER_MIN_TICKS,
+} from './behaviors';
 import { TICKS_PER_DAY } from './clock';
 import { emit } from './events';
 import { nextRange } from './rng';
@@ -44,7 +53,10 @@ const BABY_LEASH = 140;
  */
 const NURSE_HOLDING_STEPS = new Set([1, 2, 3]);
 const CARRY_HOLDING_STEPS = new Set([3, 4]);
-const PASS_GATHER_TICKS = 200;
+/** Defined in terms of behaviors.ts's shared discriminator (M13) so the
+ * mourning vigil's real duration and the threshold that classifies it as
+ * "mourning" (vs. 'gather's other, much shorter reuses) cannot drift apart. */
+const PASS_GATHER_TICKS = MOURNING_GATHER_MIN_TICKS;
 const PASS_GATHER_RANGE = 700;
 const MEMORIAL_TICKS = 2 * TICKS_PER_DAY;
 
@@ -371,24 +383,35 @@ function stepFamily(state: WorldState, fam: Family): void {
       // Both parents work on the home, spread onto opposite sides of the
       // nest so they don't stack on one point (id-hash base angle, plus a
       // half-turn per parent slot so the pair never lands close together).
+      // Distance-gated (M13): only assigned while still short of the ring
+      // point, and explicitly released on arrival — a bounded "keeps
+      // pottering back to the nest" loop instead of a one-way latch. It
+      // does not flicker: the tick after release, d is still ~0 (moveToward
+      // snaps exactly onto the target), so neither branch fires again until
+      // the parent has actually wandered off far enough to matter.
       parents.forEach((p, i) => {
         const ringAngle = idOffsetAngle(p.id) + i * Math.PI;
-        setIfFree(p, {
-          id: 'gather',
-          ticks: 0,
-          minTicks: 30,
-          targetPos: {
-            x: home.pos.x + Math.cos(ringAngle) * 26,
-            y: home.pos.y + Math.sin(ringAngle) * 26,
-          },
-        });
+        const target = {
+          x: home.pos.x + Math.cos(ringAngle) * 26,
+          y: home.pos.y + Math.sin(ringAngle) * 26,
+        };
+        const d = Math.hypot(p.pos.x - target.x, p.pos.y - target.y);
+        if (d > ARRIVE_DIST) {
+          setIfFree(p, { id: 'gather', ticks: 0, minTicks: 30, targetPos: target });
+        } else if (p.activity.id === 'gather') {
+          p.activity = { id: 'idle', ticks: 0, minTicks: 0 };
+        }
       });
       if (fam.phaseTicks >= NEST_TICKS) {
         const rep = SPECIES[fam.species].reproduction;
         const count = rollClutchSize(state, fam.species);
         if (count === 0) {
           // A full valley: this pair simply doesn't raise a clutch this
-          // season. They keep the nest and wait out the cooldown.
+          // season. They keep the nest and wait out the cooldown. Release
+          // any parent still mid-potter — the per-tick loop above that
+          // would otherwise release it on arrival doesn't run again once
+          // the phase has moved on.
+          for (const p of parents) releaseGathers(p);
           enterPhase(fam, 'emptyNest');
           break;
         }
@@ -404,6 +427,7 @@ function stepFamily(state: WorldState, fam: Family): void {
             ...(home2 ? { pos: { ...home2.pos } } : {}),
           });
         }
+        for (const p of parents) releaseGathers(p);
         enterPhase(fam, 'expecting');
       }
       break;
@@ -527,21 +551,53 @@ function stepFamily(state: WorldState, fam: Family): void {
 
       if (leashAnchor) {
         for (const child of children) {
-          if (child.stage !== 'baby') continue;
           if (carrier) continue; // stepPouch above owns this one
+          if (child.stage !== 'baby') {
+            // Grew out of baby stage while still latched to this leash
+            // (M13): nothing else ever releases it, since this loop is the
+            // only thing that ever assigns 'gather' here, and it used to
+            // skip non-babies outright — a one-way latch for life. Mourning
+            // is a different, deliberately long-lived 'gather' this loop
+            // never assigns in the first place, so it's excluded here too.
+            if (child.activity.id === 'gather' && !isMourningGather(child.activity)) {
+              child.activity = { id: 'idle', ticks: 0, minTicks: 0 };
+            }
+            continue;
+          }
           const d = Math.hypot(child.pos.x - leashAnchor.x, child.pos.y - leashAnchor.y);
-          if (d > leashRadius && child.activity.id !== 'gather') {
+          if (deliveringParent) {
+            // The moving feed-hold anchor (M13): refreshed EVERY tick,
+            // unlike the home-anchored case below — the anchor is a parent
+            // who can move, and a baby chasing where it stood a moment ago
+            // would never arrive. Never released while the hold is active:
+            // the hold itself is bounded (<=160 nurse / <=240 carry ticks)
+            // and ends on its own, which is what every M12 feeding
+            // assertion depends on. Draw-free (feedContactRing).
+            child.activity = {
+              id: 'gather',
+              ticks: child.activity.id === 'gather' ? child.activity.ticks : 0,
+              minTicks: 0,
+              targetPos: feedContactRing(leashAnchor, child.id, landingMediumOf(child.species)),
+            };
+          } else if (d > leashRadius && child.activity.id !== 'gather') {
+            // Home anchor: a fresh scatter target is drawn only on first
+            // crossing the radius, not every tick — re-drawing nextRange
+            // every tick per straggler would be a gratuitous RNG-stream and
+            // balance perturbation for a target that isn't even moving.
             child.activity = {
               id: 'gather',
               ticks: 0,
               minTicks: 30,
-              targetPos: deliveringParent
-                ? feedContactRing(leashAnchor, child.id, landingMediumOf(child.species))
-                : {
-                    x: leashAnchor.x + nextRange(state.rng, -40, 40),
-                    y: leashAnchor.y + nextRange(state.rng, -30, 30),
-                  },
+              targetPos: {
+                x: leashAnchor.x + nextRange(state.rng, -40, 40),
+                y: leashAnchor.y + nextRange(state.rng, -30, 30),
+              },
             };
+          } else if (d <= leashRadius && child.activity.id === 'gather') {
+            // Arrived home (M13). Explicitly released — nothing else ever
+            // lets a leashed baby out of 'gather' (mirrors stepPouch's own
+            // release, above).
+            child.activity = { id: 'idle', ticks: 0, minTicks: 0 };
           }
         }
       }
@@ -582,7 +638,10 @@ function stepFamily(state: WorldState, fam: Family): void {
 
       // All children grown? They set out on their own.
       if (children.length > 0 && children.every((c) => c.stage !== 'baby' && c.stage !== 'juvenile')) {
-        for (const child of children) child.familyId = null;
+        for (const child of children) {
+          releaseGathers(child);
+          child.familyId = null;
+        }
         fam.childIds = [];
         enterPhase(fam, 'emptyNest');
       }
@@ -688,6 +747,22 @@ function setIfFree(c: Creature, activity: Creature['activity']): void {
 }
 
 /**
+ * Release a creature from any non-mourning family-latching activity (M13) —
+ * in practice almost always 'gather' (a nest-building potter or baby-leash
+ * latch that outlived the phase/family that was managing it), but checked
+ * against FAMILY_ACTIVITIES generically so a future family-owned latch (e.g.
+ * a pouch-mount transition) is covered automatically, without this needing a
+ * matching update. The mourning vigil is deliberately excluded — it is
+ * released only by removeCreature, once the memorial forms — and 'pass' is
+ * never interrupted by anything. Matches dismount()'s release shape.
+ */
+function releaseGathers(c: Creature): void {
+  if (c.activity.id === 'pass' || !FAMILY_ACTIVITIES.has(c.activity.id)) return;
+  if (isMourningGather(c.activity)) return;
+  c.activity = { id: 'idle', ticks: 0, minTicks: 0 };
+}
+
+/**
  * Remove families with no parents left — whether or not children remain.
  * A parentless family can never do anything again (stepFamily short-circuits
  * on `parents.length === 0`), so any lingering children (e.g. a phoenix
@@ -699,7 +774,10 @@ function cleanupFamilies(state: WorldState): void {
   for (const fam of [...state.families]) {
     if (fam.parentIds.length === 0) {
       for (const c of state.creatures) {
-        if (c.familyId === fam.id) c.familyId = null;
+        if (c.familyId === fam.id) {
+          releaseGathers(c);
+          c.familyId = null;
+        }
       }
       const home = homeOf(state, fam);
       if (home) home.familyId = null;
