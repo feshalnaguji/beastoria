@@ -1935,6 +1935,10 @@ function glyphKindFor(
       return step === 0 || step === 1 ? 'forage' : step === 2 || step === 3 ? 'carry' : undefined;
     case 'gather':
       return minTicks >= MOURNING_GATHER_MIN_TICKS ? 'mourning' : undefined;
+    case 'mount':
+      // The pouch mount/dismount errand (M13) reads through animation and
+      // reparenting, not a glyph — explicit no-op, not an oversight.
+      return undefined;
     default:
       return undefined;
   }
