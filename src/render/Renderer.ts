@@ -786,6 +786,7 @@ export class Renderer {
       // must never throw): render at its own interpolated position exactly
       // like an ordinary uncarried creature.
       this.creatureLayer.addChild(view.node);
+      view.node.zIndex = 0;
     }
   }
 
@@ -1842,13 +1843,16 @@ export class Renderer {
  * these clips keeps getting 'sit'/'eat' exactly as before).
  *
  * M12 task 5 adds `carried` — a real joey riding in its mother's pouch —
- * as the single strongest override, checked first. Its own `activityId`
- * stays 'idle' the whole ride (family.ts's mount() sets it once and
- * nothing else touches it while carried) and `moving` reads true (its
- * `curr`/`prev` literally track its carrier's motion, sim/movement.ts),
- * which unchecked would show her joey walking mid-air inside the pouch —
- * so it is forced to 'sit' regardless, the same held pose the mother
- * herself plays during a nurse hold.
+ * checked right after `pass`, the strongest override short of it (a joey
+ * is always dismounted, per `stepPouch`, the moment it enters 'pass', so
+ * the two never actually overlap — but `pass` still wins over `carried`
+ * on principle, matching the "`pass` wins over everything else" rule
+ * above). Its own `activityId` stays 'idle' the whole ride (family.ts's
+ * mount() sets it once and nothing else touches it while carried) and
+ * `moving` reads true (its `curr`/`prev` literally track its carrier's
+ * motion, sim/movement.ts), which unchecked would show her joey walking
+ * mid-air inside the pouch — so it is forced to 'sit' regardless, the
+ * same held pose the mother herself plays during a nurse hold.
  */
 function clipFor(
   activityId: string,
@@ -1863,8 +1867,8 @@ function clipFor(
   feedTaking: boolean,
   carried: boolean,
 ): ClipName {
-  if (carried) return 'sit';
   if (activityId === 'pass') return 'sleep';
+  if (carried) return 'sit';
   if (airborne) return 'flap';
   if (swimming) return 'swim';
   if (nursing) return feedGiving ? 'feedGive' : 'sit';

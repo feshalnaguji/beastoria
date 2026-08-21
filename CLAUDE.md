@@ -114,21 +114,42 @@ v1 (two open tabs overwrite each other's timeline harmlessly).
   via Pixi reparenting into pouch rig part, decorative joey deleted); written
   reviewed rig-art recipe (silhouette/markings/shading/motion as four checkable
   dimensions, proved on rabbit/deer/robin/kangaroo); 213 tests)
-- **Status: v1.4 shipped and verified (2026-08-21).** M12 closed three threads:
-  feeding now reads legibly, kangaroo joey rides in actual pouch (not decorative
-  art), four species rigs meet a documented bar. v2 Caretaker World stays next
-  (only once user decides; feeding, care, unlocking families).
+- **Status: v1.4 implemented and test-verified (2026-08-21), awaiting live user
+  review.** M12 closed three threads: a feeding contact/facing/pacing mechanism,
+  real kangaroo pouch-carry, and a reviewed rig-art recipe proved on four
+  species — all pass the full test suite and were independently code-reviewed,
+  but per project policy the actual read (does feeding land, does the joey read
+  right, do the four species look recognizable) is the user's call, not an
+  agent's. v2 Caretaker World stays next (only once user decides; feeding, care,
+  unlocking families).
 - **M13 candidate (next scoping decision):** apply the reviewed rig-art recipe
   (docs/superpowers/specs/2026-08-21-rig-art-recipe.md) to the remaining eight
-  species (squirrel, frog, turtle, duck, owl, dodo, phoenix, koi). **Backlog item
-  (pre-existing, out of M12 scope, not blocking):** kangaroo population hardCap
-  (8) and SHADE_SCRAPES home-site count (3) are mismatched (predates M12, noted
-  during planning, explicitly ruled out of scope per pouch-carry being independent
-  of home-site balance) — consider for M13 or later when touching kangaroo balance.
-- **Open item awaiting user verification:** mobile perf with the richer/heavier
-  rig art has NOT yet been confirmed on a real device — this is reserved for the
-  user's own physical-device check before v1.4 is considered fully closed out (same
-  policy as M2/M3 testing per CLAUDE.md).
+  species (squirrel, frog, turtle, duck, owl, dodo, phoenix, koi). **Priority
+  item (pre-existing, confirmed unchanged by M12 — measured identically present
+  on both the pre-M12 base and this branch, NOT a new defect, but a real
+  correctness bug rather than a cosmetic one):** babies of any species can get
+  permanently parked in the `'gather'` activity by the nest leash — there is no
+  exit condition anywhere in the code. The final whole-branch review measured
+  this empirically (30,000 ticks × 3 seeds): 17-26 creatures, roughly 25% of a
+  70-77 population, permanently frozen in `'gather'` by the end of a run, with
+  freeze streaks up to ~28,000 ticks, in 3/3 seeds tested. Should be a priority
+  item whenever M13 or a dedicated bugfix pass happens, not deferred
+  indefinitely. **Backlog item (pre-existing, out of M12 scope, not
+  blocking):** kangaroo population hardCap (8) and SHADE_SCRAPES home-site
+  count (3) are mismatched (predates M12, noted during planning, explicitly
+  ruled out of scope per pouch-carry being independent of home-site balance)
+  — consider for M13 or later when touching kangaroo balance.
+- **Open items awaiting user verification:** (1) mobile perf with the
+  richer/heavier rig art has NOT yet been confirmed on a real device — this is
+  reserved for the user's own physical-device check before v1.4 is considered
+  fully closed out (same policy as M2/M3 testing per CLAUDE.md); (2) a carried
+  kangaroo joey is only visible at close zoom (T2) — at T0/T1 it renders
+  invisibly inside its mother. This is a real, understood, and accepted
+  regression from the old decorative-joey approach (which baked into the
+  mother's T1 frame directly), not a bug in the new pouch-carry mechanism,
+  which is itself correct. A full fix is M13-sized — either give
+  `creatureLayer` a real z-sort or bake a joey-variant T1 frame — so don't let
+  the user's live review be the first place this is discovered.
 - Live: https://feshalnaguji.github.io/beastoria/ · repo: feshalnaguji/beastoria
   (GitHub Pages auto-deploys main; CI runs tests+build)
 

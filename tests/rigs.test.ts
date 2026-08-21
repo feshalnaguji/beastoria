@@ -88,3 +88,46 @@ describe('rig coverage', () => {
     for (const id of Object.keys(SPECIES)) expect(rigged.has(id as never)).toBe(true);
   });
 });
+
+/**
+ * The pouch render contract (M12 task 5/7): `Renderer.ts` reparents a riding
+ * joey's whole view into the kangaroo rig's `pouch` part, between drawn
+ * `pouchBack`/`pouchFront` walls, by id — with nothing in the type system
+ * connecting the two files. Pinned numeric contract (same convention as
+ * tests/feeding.test.ts and tests/pouch.test.ts): the literals below are
+ * copies of Renderer.ts's module-private POUCH_RIDER_Z/POUCH_WORLD_OFFSET_*
+ * constants, not imports of them, so an accidental change on either side of
+ * the contract fails a test here instead of silently breaking the pouch.
+ */
+describe('kangaroo rig: the pouch render contract', () => {
+  const POUCH_RIDER_Z = 2;
+  const POUCH_WORLD_OFFSET_X = 6;
+  const POUCH_WORLD_OFFSET_Y = 0;
+  const rig = ALL_RIGS.find((r) => r.species === 'kangaroo');
+  if (!rig) throw new Error('no kangaroo rig');
+
+  it('pouch is a pure empty-shapes anchor', () => {
+    const pouch = rig.parts.find((p) => p.id === 'pouch');
+    expect(pouch).toBeDefined();
+    expect(pouch?.shapes.length).toBe(0);
+  });
+
+  it('pouchBack is a child of pouch, drawn strictly below the rider', () => {
+    const pouchBack = rig.parts.find((p) => p.id === 'pouchBack');
+    expect(pouchBack?.parent).toBe('pouch');
+    expect(pouchBack?.z).toBeLessThan(POUCH_RIDER_Z);
+  });
+
+  it('pouchFront is a child of pouch, drawn strictly above the rider', () => {
+    const pouchFront = rig.parts.find((p) => p.id === 'pouchFront');
+    expect(pouchFront?.parent).toBe('pouch');
+    expect(pouchFront?.z).toBeGreaterThan(POUCH_RIDER_Z);
+  });
+
+  it("body + pouch offsets sum to Renderer.ts's POUCH_WORLD_OFFSET", () => {
+    const body = rig.parts.find((p) => p.id === 'body');
+    const pouch = rig.parts.find((p) => p.id === 'pouch');
+    expect((body?.x ?? 0) + (pouch?.x ?? 0)).toBe(POUCH_WORLD_OFFSET_X);
+    expect((body?.y ?? 0) + (pouch?.y ?? 0)).toBe(POUCH_WORLD_OFFSET_Y);
+  });
+});
