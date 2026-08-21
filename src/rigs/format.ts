@@ -22,8 +22,15 @@ export type CoreClipName = 'idle' | 'walk' | 'sleep' | 'eat' | 'social' | 'carry
  * only the four Thread-C rigs (rabbit/deer/robin/kangaroo) need author them
  * now; every other rig falls back to 'sit'/'eat' via clipFor (Task 3) until
  * M13 completes the set.
+ *
+ * 'mount' (M13 Thread 3 task 10) is the kangaroo joey's reach-and-scramble
+ * pose for the pouch mount/dismount errand (Task 8 sim, Task 9 renderer
+ * ease) — forelimbs reaching up and forward, tail counterweighting, head
+ * raised. Optional like the others: only the kangaroo rig authors it, and
+ * `Renderer.ts`'s `hasMount = 'mount' in speciesRig.clips` check (Task 9)
+ * falls back to 'sit'/'idle' for every rig that doesn't.
  */
-export type ExtraClipName = 'flap' | 'swim' | 'feedGive' | 'feedTake';
+export type ExtraClipName = 'flap' | 'swim' | 'feedGive' | 'feedTake' | 'mount';
 export type ClipName = CoreClipName | ExtraClipName;
 
 /** t is 0..1 across the clip; values interpolate smoothly and loop. */

@@ -30,7 +30,7 @@ function expectValidClip(clip: AnimClip, ids: Set<string>) {
   }
 }
 
-const OPTIONAL_FEED_CLIPS: ExtraClipName[] = ['feedGive', 'feedTake'];
+const OPTIONAL_CLIPS: ExtraClipName[] = ['feedGive', 'feedTake', 'mount'];
 
 /**
  * The full CoreClipName set, kept in sync with format.ts by construction: if
@@ -72,9 +72,9 @@ describe.each(ALL_RIGS.map((r) => [r.species, r] as const))('%s rig', (_species,
     }
   });
 
-  it('if feedGive/feedTake are defined, they follow the same clip structure rules', () => {
+  it('if feedGive/feedTake/mount are defined, they follow the same clip structure rules', () => {
     const ids = new Set(rig.parts.map((p) => p.id));
-    for (const name of OPTIONAL_FEED_CLIPS) {
+    for (const name of OPTIONAL_CLIPS) {
       const clip = rig.clips[name];
       if (!clip) continue;
       expectValidClip(clip, ids);

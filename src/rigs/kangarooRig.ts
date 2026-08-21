@@ -1202,5 +1202,190 @@ export const kangarooRig: CreatureRig = {
         },
       ],
     },
+    mount: {
+      // M13 Thread 3 task 10 — the pouch mount/dismount errand's own pose
+      // (Task 8 sim, Task 9 renderer ease). Played by the JOEY, not the
+      // mother: `Renderer.ts`'s `clipFor` shows it to a still-on-its-own-feet
+      // baby settling just before climbing in, and again to the same baby
+      // right after `carriedBy` attaches, while the mount/dismount ease is
+      // still running — never to an adult, since only a joey ever carries.
+      //
+      // A reach-and-scramble, not a walk cycle: forelimbs reach up and
+      // forward (the climb), the body pitches back onto the haunch as the
+      // hind chain braces and pushes rather than travels, the tail swings
+      // down and back to counterweight the forward reach exactly the way it
+      // counterweights the opposite lean in BOUND_TRACKS, and the head lifts
+      // to look up at the pouch mouth it's climbing toward. Built the same
+      // way as `feedGive`/`feedTake` next to it: same `head`-led gesture
+      // shape, same ear/muzzle-style secondary tracks, same loop-safety
+      // requirement (`Animator` loops every clip with no one-shot mode, and
+      // the sim only ever holds this pose a few hundred ms per Task
+      // 8/9 — no designed "settle to rest" tail is needed, just a clean seam
+      // at t=0/1 on every channel below).
+      //
+      // Rotation-sign precedent (recipe rule 4A, restated in this file's
+      // header): forelimbs hang down from their shoulder pivot, so negative
+      // rot swings them FORWARD/UP — exactly the sign `eat`'s foreUpper
+      // track already uses for reaching toward the grass, pushed further
+      // here (-0.7 vs. eat's -0.35) because a climb reaches higher than a
+      // graze. `tail`'s positive/negative meaning is BOUND_TRACKS' own:
+      // negative is down-and-back, positive is up-and-forward — so a
+      // forward weight shift onto the forelimbs counterweights with
+      // negative tail rot, the same relationship BOUND_TRACKS uses (just
+      // the opposite direction, since there the body is driving forward
+      // over the hind legs, not reaching up over the forelimbs). `head`'s
+      // sign is `idle`/`walk`'s own: negative rot + negative py is raised,
+      // positive is dipped — matched here for "head raised".
+      durationMs: 880,
+      tracks: [
+        {
+          partId: 'body',
+          rot: [
+            { t: 0, v: 0.05 },
+            { t: 0.3, v: -0.08 },
+            { t: 0.55, v: -0.1 },
+            { t: 0.8, v: 0.02 },
+            { t: 1, v: 0.05 },
+          ],
+          py: [
+            { t: 0, v: 4 },
+            { t: 0.3, v: 0 },
+            { t: 0.55, v: -2 },
+            { t: 0.8, v: 3 },
+            { t: 1, v: 4 },
+          ],
+        },
+        {
+          // The hind chain braces and pushes rather than travels — a
+          // scramble, not a bound — so the excursion is smaller than
+          // BOUND_TRACKS' but shaped the same way (thigh and shank folding
+          // against each other, recipe rule 4A's articulation test).
+          partId: 'hindThigh',
+          rot: [
+            { t: 0, v: 0.22 },
+            { t: 0.3, v: 0.3 },
+            { t: 0.55, v: 0.15 },
+            { t: 0.8, v: 0.2 },
+            { t: 1, v: 0.22 },
+          ],
+        },
+        {
+          partId: 'hindShank',
+          rot: [
+            { t: 0, v: -0.26 },
+            { t: 0.3, v: -0.35 },
+            { t: 0.55, v: -0.2 },
+            { t: 0.8, v: -0.24 },
+            { t: 1, v: -0.26 },
+          ],
+        },
+        {
+          partId: 'hindFoot',
+          rot: [
+            { t: 0, v: 0.14 },
+            { t: 0.3, v: 0.22 },
+            { t: 0.55, v: 0.08 },
+            { t: 0.8, v: 0.12 },
+            { t: 1, v: 0.14 },
+          ],
+        },
+        {
+          partId: 'hindFar',
+          rot: [
+            { t: 0, v: 0.2 },
+            { t: 0.32, v: 0.28 },
+            { t: 0.58, v: 0.14 },
+            { t: 0.82, v: 0.18 },
+            { t: 1, v: 0.2 },
+          ],
+        },
+        {
+          // The primary gesture: the near forelimb reaches up and forward
+          // for the climb, then curls (positive `foreLower`) as if gripping
+          // and pulling in mid-scramble, before releasing back to start.
+          partId: 'foreUpper',
+          rot: [
+            { t: 0, v: 0.1 },
+            { t: 0.35, v: -0.65 },
+            { t: 0.6, v: -0.7 },
+            { t: 0.85, v: -0.15 },
+            { t: 1, v: 0.1 },
+          ],
+        },
+        {
+          partId: 'foreLower',
+          rot: [
+            { t: 0, v: 0.15 },
+            { t: 0.35, v: -0.3 },
+            { t: 0.6, v: 0.25 },
+            { t: 0.85, v: 0.05 },
+            { t: 1, v: 0.15 },
+          ],
+        },
+        {
+          // The off-side forelimb mirrors the reach, damped and a touch
+          // behind — the same "with its partner, not alternating" beat
+          // BOUND_TRACKS' `hindFar` uses for the hind pair.
+          partId: 'foreFar',
+          rot: [
+            { t: 0, v: 0.12 },
+            { t: 0.38, v: -0.55 },
+            { t: 0.62, v: -0.5 },
+            { t: 0.85, v: -0.1 },
+            { t: 1, v: 0.12 },
+          ],
+        },
+        {
+          // Counterweighting the forward reach: swings down-and-back as the
+          // forelimbs reach up-and-forward, the opposite pairing from
+          // BOUND_TRACKS but the identical mechanism.
+          partId: 'tail',
+          rot: [
+            { t: 0, v: 0.05 },
+            { t: 0.35, v: -0.28 },
+            { t: 0.6, v: -0.32 },
+            { t: 0.85, v: -0.05 },
+            { t: 1, v: 0.05 },
+          ],
+        },
+        {
+          partId: 'head',
+          rot: [
+            { t: 0, v: 0.02 },
+            { t: 0.35, v: -0.3 },
+            { t: 0.6, v: -0.34 },
+            { t: 0.85, v: -0.08 },
+            { t: 1, v: 0.02 },
+          ],
+          py: [
+            { t: 0, v: 1 },
+            { t: 0.35, v: -4 },
+            { t: 0.6, v: -5 },
+            { t: 0.85, v: -1 },
+            { t: 1, v: 1 },
+          ],
+        },
+        {
+          partId: 'earL',
+          rot: [
+            { t: 0, v: 0 },
+            { t: 0.35, v: 0.22 },
+            { t: 0.6, v: 0.24 },
+            { t: 0.85, v: 0.05 },
+            { t: 1, v: 0 },
+          ],
+        },
+        {
+          partId: 'earR',
+          rot: [
+            { t: 0, v: 0 },
+            { t: 0.38, v: 0.18 },
+            { t: 0.62, v: 0.2 },
+            { t: 0.85, v: 0.04 },
+            { t: 1, v: 0 },
+          ],
+        },
+      ],
+    },
   },
 };
