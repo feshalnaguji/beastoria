@@ -145,6 +145,18 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+/** M12 task 5: true while `c` currently has a baby mounted in her pouch.
+ * The carry link is stored on the RIDER (`Creature.carriedBy`), not the
+ * carrier, so reading it from the carrier's side means scanning for it —
+ * see sim/state.ts's own field comment for why. Only ever true for a
+ * kangaroo mother (the sole pouchCarry species, sim/species.ts) with a
+ * riding joey; a carried creature is excluded from `pickCreature`'s hit
+ * test (Renderer.ts), so this is the only way to learn about the joey —
+ * through the mother's own card. */
+function isCarryingJoey(state: WorldState, c: Creature): boolean {
+  return state.creatures.some((rider) => rider.carriedBy === c.id);
+}
+
 export class InspectCard {
   private root: HTMLDivElement;
   private nameEl: HTMLDivElement;
@@ -204,7 +216,13 @@ export class InspectCard {
     this.nameEl.textContent = creatureName(state, c);
     this.roleEl.textContent = creatureRole(state, c);
     this.metaEl.textContent = `${capitalize(c.species)} · ${c.stage}`;
-    this.doingEl.textContent = creatureDoing(c, presentation);
+    let doing = creatureDoing(c, presentation);
+    // M12 task 5: a riding joey is excluded from pickCreature's own hit
+    // test (it shares its mother's exact position), so her card is the
+    // only place this is ever visible — appended rather than replacing,
+    // so whatever she's actually doing still reads first.
+    if (isCarryingJoey(state, c)) doing += ', her joey riding along in the pouch';
+    this.doingEl.textContent = doing;
     this.root.style.display = 'block';
   }
 

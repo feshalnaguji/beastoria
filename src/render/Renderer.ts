@@ -8,6 +8,7 @@ import { getClock, TICKS_PER_DAY, type Clock } from '../sim/clock';
 import type { SimEvent } from '../sim/events';
 import { SPECIES, speedFor } from '../sim/species';
 import {
+  isCarried,
   WORLD_HEIGHT,
   WORLD_WIDTH,
   type Creature,
@@ -169,6 +170,20 @@ interface CreatureView {
    * text (via presentationFor()) can agree with what's on screen without
    * recomputing the speed/medium inference itself. */
   airborneNow: boolean;
+  /** M12 task 5: mirrors `Creature.carriedBy` (null when on its own feet) —
+   * kept on the view (rather than re-read from state each frame) so sync()
+   * can detect the mount/dismount transition edge (compare against the
+   * previous value) and render() can force this view's clip to 'sit'
+   * while carried, regardless of its own activity. */
+  carriedBy: number | null;
+  /** True only once `carriedBy` has actually been resolved into a live
+   * reparenting — the carrier has a view AND that view's rig defines a
+   * `pouch` container (only the kangaroo's does today). False whenever
+   * `carriedBy` is null, and also (defensive fallback) when it is non-null
+   * but no pouch could be found — such a view renders at its own
+   * interpolated position exactly like an uncarried creature, rather than
+   * crashing or vanishing. */
+  pouchAttached: boolean;
 }
 
 /** Baked walk frames per species (Step 1: symmetric 3-key clips sample
@@ -294,6 +309,33 @@ const EMERGE_SLIDE_PX = 12;
  * view (see CreatureView.zzzIntervalMs) so a napping cluster doesn't emit in
  * lockstep. */
 const ZZZ_INTERVAL_MS = 2500;
+
+/** M12 task 5: a carried joey's view, once reparented into its carrier's
+ * rig `pouch` container, sits at this fixed LOCAL offset within it —
+ * (0,0) is exactly the anchor point kangarooRig.ts's `pouch` part occupies,
+ * which already centers a rider's own head (root-relative, post baby-stage
+ * 0.4 scale) just above `pouchFront`'s top edge, so no extra nudge is
+ * needed. Not derived from the sim's `joey.pos` (which the sim sets equal
+ * to the mother's own position every tick — see sim/movement.ts) — that
+ * would double-count "where the pouch is" (the parent chain already
+ * handles it) with "where the joey sits inside it". */
+const POUCH_RIDER_OFFSET: Vec2 = { x: 0, y: 0 };
+/** zIndex a reparented rider is given inside the pouch container — between
+ * kangarooRig.ts's `pouchBack` (z 1) and `pouchFront` (z 3), so the near
+ * rim genuinely draws over her lower body while the back wall stays behind
+ * her, the illusion the M11 decorative pouch/joey art never achieved. */
+const POUCH_RIDER_Z = 2;
+/** M12 task 5 (Task 4 review follow-up): a riding joey's own `curr`
+ * position is literally its mother's (sim/movement.ts's carried-position
+ * derivation) — using it to place a feed mote would land the mote at her
+ * center, not near the pouch where the feeding is actually happening. This
+ * is the pouch's approximate WORLD-space offset from the mother's own root
+ * instead, derived from kangarooRig.ts's authored numbers: `body` sits at
+ * (0,-20) off her root, and `pouch` sits at (6,20) off `body`, summing to
+ * (6,0) — mirrored across x for a mother facing left, exactly as her whole
+ * rig already flips (see the facingLeft scale.x logic in render()). */
+const POUCH_WORLD_OFFSET_X = 6;
+const POUCH_WORLD_OFFSET_Y = 0;
 
 /** A view mid-fade after leaving state.creatures (M9 task 5's gentle
  * passing) — drained in the render loop rather than destroyed same-frame. */
@@ -530,13 +572,19 @@ export class Renderer {
     return { x: c.x, y: c.y, zoom: this.camera.getZoom() };
   }
 
-  /** Nearest creature to a screen point, within a world-space radius. */
+  /** Nearest creature to a screen point, within a world-space radius. A
+   * carried creature is skipped (M12 task 5): its raw `pos` is literally
+   * its carrier's, so leaving it in this hit test would let it steal taps
+   * meant for its carrier (or vice versa) at that exact point — it's
+   * reached instead through the carrier's own InspectCard ("carrying a
+   * joey"). */
   pickCreature(state: WorldState, screenX: number, screenY: number): Creature | undefined {
     const w = this.camera.toWorld(screenX, screenY);
     const radius = 80 / Math.max(0.2, this.camera.getZoom());
     let best: Creature | undefined;
     let bestDist = radius;
     for (const c of state.creatures) {
+      if (isCarried(c)) continue;
       const d = Math.hypot(c.pos.x - w.x, c.pos.y - w.y);
       if (d < bestDist) {
         bestDist = d;
@@ -570,6 +618,25 @@ export class Renderer {
     return out;
   }
 
+  /** M12 task 5 (Task 4 review follow-up): the world point a feed mote
+   * should arc TO for a given baby. Ordinarily that's the baby's own head
+   * (headPos above) — but a baby currently riding in a pouch has no
+   * meaningful head point of its own (its `curr` is literally its
+   * carrier's `curr`, copied every tick by sim/movement.ts), so headPos
+   * would place the mote at the CARRIER's head, not near the pouch where
+   * the feeding is actually happening. Falls back to the carrier's
+   * approximate pouch world point (POUCH_WORLD_OFFSET_*) whenever the baby
+   * is actually pouch-attached; ordinary headPos otherwise (every other
+   * feeding — carry deliveries, nurse-fed babies on their own feet). */
+  private feedToPoint(babyView: CreatureView, parentView: CreatureView, out: Vec2): Vec2 {
+    if (!babyView.pouchAttached) return this.headPos(babyView, out);
+    const scale = rigFor(parentView.species).stages[parentView.stage].scale;
+    const facingLeft = Math.cos(parentView.heading) < 0;
+    out.x = parentView.curr.x + (facingLeft ? -POUCH_WORLD_OFFSET_X : POUCH_WORLD_OFFSET_X) * scale;
+    out.y = parentView.curr.y + POUCH_WORLD_OFFSET_Y * scale;
+    return out;
+  }
+
   /**
    * M11: main.ts calls this once per tick, right after sync(state), with
    * that tick's TickOutput.feedings — the transient "this baby just got
@@ -595,7 +662,7 @@ export class Renderer {
           ? FEED_MOTE_TINT_NURSE
           : FEED_MOTE_TINT_CARRY;
       const from = this.headPos(parentView, this.scratchHeadA);
-      const to = this.headPos(babyView, this.scratchHeadB);
+      const to = this.feedToPoint(babyView, parentView, this.scratchHeadB);
       for (let i = 0; i < FEED_MOTE_BURST_COUNT; i++) {
         this.ambient.spawnFeedMote(from, to, tint, i * FEED_MOTE_BURST_STAGGER_MS);
       }
@@ -660,6 +727,20 @@ export class Renderer {
       view.nursing = nursingIds.has(c.id);
       view.nursed = isNursed(c, nursingMotherPos);
       view.feedContact = inFeedContact(c, feedGivingPos);
+      // M12 task 5: only touch the display tree on the actual mount/dismount
+      // edge (compare against the view's own last-seen value), not every
+      // sync — reparenting is cheap but there is no reason to repeat it
+      // every tick a joey simply keeps riding. Safe to look the carrier's
+      // view up here: state.creatures (and so this very loop) walks in
+      // ascending id order, and a carrier is always born before its rider
+      // (sim/movement.ts's own carried-position derivation depends on the
+      // same fact), so by the time we reach the rider its carrier's view
+      // has already been created/updated earlier in this same loop.
+      const carriedBy = c.carriedBy ?? null;
+      if (carriedBy !== view.carriedBy) {
+        this.updatePouchAttachment(view, carriedBy);
+        view.carriedBy = carriedBy;
+      }
     }
     // Creatures who have passed ease out instead of vanishing same-frame —
     // see this.fading, drained in render() (M9 task 5).
@@ -675,6 +756,49 @@ export class Renderer {
     this.syncMemorials(state);
     this.ambient.setMemorialAnchors(state.memorials.map((m) => m.pos));
     this.consumeNewEvents(state, newlyCreatedIds);
+  }
+
+  /**
+   * M12 task 5: moves `view.node` between `creatureLayer` (walking on its
+   * own) and a carrier's rig `pouch` container (riding), on the actual
+   * mount/dismount transition only. Reparenting — not a `broodOffset`-style
+   * world-space nudge — is the only way a joey can ever paint genuinely
+   * INSIDE its mother's silhouette: `creatureLayer` has no z-sort of its
+   * own (views paint in creation order, Renderer.ts's own `sync`/
+   * `createView`), but a rig's own part containers do (`part.z` → Pixi
+   * `zIndex`, `sortableChildren: true` — RigRenderer.ts), so putting the
+   * joey's whole view inside the mother's rig tree, between her
+   * `pouchBack` and `pouchFront`, is what lets the near rim actually draw
+   * over it.
+   */
+  private updatePouchAttachment(view: CreatureView, carrierId: number | null): void {
+    if (view.pouchAttached) {
+      view.node.parent?.removeChild(view.node);
+      view.pouchAttached = false;
+    }
+    const pouch = carrierId === null ? undefined : this.views.get(carrierId)?.rig.pouch;
+    if (pouch) {
+      this.attachToPouch(view, pouch);
+    } else {
+      // No carrier (dismounted), or a defensive fallback — the carrier's
+      // view is missing, or its rig doesn't define a `pouch` (shouldn't
+      // happen given family.ts's own pouchCarry species gate, but this
+      // must never throw): render at its own interpolated position exactly
+      // like an ordinary uncarried creature.
+      this.creatureLayer.addChild(view.node);
+    }
+  }
+
+  /** Parents `view.node` into `pouch` at the fixed rider offset/zIndex —
+   * shared by the mount transition above and by applyStage's rebuild-time
+   * reattachment below (the `rippleSprite` detach/reattach precedent). */
+  private attachToPouch(view: CreatureView, pouch: Container): void {
+    pouch.addChild(view.node);
+    view.node.position.set(POUCH_RIDER_OFFSET.x, POUCH_RIDER_OFFSET.y);
+    view.node.zIndex = POUCH_RIDER_Z;
+    view.node.scale.set(1);
+    view.node.alpha = 1;
+    view.pouchAttached = true;
   }
 
   /** A brooding sitter at a treeNest home renders offset into the drawn
@@ -1116,15 +1240,31 @@ export class Renderer {
         if (t >= 1) view.emergeKind = undefined;
       }
 
-      // A brooding sitter at a treeNest home nudges into the drawn bowl
-      // (broodOffsetX/Y, set in sync() — zero for every other case).
-      view.node.position.set(
-        x + view.broodOffsetX + emergeOffX,
-        y + view.broodOffsetY + emergeOffY + liftPx,
-      );
       const facingLeft = Math.cos(view.heading) < 0;
-      view.node.scale.x = (facingLeft ? -1 : 1) * emergeScale;
-      view.node.scale.y = emergeScale;
+      if (view.pouchAttached) {
+        // M12 task 5: riding in a carrier's pouch — `view.node` is a child
+        // of the carrier's rig `pouch` container now, not of creatureLayer,
+        // so its position is a small FIXED offset within that pouch
+        // (POUCH_RIDER_OFFSET), not this frame's interpolated (x, y) — the
+        // sim sets `curr` equal to the carrier's own position every tick
+        // (sim/movement.ts), so applying it here too would double-count
+        // "where the pouch is" (already handled by the parent chain) with
+        // "where the rider sits inside it". No facing flip either — the
+        // parent chain (the carrier's own node.scale.x) already applies it,
+        // and re-applying it here would cancel it back out whenever she
+        // faces left.
+        view.node.position.set(POUCH_RIDER_OFFSET.x, POUCH_RIDER_OFFSET.y);
+        view.node.scale.set(1);
+      } else {
+        // A brooding sitter at a treeNest home nudges into the drawn bowl
+        // (broodOffsetX/Y, set in sync() — zero for every other case).
+        view.node.position.set(
+          x + view.broodOffsetX + emergeOffX,
+          y + view.broodOffsetY + emergeOffY + liftPx,
+        );
+        view.node.scale.x = (facingLeft ? -1 : 1) * emergeScale;
+        view.node.scale.y = emergeScale;
+      }
       // A passing elder softens — the gentlest farewell.
       view.node.alpha = view.activityId === 'pass' ? 0.75 : 1;
 
@@ -1168,7 +1308,13 @@ export class Renderer {
       // `nursing` above `moving` (a mother mid-settle micro-adjusting to
       // face her baby is still genuinely stationary, so the old ordering
       // cost her pose right on arrival) and layers feedGive/feedTake on top
-      // of the sit/eat poses they're replacing.
+      // of the sit/eat poses they're replacing. M12 task 5 adds
+      // `view.pouchAttached` as the single strongest override: a riding
+      // joey's own `activityId` stays 'idle' the whole ride (family.ts's
+      // mount() assigns it and nothing else ever touches it while carried)
+      // and its `moving` reads true (its `curr`/`prev` track its carrier's
+      // real motion) — left alone that would show her joey walking in
+      // mid-air inside the pouch, so it's forced to 'sit' regardless.
       const clip = clipFor(
         view.activityId,
         moving,
@@ -1180,6 +1326,7 @@ export class Renderer {
         fed,
         feedGiving,
         feedTaking,
+        view.pouchAttached,
       );
 
       if (tier === 2) {
@@ -1495,6 +1642,8 @@ export class Renderer {
       zzzIntervalMs: ZZZ_INTERVAL_MS + ((c.id * 37) % 401) - 200,
       glyphBornMs: 0,
       airborneNow: false,
+      carriedBy: null,
+      pouchAttached: false,
     };
     this.positionLabel(view);
     return view;
@@ -1507,10 +1656,37 @@ export class Renderer {
     // destroyed (destroy({children:true}) would take it down too), then
     // reattach to the freshly built shadow container.
     if (view.rippleSprite) view.rig.shadow?.removeChild(view.rippleSprite);
+    // M12 task 5: same precedent, for any real joey currently riding in
+    // THIS view's pouch — rare (a carrying mother changing life stage
+    // mid-ride) but the pouch container lives inside the rig about to be
+    // destroyed, and a reparented rider would go down with it otherwise.
+    // Found by parentage (`node.parent`), not a stored back-reference —
+    // clutchMax 1 means there's at most one today, but this stays correct
+    // even if that ever changes.
+    const oldPouch = view.rig.pouch;
+    const riders: CreatureView[] = [];
+    if (oldPouch) {
+      for (const v of this.views.values()) {
+        if (v.node.parent === oldPouch) riders.push(v);
+      }
+    }
+    for (const r of riders) oldPouch?.removeChild(r.node);
+
     view.rig.root.destroy({ children: true });
     view.rig = buildRig(rigFor(view.species), stage);
     view.node.addChildAt(view.rig.root, 0);
     if (view.rippleSprite) view.rig.shadow?.addChild(view.rippleSprite);
+    for (const r of riders) {
+      if (view.rig.pouch) {
+        this.attachToPouch(r, view.rig.pouch);
+      } else {
+        // Defensive fallback: the new stage's rig has no pouch. Shouldn't
+        // happen (kangarooRig.ts defines `pouch` in every stage), but
+        // render the rider at its own position rather than orphaning it.
+        this.creatureLayer.addChild(r.node);
+        r.pouchAttached = false;
+      }
+    }
     view.frames = this.bakeFrames(view.species, stage);
     this.positionLabel(view);
   }
@@ -1658,6 +1834,15 @@ export class Renderer {
  * sit/eat poses they're replacing — both pre-resolved by the caller against
  * the creature's own rig (graceful fallback: a rig that doesn't author
  * these clips keeps getting 'sit'/'eat' exactly as before).
+ *
+ * M12 task 5 adds `carried` — a real joey riding in its mother's pouch —
+ * as the single strongest override, checked first. Its own `activityId`
+ * stays 'idle' the whole ride (family.ts's mount() sets it once and
+ * nothing else touches it while carried) and `moving` reads true (its
+ * `curr`/`prev` literally track its carrier's motion, sim/movement.ts),
+ * which unchecked would show her joey walking mid-air inside the pouch —
+ * so it is forced to 'sit' regardless, the same held pose the mother
+ * herself plays during a nurse hold.
  */
 function clipFor(
   activityId: string,
@@ -1670,7 +1855,9 @@ function clipFor(
   fed: boolean,
   feedGiving: boolean,
   feedTaking: boolean,
+  carried: boolean,
 ): ClipName {
+  if (carried) return 'sit';
   if (activityId === 'pass') return 'sleep';
   if (airborne) return 'flap';
   if (swimming) return 'swim';

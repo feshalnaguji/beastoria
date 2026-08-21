@@ -30,6 +30,13 @@ export interface RigInstance {
    * fix wave, fix 2). Undefined for rigs that omit a 'food' part (none do
    * today). */
   food?: Container | undefined;
+  /** The rig's 'pouch' part, looked up by id once at build time same as
+   * `shadow`/`food` above — the anchor container a real carried joey's
+   * whole view is reparented into (M12 task 5), so it z-sorts against the
+   * pouch's own `pouchBack`/`pouchFront` children (sortableChildren, same
+   * as every other part container). Undefined for every rig but the
+   * kangaroo's — the only species with a `pouch` part today. */
+  pouch?: Container | undefined;
 }
 
 export function buildRig(rig: CreatureRig, stage: LifeStage): RigInstance {
@@ -43,6 +50,7 @@ export function buildRig(rig: CreatureRig, stage: LifeStage): RigInstance {
   let shadow: Container | undefined;
   let shadowGraphic: Graphics | undefined;
   let food: Container | undefined;
+  let pouch: Container | undefined;
 
   for (const part of rig.parts) {
     const node = new Container();
@@ -63,6 +71,7 @@ export function buildRig(rig: CreatureRig, stage: LifeStage): RigInstance {
       shadowGraphic = g;
     }
     if (part.id === 'food') food = node;
+    if (part.id === 'pouch') pouch = node;
 
     containers.set(part.id, node);
     const parent = part.parent ? containers.get(part.parent) : undefined;
@@ -77,6 +86,7 @@ export function buildRig(rig: CreatureRig, stage: LifeStage): RigInstance {
     shadow,
     shadowGraphic,
     food,
+    pouch,
   };
 }
 

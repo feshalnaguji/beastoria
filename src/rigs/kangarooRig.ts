@@ -39,34 +39,39 @@ export const kangarooRig: CreatureRig = {
       ],
     },
     {
-      // Always visible — part of her silhouette, not a carried item. The
-      // joey only shows itself over the rim in the 'sit' clip (below).
+      // Always visible — part of her silhouette, not a carried item.
+      // Anchor only, no shapes of its own (M12 task 5): split from one
+      // drawn part into `pouchBack`/`pouchFront` below so a REAL riding
+      // joey Creature — reparented here by the renderer (RigRenderer.ts's
+      // `pouch` lookup) — can be z-sorted between them: the back wall
+      // renders first, then the joey, then the near rim overlaps her lower
+      // body, reading as genuinely tucked inside rather than floating on
+      // top. Supersedes the decorative 'joey' rig part (M11), deleted.
       id: 'pouch',
       parent: 'body',
       x: 6,
       y: 20,
       z: 2,
-      shapes: [
-        { kind: 'ellipse', x: 0, y: 0, rx: 16, ry: 11, fill: { color: POUCH } },
-        { kind: 'ellipse', x: 0, y: -4, rx: 12, ry: 6, fill: { color: POUCH_LINING, alpha: 0.75 } },
-      ],
+      shapes: [],
     },
     {
-      // A joey's head and ear tips, peeking over the pouch rim — visible
-      // only in 'sit', exactly the clip clipFor gives a nurse-hold mother
-      // (M11). No new systems: this is purely rig art, gated by hideInClips.
-      id: 'joey',
+      // The pouch's back wall.
+      id: 'pouchBack',
       parent: 'pouch',
       x: 0,
-      y: -7,
+      y: 0,
+      z: 1,
+      shapes: [{ kind: 'ellipse', x: 0, y: 0, rx: 16, ry: 11, fill: { color: POUCH } }],
+    },
+    {
+      // The near rim — drawn over whatever is riding inside (its zIndex
+      // sits above the joey's, below this).
+      id: 'pouchFront',
+      parent: 'pouch',
+      x: 0,
+      y: -4,
       z: 3,
-      shapes: [
-        { kind: 'circle', x: 0, y: 0, r: 6, fill: { color: FUR } },
-        { kind: 'circle', x: 2.5, y: -0.5, r: 1, fill: { color: NOSE } }, // eye
-        { kind: 'ellipse', x: -3, y: -5.5, rx: 2, ry: 3, fill: { color: FUR_DARK } }, // ear tip L
-        { kind: 'ellipse', x: 3, y: -6, rx: 2, ry: 3, fill: { color: FUR_DARK } }, // ear tip R
-      ],
-      hideInClips: ['idle', 'walk', 'sleep', 'eat', 'social', 'carry'],
+      shapes: [{ kind: 'ellipse', x: 0, y: 0, rx: 12, ry: 6, fill: { color: POUCH_LINING, alpha: 0.75 } }],
     },
     {
       // Heavy and ground-anchored: it plants near the shadow, the third
@@ -158,8 +163,9 @@ export const kangarooRig: CreatureRig = {
         earL: { x: 0.85, y: 0.7 },
         earR: { x: 0.85, y: 0.7 },
         legB: { x: 0.9, y: 0.8 },
+        // Zeroing the anchor zeroes pouchBack/pouchFront with it (both are
+        // its children) — a baby has no pouch of its own.
         pouch: { x: 0, y: 0 },
-        joey: { x: 0, y: 0 },
       },
     },
     juvenile: { scale: 0.7, partScale: { head: { x: 1.12, y: 1.12 } } },
@@ -365,8 +371,9 @@ export const kangarooRig: CreatureRig = {
       ],
     },
     sit: {
-      // Settled to nurse: a gentle squash, the joey visible over the pouch
-      // rim (M11).
+      // Settled to nurse: a gentle squash. Also the clip a riding joey is
+      // forced into while carried (Renderer.ts, M12 task 5) — she plays
+      // this same hold either way.
       durationMs: 1100,
       tracks: [
         { partId: 'body', sy: [{ t: 0, v: 0.85 }, { t: 1, v: 0.85 }], py: [{ t: 0, v: 3 }, { t: 1, v: 3 }] },
