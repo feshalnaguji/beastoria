@@ -387,7 +387,7 @@ export const PRIVACY_SECTIONS: { heading: string; bodyHtml: string }[] = [
     heading: 'The short version',
     bodyHtml:
       '<p>Beastoria collects <strong>nothing</strong>. No accounts, no names, no emails, ' +
-      'no tracking, no analytics, no cookies used to follow you, and no ads. ' +
+      'no tracking, no analytics, no cookies used to follow you, and no ads today. ' +
       'This page exists so parents can check that for themselves.</p>',
   },
   {

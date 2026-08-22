@@ -101,7 +101,8 @@ export function renderSpeciesPage(entry: GuideEntry): string {
 <h2>In Beastoria</h2>
 <p>${entry.inBeastoria}</p>
 <a class="play" href="../../">Open the valley</a>
-<div class="credits">${creditsHtml}</div>`;
+<div class="credits">${creditsHtml}</div>
+<footer><a href="../../privacy/">Privacy</a> · <a href="${SITE.repoUrl}" rel="external">Source on GitHub</a></footer>`;
   return shell({
     title: `${entry.name} — ${SITE.name} Creature Guide`,
     description,
@@ -119,7 +120,8 @@ ${sections}
 <footer><a href="../">← back to the valley</a> · <a href="../guide/">Creature guide</a></footer>`;
   return shell({
     title: `Privacy — ${SITE.name}`,
-    description: SITE.socialDescription,
+    description:
+      'How Beastoria protects children and families: no accounts, no data collection, no tracking — your valley is saved only on your own device.',
     canonicalPath: 'privacy/',
     body,
   });

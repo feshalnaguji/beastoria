@@ -151,11 +151,8 @@ v1 (two open tabs overwrite each other's timeline harmlessly).
   path that could silently corrupt an in-progress mourning vigil) and five
   important findings surfaced by the milestone's own final review. Do not
   start v2 Caretaker World or M14 until the user's M13 review happens.
-  **G1 (Findable) is additionally built, on branch `g1-findable`** (this
-  session, 2026-08-23) — fully verified locally (tests/lint/build all
-  clean, 250 tests passing) — awaiting the controller's whole-branch
-  review, merge to main, and deploy, then the user's own browser review
-  per the working process below.
+  **G1 (Findable) merged to main and deployed (2026-08-23)**, awaiting
+  the user's live review alongside M13's.
 - **M14 candidates (deferred out of M13 scope, per the user's own decision
   recorded in this milestone's plan):** (1) feeding still reads as one
   mechanism tuned per species rather than each species' real behavior — not

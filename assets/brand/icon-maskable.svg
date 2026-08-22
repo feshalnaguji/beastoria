@@ -1,7 +1,7 @@
 <svg viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
   <rect width="128" height="128" fill="#87a96b"/>
+  <path d="M0 96 Q 40 82 80 94 T 128 90 V 128 H 0 Z" fill="#6f9157" opacity="0.7"/>
   <g transform="translate(16 16) scale(0.75)">
-    <path d="M0 96 Q 40 82 80 94 T 128 90 V 128 H 0 Z" fill="#6f9157" opacity="0.7"/>
     <!-- rabbit: seated silhouette, cream on green -->
     <ellipse cx="60" cy="88" rx="26" ry="19" fill="#f6f2e7"/>
     <circle cx="82" cy="72" r="13" fill="#f6f2e7"/>
