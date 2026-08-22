@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { SITE } from '../src/content/site';
 import { GUIDE } from '../src/content/guide';
 import { PORTRAITS } from '../src/content/portraits';
+import {
+  headInjectionTags, renderGuideIndex, renderRobotsTxt,
+  renderSitemapXml, renderSpeciesPage, sitePaths,
+} from '../src/content/pageTemplates';
 
 const EXPECTED_IDS = [
   'rabbit', 'robin', 'deer', 'duck', 'koi', 'owl',
@@ -67,5 +71,61 @@ describe('portraits', () => {
       expect(svg, e.id).toContain('aria-label=');
       expect(svg, e.id).not.toMatch(/<image|href="http/); // self-contained, no external refs
     }
+  });
+});
+
+describe('page templates', () => {
+  it('sitePaths lists every canonical path exactly once', () => {
+    const paths = sitePaths();
+    expect(paths.length).toBe(15); // game + guide index + 12 species + privacy
+    expect(new Set(paths).size).toBe(15);
+    expect(paths).toContain('guide/rabbit/');
+    expect(paths).toContain('privacy/');
+  });
+
+  it('sitemap lists every page exactly once, absolute, from SITE.baseUrl', () => {
+    const xml = renderSitemapXml();
+    const locs = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
+    expect(locs.length).toBe(15); // game + guide index + 12 species + privacy
+    expect(new Set(locs).size).toBe(15);
+    for (const loc of locs) expect(loc!.startsWith(SITE.baseUrl)).toBe(true);
+    expect(locs).toContain(`${SITE.baseUrl}guide/rabbit/`);
+  });
+
+  it('robots.txt allows all and points at the sitemap', () => {
+    const txt = renderRobotsTxt();
+    expect(txt).toContain('User-agent: *');
+    expect(txt).toContain(`Sitemap: ${SITE.baseUrl}sitemap.xml`);
+  });
+
+  it('species pages carry canonical URL, portrait, copy, and credits', () => {
+    const robin = GUIDE.find((e) => e.id === 'robin')!;
+    const html = renderSpeciesPage(robin);
+    expect(html).toContain(`<link rel="canonical" href="${SITE.baseUrl}guide/robin/"`);
+    expect(html).toContain('viewBox="0 0 240 180"');
+    expect(html).toContain(robin.tagline);
+    if (robin.voice.kind !== 'silent') {
+      for (const c of robin.voice.credits) expect(html).toContain(c.url);
+    }
+    expect(html).not.toContain('<script'); // pages are zero-JS
+  });
+
+  it('guide index links every species page and the game', () => {
+    const html = renderGuideIndex();
+    for (const e of GUIDE) expect(html).toContain(`href="./${e.id}/"`);
+    expect(html).toContain('href="../"');
+  });
+
+  it('head injection carries canonical, og:url, og:image, and VideoGame JSON-LD', () => {
+    const tags = headInjectionTags();
+    const canonical = tags.find((t) => t.tag === 'link');
+    expect(canonical?.attrs?.href).toBe(SITE.baseUrl);
+    const jsonLd = tags.find((t) => t.tag === 'script');
+    const parsed = JSON.parse(jsonLd!.children!);
+    expect(parsed['@type']).toBe('VideoGame');
+    expect(parsed.isFamilyFriendly).toBe(true);
+    expect(parsed.image).toBe(`${SITE.baseUrl}og-image.png`);
+    const ogUrl = tags.find((t) => t.attrs?.property === 'og:url');
+    expect(ogUrl?.attrs?.content).toBe(SITE.baseUrl);
   });
 });
