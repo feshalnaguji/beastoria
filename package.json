@@ -2,6 +2,7 @@
   "name": "beastoria",
   "private": true,
   "version": "0.1.0",
+  "homepage": "https://feshalnaguji.github.io/beastoria/",
   "type": "module",
   "scripts": {
     "dev": "vite",

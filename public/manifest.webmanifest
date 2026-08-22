@@ -1,0 +1,17 @@
+{
+  "name": "Beastoria — a calm little world of creature families",
+  "short_name": "Beastoria",
+  "description": "A gentle living valley of creature families — watch, zoom in close, and listen.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#87a96b",
+  "theme_color": "#87a96b",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
