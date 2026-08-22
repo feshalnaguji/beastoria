@@ -6,17 +6,10 @@
  * this file only renders and computes the card's text.
  */
 import { familyName } from '../render/Renderer';
-import { idHash } from '../sim/behaviors';
+import { idHash, MOURNING_GATHER_MIN_TICKS } from '../sim/behaviors';
 import { SPECIES } from '../sim/species';
 import type { Creature, WorldState } from '../sim/state';
 import { PILL_CSS } from './Hud';
-
-/** Matches src/sim/family.ts's PASS_GATHER_TICKS and Renderer.ts's own
- * MOURNING_GATHER_MIN_TICKS — 'gather' is reused for three unrelated family
- * moments (mourning vigil, nest-material gathering, baby leash-back) that
- * the sim doesn't otherwise distinguish; only the long-minTicks vigil one
- * reads as mourning (see glyphKindFor's identical gate in Renderer.ts). */
-const MOURNING_GATHER_MIN_TICKS = 200;
 
 /** Render-only presentation hint from Renderer.presentationFor() — whether
  * the creature currently reads as airborne/swimming, same inference the

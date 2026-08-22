@@ -113,65 +113,62 @@ v1 (two open tabs overwrite each other's timeline harmlessly).
   zero-draw mount/dismount/graze-window transitions, position-derived rendering
   via Pixi reparenting into pouch rig part, decorative joey deleted); written
   reviewed rig-art recipe (silhouette/markings/shading/motion as four checkable
-  dimensions, proved on rabbit/deer/robin/kangaroo); 213 tests)
-- **Status: v1.4 shipped and live-reviewed (2026-08-21).** M12 closed three
-  threads (feeding contact/facing/pacing, real kangaroo pouch-carry, a reviewed
-  rig-art recipe on four species) and deployed. The live review on the deployed
-  site found four issues — see below. v2 Caretaker World stays next (only once
-  user decides; feeding, care, unlocking families).
-- **M13 candidate (from the 2026-08-21 live review — see
-  docs/superpowers/reviews/2026-08-21-v1.4-user-review.md for full root-cause
-  detail; not yet planned/branched, needs superpowers:brainstorming first):**
-  (1) mammal parents (rabbit/deer/squirrel/kangaroo — all live-birth) are shown
-  "keeping the eggs warm" during gestation — `InspectCard.ts:124-125`'s
-  `'brood'` case is a blanket string with no branch on `reproduction.mode`, and
-  `family.ts:424-429` confirms the sim itself reuses the same `'brood'` activity
-  id for both egg-sitting and live-birth gestation, so there's no sim-level
-  distinction to hang the UI fix on yet either; (2) user wants confirmation that
-  mammals genuinely nurse per real-world behavior, not just that the wrong word
-  is removed — `feedMode: 'nurse'` already exists and drives real milk-feeding
-  behavior for exactly these four species (built M10-M12), but it's unverified
-  whether this reads clearly to a live viewer or whether item 1's wrong label
-  was itself causing the "mammals aren't behaving like mammals" impression —
-  needs a fresh look once item 1 is fixed, not an assumed redesign; (3) kangaroo
-  joey mounting reads as "magic" — confirmed exact: `family.ts:171-172`'s mount
-  condition is a hard binary flip (`joey.carriedBy = mother.id` the instant
-  distance `<= MOUNT_RANGE`) with the render-side reparenting (`Renderer.ts`,
-  M12 Task 5) an equally instant snap — the underlying pouch-carry mechanism is
-  sound (M12's own review confirmed this), only the *transition* between
-  walking and riding is unanimated; (4) feeding still reads as one mechanism
-  tuned per species rather than each species' real behavior — not yet
-  root-caused, needs the next session to actually watch multiple species feed
-  side by side and identify specifically what reads as same-y before scoping a
-  fix, the way M12's brainstorm broke "recognizable" into four checkable
-  dimensions rather than guessing. **Also candidate, from before this review:**
-  apply the reviewed rig-art recipe
-  (docs/superpowers/specs/2026-08-21-rig-art-recipe.md) to the remaining eight
-  species (squirrel, frog, turtle, duck, owl, dodo, phoenix, koi). **Priority
-  item (pre-existing, confirmed unchanged by M12 — measured identically present
-  on both the pre-M12 base and this branch, NOT a new defect, but a real
-  correctness bug rather than a cosmetic one):** babies of any species can get
-  permanently parked in the `'gather'` activity by the nest leash — there is no
-  exit condition anywhere in the code. The final whole-branch review measured
-  this empirically (30,000 ticks × 3 seeds): 17-26 creatures, roughly 25% of a
-  70-77 population, permanently frozen in `'gather'` by the end of a run, with
-  freeze streaks up to ~28,000 ticks, in 3/3 seeds tested. **Backlog item
-  (pre-existing, out of M12 scope, not blocking):** kangaroo population hardCap
-  (8) and SHADE_SCRAPES home-site count (3) are mismatched (predates M12, noted
-  during planning, explicitly ruled out of scope per pouch-carry being
-  independent of home-site balance) — consider for M13 or later when touching
-  kangaroo balance. The next session should decide, during its own brainstorm,
-  how many of these become one milestone vs. several — this is a wider set of
-  items than a single-thread fix.
+  dimensions, proved on rabbit/deer/robin/kangaroo); 213 tests), M13 (v1.5:
+  four threads from the 2026-08-21 live review. Gestation/brood split — a
+  live-birth mother (rabbit/deer/squirrel/kangaroo) now settles into her own
+  `'gestate'` activity id instead of reusing egg-sitting `'brood'`, both in
+  the sim (`family.ts`) and the inspect card, so she never reads as "keeping
+  the eggs warm". Squirrel nursing gesture — `feedGive`/`feedTake` poses
+  authored for the squirrel rig, same recipe as rabbit/deer/robin/kangaroo.
+  Visible pouch mount — the kangaroo joey's `carriedBy` flip is now a real
+  multi-tick errand (a `'mount'` activity id: walk to a flank point behind
+  her heel, settle, climb aboard; symmetrically, a climb-out lead-in before
+  dismount), with an eased render-side transition and a baked T1 mid-pose so
+  it reads correctly at every zoom, replacing the old instant snap/flip. The
+  `'gather'` freeze bug — babies (and nest-building parents) could get
+  permanently parked in `'gather'` with no exit condition, measured at ~25%
+  of the population stuck by the end of a 30,000-tick run — fixed via a
+  generalized release discipline (every legitimate use of `'gather'` now
+  releases itself on arrival, still excluding the mourning vigil, which
+  `isMourningGather` shields at every release site including the leash/
+  feed-hold branches a same-milestone fix-wave found still unguarded) plus a
+  save-load self-heal migration and a 900-tick last-resort backstop; a
+  30,000-tick × 3-seed property test (`tests/stuck.test.ts`) now holds it
+  fixed. 238 tests)
+- **Status: M13 complete, awaiting deploy + live review.** All four M13
+  threads above are implemented, tested (full suite incl. the 6-seed +
+  100-day-soak balance property suite), and merged, including a whole-branch
+  fix wave that closed one critical (a leash/feed-hold code path that could
+  silently corrupt an in-progress mourning vigil) and five important findings
+  surfaced by the milestone's own final review. Not yet deployed or reviewed
+  live by the user — that is the next step before v2 Caretaker World.
+- **M14 candidates (deferred out of M13 scope, per the user's own decision
+  recorded in this milestone's plan):** (1) feeding still reads as one
+  mechanism tuned per species rather than each species' real behavior — not
+  yet root-caused; needs a session to actually watch multiple species feed
+  side by side and identify specifically what reads as same-y before scoping
+  a fix, the way M12's brainstorm broke "recognizable" into four checkable
+  dimensions rather than guessing; (2) apply the reviewed rig-art recipe
+  (docs/superpowers/specs/2026-08-21-rig-art-recipe.md) to the remaining
+  eight species (squirrel's nursing gesture is now done via M13 — the rest of
+  its recipe pass, plus frog, turtle, duck, owl, dodo, phoenix, koi, are
+  still outstanding). **Backlog item (pre-existing, out of scope, not
+  blocking):** kangaroo population hardCap (8) and SHADE_SCRAPES home-site
+  count (3) are mismatched (predates M12, explicitly ruled out of scope again
+  in M13 per pouch-carry/mount work being independent of home-site balance) —
+  consider whenever a session next touches kangaroo balance.
 - **Open items awaiting user verification:** (1) mobile perf with the
   richer/heavier rig art has NOT yet been confirmed on a real device — this is
   reserved for the user's own physical-device check (same policy as M2/M3
   testing per CLAUDE.md); (2) a carried kangaroo joey is only visible at close
   zoom (T2) — at T0/T1 it renders invisibly inside its mother. This is a real,
   understood, and accepted regression from the old decorative-joey approach
-  (which baked into the mother's T1 frame directly), not a bug in the new
-  pouch-carry mechanism, which is itself correct. A full fix is M13-sized —
-  either give `creatureLayer` a real z-sort or bake a joey-variant T1 frame.
+  (which baked into the mother's T1 frame directly), not a bug in the pouch-
+  carry mechanism itself (M12) or the mount errand built on top of it (M13),
+  both of which are correct. A full fix is its own milestone-sized piece of
+  work — either give `creatureLayer` a real z-sort or bake a joey-variant T1
+  frame — and is unrelated to M13's mount-transition work, which only
+  animates the moment of climbing in/out, not T1's joey-visibility gap.
 - Live: https://feshalnaguji.github.io/beastoria/ · repo: feshalnaguji/beastoria
   (GitHub Pages auto-deploys main; CI runs tests+build)
 

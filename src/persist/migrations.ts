@@ -117,7 +117,7 @@ export function migrate(raw: unknown): SaveFile | null {
   // entirely. Same shape as the gather normalization above: pure data
   // placement, zero RNG draws, idempotent, no SAVE_VERSION bump needed.
   for (const c of save.sim.creatures) {
-    if (c.activity?.id === 'brood' && SPECIES[c.species].reproduction.mode === 'live') {
+    if (c.activity?.id === 'brood' && SPECIES[c.species]?.reproduction.mode === 'live') {
       c.activity = { id: 'idle', ticks: 0, minTicks: 0 };
     }
   }
