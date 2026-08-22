@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SITE } from '../src/content/site';
 import { GUIDE } from '../src/content/guide';
+import { PORTRAITS } from '../src/content/portraits';
 
 const EXPECTED_IDS = [
   'rabbit', 'robin', 'deer', 'duck', 'koi', 'owl',
@@ -52,6 +53,19 @@ describe('guide content', () => {
       if (e.voice.kind !== 'silent') {
         expect(e.voice.credits.some((c) => c.license.includes('CC BY-SA')), id).toBe(true);
       }
+    }
+  });
+});
+
+describe('portraits', () => {
+  it('every species has an accessible inline-SVG portrait', () => {
+    for (const e of GUIDE) {
+      const svg = PORTRAITS[e.id];
+      expect(svg, e.id).toMatch(/^<svg /);
+      expect(svg, e.id).toContain('viewBox="0 0 240 180"');
+      expect(svg, e.id).toContain('role="img"');
+      expect(svg, e.id).toContain('aria-label=');
+      expect(svg, e.id).not.toMatch(/<image|href="http/); // self-contained, no external refs
     }
   });
 });
