@@ -9,11 +9,20 @@
     <ellipse cx="60" cy="88" rx="26" ry="19"/><circle cx="82" cy="72" r="13"/>
     <path d="M75 62 Q 71 34 78 32 Q 84 34 83 60 Z"/><path d="M87 62 Q 91 32 98 35 Q 102 40 92 62 Z"/>
   </g>
-  <!-- deer silhouette: barrel body, neck, legs -->
+  <!-- deer silhouette: barrel body, forward-leaning neck, antlers/ears/snout, tail, legs -->
   <g transform="translate(560 400)" fill="#a9835f">
-    <ellipse cx="60" cy="60" rx="48" ry="28"/><rect x="92" y="10" width="14" height="46" rx="7"/>
-    <circle cx="102" cy="8" r="12"/><rect x="26" y="80" width="8" height="34" rx="4"/>
-    <rect x="50" y="82" width="8" height="34" rx="4"/><rect x="76" y="82" width="8" height="34" rx="4"/>
+    <ellipse cx="60" cy="60" rx="48" ry="28"/>
+    <ellipse cx="14" cy="52" rx="9" ry="6"/>
+    <path d="M88 58 L 101 58 Q 113 30 127 13 L 119 6 Q 105 26 91 56 Z"/>
+    <ellipse cx="129" cy="6" rx="13" ry="11"/>
+    <path d="M140 8 Q 150 10 146 16 Q 139 16 137 9 Z"/>
+    <path d="M120 -6 Q 116 -17 122 -14 Q 126 -7 124 -1 Z"/>
+    <path d="M133 -8 Q 135 -19 141 -15 Q 140 -6 136 -1 Z"/>
+    <path d="M124 -4 L 117 -22 M124 -4 L 113 -16" stroke="#a9835f" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <path d="M134 -5 L 141 -23 M134 -5 L 146 -17" stroke="#a9835f" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <rect x="26" y="80" width="8" height="34" rx="4"/>
+    <rect x="50" y="82" width="8" height="34" rx="4"/>
+    <rect x="76" y="82" width="8" height="34" rx="4"/>
   </g>
   <text x="80" y="170" font-family="Georgia, serif" font-size="96" fill="#3a4a33">Beastoria</text>
   <text x="84" y="230" font-family="Georgia, serif" font-size="34" fill="#5a6b4e" font-style="italic">A calm little world of creature families</text>
