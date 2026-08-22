@@ -138,7 +138,7 @@ v1 (two open tabs overwrite each other's timeline harmlessly).
   30,000-tick × 3-seed property test (`tests/stuck.test.ts`) now holds it
   fixed. 238 tests), G1 (Findable: full SEO/PWA head tags — OG, Twitter
   card, canonical, JSON-LD VideoGame schema — plus a `noscript` fallback,
-  13 static pages emitted by a Vite plugin at build time (a species guide
+  14 static pages emitted by a Vite plugin at build time (a species guide
   index + one page per species across all 12, plus a privacy page),
   `sitemap.xml` + `robots.txt`, a code-crafted brand icon set + OG share
   image via a one-time rasterizer script, a PWA `manifest.webmanifest`;
