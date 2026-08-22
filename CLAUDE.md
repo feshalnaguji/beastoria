@@ -192,7 +192,7 @@ Separate from the v1/v2/v3 sim roadmap above: make Beastoria findable (SEO), sha
 spread), appealing to children specifically, and eventually monetizable via ads — planned
 deliberately so ads don't feel intrusive. Tracked as its own G-series in
 `docs/superpowers/specs/2026-08-22-growth-distribution-design.md` — read that spec before touching
-this track. **G1 (Findable)** is built (see Current status above) and awaiting review + deploy.
+this track. **G1 (Findable)** is built and deployed (see Current status above), awaiting the user's live review.
 **G2 (Shareable)** — seed/world-link sharing, naming — is next, pending its own
 `superpowers:brainstorming` session per this project's working process. **G3** (child mode) and
 **G4** (return rhythm) are queued behind it. One decision from G1's brainstorm binds all later
