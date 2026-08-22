@@ -37,6 +37,8 @@ any design-affecting work. The spec is the source of truth; this file is the sum
 - `npm run build` — production build (`tsc && vite build`)
 - `npm test` — Vitest (sim + persist tests only; rendering is eyeballed via DevPanel)
 - `npm run lint` — ESLint incl. the sim-purity boundary rule
+- `npm run icons` — one-time regeneration of the code-crafted icon/OG set (favicon,
+  apple-touch-icon, PWA icons, og-image.png); outputs are committed, not built on every run
 - Single test file: `npx vitest run tests/determinism.test.ts`
 - In-game dev panel: press `~` (speed 1x/8x/64x, seed, creature inspector, FPS)
 
@@ -134,15 +136,23 @@ v1 (two open tabs overwrite each other's timeline harmlessly).
   feed-hold branches a same-milestone fix-wave found still unguarded) plus a
   save-load self-heal migration and a 900-tick last-resort backstop; a
   30,000-tick × 3-seed property test (`tests/stuck.test.ts`) now holds it
-  fixed. 238 tests)
-- **Status: M13 complete and deployed (2026-08-22), awaiting the user's live
-  review.** All four M13 threads above are implemented, tested (full suite
-  incl. the 6-seed + 100-day-soak balance property suite), merged to main,
-  and live at the URL below — including a whole-branch fix wave that closed
-  one critical (a leash/feed-hold code path that could silently corrupt an
-  in-progress mourning vigil) and five important findings surfaced by the
-  milestone's own final review. The user's live review of this deploy is
-  still pending — do not start v2 Caretaker World or M14 until it happens.
+  fixed. 238 tests), G1 (Findable: full SEO/PWA head tags — OG, Twitter
+  card, canonical, JSON-LD VideoGame schema — plus a `noscript` fallback,
+  14 static pages emitted by a Vite plugin at build time (a species guide
+  index + one page per species across all 12, plus a privacy page),
+  `sitemap.xml` + `robots.txt`, a code-crafted brand icon set + OG share
+  image via a one-time rasterizer script, a PWA `manifest.webmanifest`;
+  250 tests).
+- **Status: M13 complete and deployed (2026-08-22), still awaiting the
+  user's live review** — all four M13 threads above are implemented,
+  tested (full suite incl. the 6-seed + 100-day-soak balance property
+  suite), merged to main, and live at the URL below — including a
+  whole-branch fix wave that closed one critical (a leash/feed-hold code
+  path that could silently corrupt an in-progress mourning vigil) and five
+  important findings surfaced by the milestone's own final review. Do not
+  start v2 Caretaker World or M14 until the user's M13 review happens.
+  **G1 (Findable) merged to main and deployed (2026-08-23)**, awaiting
+  the user's live review alongside M13's.
 - **M14 candidates (deferred out of M13 scope, per the user's own decision
   recorded in this milestone's plan):** (1) feeding still reads as one
   mechanism tuned per species rather than each species' real behavior — not
@@ -172,52 +182,23 @@ v1 (two open tabs overwrite each other's timeline harmlessly).
   animates the moment of climbing in/out, not T1's joey-visibility gap.
 - Live: https://feshalnaguji.github.io/beastoria/ · repo: feshalnaguji/beastoria
   (GitHub Pages auto-deploys main; CI runs tests+build)
+- **Moving domains later:** edit `SITE.baseUrl` in `src/content/site.ts` and `homepage` in
+  `package.json`, then rebuild — every absolute URL (canonical, OG/Twitter, JSON-LD, sitemap)
+  derives from those two values.
 
-## Next up: growth & distribution (user request, 2026-08-22 — not started)
+## Next up: growth & distribution (user request, 2026-08-22 — underway)
 
-The user wants a follow-up track, separate from the v1/v2/v3 sim roadmap above: make Beastoria
-findable (SEO), shareable (built to spread), appealing to children specifically, and eventually
-monetizable via ads — planned deliberately so ads don't feel intrusive. **Nothing in this section
-has been implemented yet.** This is a handoff for the next session, not a plan — that session
-should open with `superpowers:brainstorming` per this project's own working process, same as every
-prior milestone, because this crosses into product/legal territory the sim work never touched.
-
-**Baseline audit done this session (2026-08-22), so the next session doesn't have to re-derive it:**
-`index.html` has only a bare `<title>`, one `<meta name="description">`, and an inline-SVG-data-URI
-favicon — no Open Graph tags, no Twitter Card, no `manifest.json` (so no "add to home screen"
-installability), no `robots.txt`, no `sitemap.xml`, no `favicon.ico`/`apple-touch-icon` PNG set, no
-`homepage` field in `package.json`. This is a from-scratch SEO/PWA setup, not a tune-up.
-
-**Two things worth flagging before that session decides anything — not decisions made here, just
-context the user should weigh in on explicitly, since getting either wrong has real consequences:**
-
-1. **Child-directed content + ads is a specific, regulated combination**, not just a UX question.
-   If Beastoria reads as "directed to children" the way the user is describing it, that shapes what
-   "planned, non-annoying ads" is even allowed to mean — e.g. COPPA (US) and the UK/EU equivalents
-   restrict behavioral/remarketing ads and personal-data collection for child-directed sites, and ad
-   networks (AdSense, AdMob) have their own child-directed-content ad policies that are stricter
-   than their defaults. This determines the monetization architecture (contextual-only ads? no
-   tracking? age-gate + mixed-audience mode?) and should be an explicit decision in that session's
-   brainstorm, not an assumption either direction.
-2. **"Get children addicted" is worth being deliberate about phrasing-wise**, given this project's
-   own design spec is explicitly calm/gentle/watch-don't-manage — the opposite of dark-pattern
-   engagement design, which is also a category regulators and app stores increasingly scrutinize
-   specifically when aimed at kids. The likely-intended goal — delightful, shareable, something kids
-   *want* to return to — doesn't require dark patterns and fits the existing design philosophy fine;
-   flagging only so the next session's brainstorm names the target explicitly rather than defaulting
-   to whichever interpretation is easiest to build.
-
-**One idea worth surfacing because it falls directly out of the existing architecture, cheaply:**
-the sim is fully deterministic from a seed (`sim/rng.ts`, already how saves/replay work) — a
-"share this world" link encoding just the seed (+ maybe elapsed ticks) would let anyone's browser
-regenerate the *exact* same living valley someone screenshotted or shared, with zero server, zero
-cost, and a natural hook for social sharing. Whether/how to build this is the next session's call,
-not decided here.
-
-**Constraint carryover:** the "Zero cost, ever" hard constraint above still applies to whatever gets
-*built* — meta tags, a sitemap, a PWA manifest, share-image generation, and structured data are all
-free. Some typical growth tooling (paid SEO/analytics platforms, paid app-store placement, ad spend)
-is not, and should surface as an explicit ask, not get adopted by default.
+Separate from the v1/v2/v3 sim roadmap above: make Beastoria findable (SEO), shareable (built to
+spread), appealing to children specifically, and eventually monetizable via ads — planned
+deliberately so ads don't feel intrusive. Tracked as its own G-series in
+`docs/superpowers/specs/2026-08-22-growth-distribution-design.md` — read that spec before touching
+this track. **G1 (Findable)** is built and deployed (see Current status above), awaiting the user's live review.
+**G2 (Shareable)** — seed/world-link sharing, naming — is next, pending its own
+`superpowers:brainstorming` session per this project's working process. **G3** (child mode) and
+**G4** (return rhythm) are queued behind it. One decision from G1's brainstorm binds all later
+ad work and is worth keeping visible: **contextual-only ads, zero tracking** — the child-directed
+content + ads combination is a regulated one (COPPA and equivalents), so no behavioral/remarketing
+ads or personal-data collection, full stop.
 
 ## Working process (user-agreed)
 

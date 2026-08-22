@@ -3,12 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta name="description" content="Beastoria — a calm little living world of creatures and their families." />
-    <title>Beastoria</title>
-    <link
-      rel="icon"
-      href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐇</text></svg>"
-    />
+    <title>Beastoria — a calm little world of creature families</title>
+    <meta name="description" content="Watch rabbits, robins, deer, and nine other creatures pair up, raise babies, and grow old peacefully in a gentle living valley. A free, calm nature game for kids — plays right in your browser." />
+    <meta name="theme-color" content="#87a96b" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="./favicon.ico" sizes="48x48" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <meta property="og:title" content="Beastoria — a calm little world of creature families" />
+    <meta property="og:description" content="A gentle living valley of creature families — watch, zoom in close, and listen. Free in your browser." />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Beastoria" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Beastoria — a calm little world of creature families" />
+    <meta name="twitter:description" content="A gentle living valley of creature families — watch, zoom in close, and listen. Free in your browser." />
     <style>
       html,
       body {
@@ -29,6 +37,13 @@
     </style>
   </head>
   <body>
+    <noscript>
+      <p style="font-family: Georgia, serif; max-width: 42rem; margin: 2rem auto; padding: 0 1rem;">
+        Beastoria is a calm living world of creature families — rabbits, robins, deer, and
+        more — that needs JavaScript to run. Meanwhile, you can still
+        <a href="./guide/">meet the creatures in the guide</a>.
+      </p>
+    </noscript>
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

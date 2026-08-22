@@ -1,0 +1,31 @@
+<svg viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="630" fill="#dce9d5"/>
+  <circle cx="980" cy="120" r="70" fill="#f4e9c8"/>
+  <path d="M0 380 Q 300 300 620 360 T 1200 340 V 630 H 0 Z" fill="#9ab77e"/>
+  <path d="M0 470 Q 400 400 800 460 T 1200 450 V 630 H 0 Z" fill="#87a96b"/>
+  <ellipse cx="890" cy="540" rx="200" ry="55" fill="#7fa7a0"/>
+  <!-- rabbit silhouette (from icon.svg, scaled) -->
+  <g transform="translate(150 340) scale(1.9)" fill="#f6f2e7">
+    <ellipse cx="60" cy="88" rx="26" ry="19"/><circle cx="82" cy="72" r="13"/>
+    <path d="M75 62 Q 71 34 78 32 Q 84 34 83 60 Z"/><path d="M87 62 Q 91 32 98 35 Q 102 40 92 62 Z"/>
+  </g>
+  <!-- deer silhouette: barrel body, forward-leaning neck, antlers/ears/snout, tail, legs -->
+  <g transform="translate(560 400)" fill="#a9835f">
+    <ellipse cx="60" cy="60" rx="48" ry="28"/>
+    <ellipse cx="9" cy="46" rx="8" ry="7"/>
+    <path d="M86 52 L 102 58 Q 118 46 125 34 L 112 24 Q 100 38 90 48 Z"/>
+    <ellipse cx="128" cy="30" rx="15" ry="13"/>
+    <path d="M139 32 Q 149 34 145 40 Q 138 40 136 33 Z"/>
+    <path d="M119 18 Q 115 7 121 10 Q 125 17 123 23 Z"/>
+    <path d="M132 16 Q 134 5 140 9 Q 139 18 135 23 Z"/>
+    <path d="M123 20 L 116 2 M123 20 L 112 8" stroke="#a9835f" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <path d="M134 19 L 141 1 M134 19 L 146 7" stroke="#a9835f" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <rect x="24" y="80" width="8" height="34" rx="4"/>
+    <rect x="40" y="82" width="8" height="34" rx="4"/>
+    <rect x="76" y="82" width="8" height="34" rx="4"/>
+    <rect x="92" y="80" width="8" height="34" rx="4"/>
+  </g>
+  <text x="80" y="170" font-family="Georgia, serif" font-size="96" fill="#3a4a33">Beastoria</text>
+  <text x="84" y="230" font-family="Georgia, serif" font-size="34" fill="#5a6b4e" font-style="italic">A calm little world of creature families</text>
+  <text x="84" y="285" font-family="Georgia, serif" font-size="26" fill="#5a6b4e">Free in your browser</text>
+</svg>
