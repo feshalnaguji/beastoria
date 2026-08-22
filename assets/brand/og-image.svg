@@ -1,0 +1,21 @@
+<svg viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="630" fill="#dce9d5"/>
+  <circle cx="980" cy="120" r="70" fill="#f4e9c8"/>
+  <path d="M0 380 Q 300 300 620 360 T 1200 340 V 630 H 0 Z" fill="#9ab77e"/>
+  <path d="M0 470 Q 400 400 800 460 T 1200 450 V 630 H 0 Z" fill="#87a96b"/>
+  <ellipse cx="890" cy="540" rx="200" ry="55" fill="#7fa7a0"/>
+  <!-- rabbit silhouette (from icon.svg, scaled) -->
+  <g transform="translate(150 340) scale(1.9)" fill="#f6f2e7">
+    <ellipse cx="60" cy="88" rx="26" ry="19"/><circle cx="82" cy="72" r="13"/>
+    <path d="M75 62 Q 71 34 78 32 Q 84 34 83 60 Z"/><path d="M87 62 Q 91 32 98 35 Q 102 40 92 62 Z"/>
+  </g>
+  <!-- deer silhouette: barrel body, neck, legs -->
+  <g transform="translate(560 400)" fill="#a9835f">
+    <ellipse cx="60" cy="60" rx="48" ry="28"/><rect x="92" y="10" width="14" height="46" rx="7"/>
+    <circle cx="102" cy="8" r="12"/><rect x="26" y="80" width="8" height="34" rx="4"/>
+    <rect x="50" y="82" width="8" height="34" rx="4"/><rect x="76" y="82" width="8" height="34" rx="4"/>
+  </g>
+  <text x="80" y="170" font-family="Georgia, serif" font-size="96" fill="#3a4a33">Beastoria</text>
+  <text x="84" y="230" font-family="Georgia, serif" font-size="34" fill="#5a6b4e" font-style="italic">A calm little world of creature families</text>
+  <text x="84" y="285" font-family="Georgia, serif" font-size="26" fill="#5a6b4e">Free in your browser</text>
+</svg>
