@@ -66,6 +66,11 @@ interface CreatureView {
      * mirrors the flap/swim existence guard above. */
     feedGive?: BakedFrame;
     feedTake?: BakedFrame;
+    /** M13 Task 10: single mid-pose bake for the pouch mount/dismount
+     * errand's own pose — present only for rigs that author a 'mount' clip
+     * (today, only kangaroo). Same existence-guard pattern as feedGive/
+     * feedTake above. */
+    mount?: BakedFrame;
   };
   label: Text;
   species: SpeciesId;
@@ -1403,12 +1408,11 @@ export class Renderer {
       const feedTaking = view.feedContact && !!speciesRig.clips.feedTake;
       // M13 task 9: same "does this rig define the clip" guard as
       // feedGiving/feedTaking above, for the pouch mount/dismount errand's
-      // own pose. `'mount' in speciesRig.clips` checks the presence of an
-      // (as-yet-unauthored) optional key without needing `ExtraClipName`
-      // to list it — that's Task 10's job, once it writes the kangaroo's
-      // actual 'mount' clip. Until then this always evaluates false, so
-      // clipFor's two new mount branches always fall back to 'sit'/'idle',
-      // exactly matching today's (M12) behavior.
+      // own pose. `'mount' in speciesRig.clips` checks the presence of the
+      // clip — authored (Task 10) for the kangaroo rig specifically, so
+      // clipFor's two mount branches resolve to the real 'mount' pose for
+      // kangaroo and fall back to 'sit'/'idle' for every other species,
+      // which doesn't author it.
       const hasMount = 'mount' in speciesRig.clips;
 
       // Single source of truth for which pose to show, shared by T2's live
@@ -1531,6 +1535,8 @@ export class Renderer {
             frame = view.frames.feedGive;
           } else if (clip === 'feedTake' && view.frames.feedTake) {
             frame = view.frames.feedTake;
+          } else if (clip === 'mount' && view.frames.mount) {
+            frame = view.frames.mount;
           }
         }
         view.sprite.texture = frame.texture;
@@ -1876,6 +1882,12 @@ export class Renderer {
     if (rig.clips.feedTake) {
       frames.feedTake = bakedFrame(this.app.renderer, rig, stage, 'feedTake', 0.5);
     }
+    // M13 Task 10: same existence guard, for the pouch mount/dismount
+    // errand's own pose — only the kangaroo rig authors 'mount' today.
+    // Single mid-pose bake, like feedGive/feedTake above.
+    if (rig.clips.mount) {
+      frames.mount = bakedFrame(this.app.renderer, rig, stage, 'mount', 0.5);
+    }
     return frames;
   }
 
@@ -1999,9 +2011,10 @@ export class Renderer {
  * `carried` now resolves to `'mount'` instead of the flat `'sit'` whenever
  * `activityId === 'mount'` AND the rig actually authors that clip
  * (`hasMount`, resolved by the caller exactly like `feedGiving`/
- * `feedTaking` against the rig's own `clips` object) — every rig fails
- * that guard today (Task 10 hasn't authored the kangaroo's `'mount'` clip
- * yet), so this always falls back to `'sit'`, byte-identical to M12.
+ * `feedTaking` against the rig's own `clips` object) — Task 10 authored the
+ * kangaroo rig's `'mount'` clip, so `hasMount` is true for kangaroo and this
+ * resolves to the real reach-and-scramble pose there; every other rig still
+ * fails that guard and falls back to `'sit'`, byte-identical to M12.
  * `hasMount` also gets a second, NON-carried check placed after `moving`:
  * a joey still on its own feet mid-errand (step 0 approach, step 1 settle)
  * reads `'walk'` while it's actually covering ground (the ordinary
@@ -2024,15 +2037,16 @@ function clipFor(
   hasMount: boolean,
 ): ClipName {
   if (activityId === 'pass') return 'sleep';
-  if (carried) return activityId === 'mount' && hasMount ? ('mount' as ClipName) : 'sit';
+  if (carried) return activityId === 'mount' && hasMount ? 'mount' : 'sit';
   if (airborne) return 'flap';
   if (swimming) return 'swim';
   if (nursing) return feedGiving ? 'feedGive' : 'sit';
   if (moving) return activityId === 'feedYoung' && feedYoungStep === 2 ? 'carry' : 'walk';
   // M13 task 9: stationary, not-yet-carried steps 0/1 of the pouch mount
-  // errand (see the doc comment above) — `hasMount` is always false until
-  // Task 10 authors the clip, so this is 'idle' in practice today.
-  if (activityId === 'mount') return hasMount ? ('mount' as ClipName) : 'idle';
+  // errand (see the doc comment above) — `hasMount` is true for the
+  // kangaroo rig (Task 10 authored its 'mount' clip), so this resolves to
+  // the real pose there; every other species still falls back to 'idle'.
+  if (activityId === 'mount') return hasMount ? 'mount' : 'idle';
   if (nursed || fed || feedTaking) return feedTaking ? 'feedTake' : 'eat';
   if (activityId === 'brood' || activityId === 'gestate') return 'sit';
   if (activityId === 'nap') return 'sleep';
