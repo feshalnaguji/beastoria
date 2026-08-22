@@ -453,6 +453,49 @@ describe('M13: the gather freeze bug (Thread 4)', () => {
     expect(baby.activity.id).not.toBe('gather');
   });
 
+  it(
+    '1d) a mourning vigil survives contact with the REAL rearing-phase leash/feed-hold code paths ' +
+      '[regression pin, M13 fix-wave Finding 1]',
+    () => {
+      // The final whole-branch review found that 1b (below) only pins the
+      // vigil in an ISOLATED two-adult emptyNest family with no home and no
+      // rearing loop — it never exercises family.ts's rearing-phase leash
+      // branches (~848/~876) at all, so the baby-leash rewrite could (and
+      // did) silently corrupt a real vigil without failing any existing
+      // test. This test drives the exact real path: a rearing family WITH a
+      // claimed home and a baby already well within BABY_LEASH ("arrived"),
+      // one of whose parents passes near it — triggering the mourning gather
+      // on the baby itself, then running the REAL Sim.tick pipeline (which
+      // re-runs the rearing-phase leash loop, and potentially an active
+      // feed-hold, every single tick of the vigil) through to completion.
+      const { state, father, baby } = rearingBabyWorld(21);
+      father.ageTicks = father.lifespanTicks + 1; // crosses the passing threshold next tick
+
+      tick(state, []); // father settles into 'pass'; baby (kin, well within PASS_GATHER_RANGE) latches into the vigil
+      expect(father.activity.id).toBe('pass');
+      expect(baby.activity.id).toBe('gather');
+      expect(baby.activity.minTicks).toBe(PASS_GATHER_TICKS);
+
+      // Drive the vigil through its full duration via the real pipeline —
+      // familySystem's rearing-phase leash loop (and, if the baby's hunger
+      // happens to cross the feed trigger meanwhile, an active feed-hold
+      // retargeting too) runs every one of these ticks. Both must leave the
+      // vigil untouched: still 'gather', still minTicks 200, the whole way.
+      for (let t = 0; t < PASS_GATHER_TICKS - 1; t++) {
+        tick(state, []);
+        expect(baby.activity.id).toBe('gather');
+        expect(baby.activity.minTicks).toBe(PASS_GATHER_TICKS);
+      }
+      expect(state.creatures.includes(father)).toBe(true); // not yet completed
+
+      // Carry it past PASS_GATHER_TICKS: the passing completes and
+      // removeCreature — the one deliberate release path — lets the baby go.
+      for (let t = 0; t < 10; t++) tick(state, []);
+      expect(state.creatures.includes(father)).toBe(false);
+      expect(baby.activity.id).not.toBe('gather');
+    },
+  );
+
   it('1b) the mourning vigil latches for its full PASS_GATHER_TICKS and is released only when the memorial forms [PIN — must stay green]', () => {
     const { state, elder, kin } = mourningWorld(4);
 

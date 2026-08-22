@@ -153,12 +153,37 @@ const DISMOUNT_LEAD_TICKS = 10;
  */
 const MOUNT_MAX_TICKS = 120;
 /**
- * Turn rate (rad/tick) bringing the joey's heading into line with its
- * mother's during the approach — same gentle rate as behaviors.ts's
- * FEED_TURN — so there is no visible flip-pop the instant it reparents into
- * the pouch (the render side depends on the heading already matching hers).
+ * Turn rate (rad/tick) applied during step 0 (the walking approach). Kept
+ * gentle, same rate as behaviors.ts's FEED_TURN — but note this call is
+ * effectively cosmetic while actually travelling: applyActivity runs AFTER
+ * familySystem each tick (Sim.ts's pipeline order), and its own moveToward
+ * turns the joey's heading toward its direction of travel every tick step 0
+ * is moving, overwriting whatever this set a moment earlier. Real,
+ * load-bearing alignment happens during step 1 (settle) instead — see
+ * MOUNT_SETTLE_TURN_RATE below, the one window nothing else ever touches
+ * heading (M13 fix-wave, Finding 4).
  */
 const MOUNT_TURN_RATE = 0.12;
+/**
+ * Turn rate (rad/tick) applied every tick of step 1 (the stationary settle)
+ * to bring the joey's heading into line with its mother's BEFORE `mountNow`
+ * reparents it into the pouch — the actual fix for Finding 4's facing-pop:
+ * step 0's MOUNT_TURN_RATE above never survives to the reparenting instant
+ * (applyActivity's moveToward overwrites it every travelling tick), but
+ * nothing in applyActivity's 'mount' case touches heading during step 1, so
+ * a call made here is the first one that actually sticks.
+ *
+ * Deliberately much stronger than MOUNT_TURN_RATE: MOUNT_SETTLE_TICKS is a
+ * short, fixed window (10 ticks of stepApproach's own counting — but only
+ * ~5 REAL ticks in ordinary play, since applyActivity's unconditional
+ * top-of-function `ticks++` double-counts against the same field every tick
+ * both systems run, per stepApproach's own doc comment above). A joey can
+ * arrive facing anywhere up to pi radians from its mother's heading, so
+ * closing that within ~5 real ticks needs a rate comfortably above pi/5
+ * (~0.63) — 0.7 leaves margin so the remaining gap lands under the ~0.3 rad
+ * tolerance a visible flip-pop would need to exceed.
+ */
+const MOUNT_SETTLE_TURN_RATE = 0.7;
 /**
  * How far behind/below the mother the joey's climb-in flank point sits —
  * inside CLIMB_RANGE, so simply reaching the (constantly re-derived) flank
@@ -256,6 +281,13 @@ function stepApproach(
     // Settle: stationary, always resolves in exactly MOUNT_SETTLE_TICKS —
     // no further distance check, since a joey that got this close doesn't
     // get bumped back out by her taking one more step meanwhile.
+    //
+    // M13 fix-wave (Finding 4): align heading here, every tick of the
+    // settle — the one window applyActivity never touches the joey's
+    // heading (its 'mount' case only moves during step 0), so a call made
+    // here actually survives to the moment mountNow reparents it into the
+    // pouch, unlike step 0's MOUNT_TURN_RATE nudge above.
+    joey.heading = turnToward(joey.heading, mother.heading, MOUNT_SETTLE_TURN_RATE);
     if (joey.activity.ticks >= MOUNT_SETTLE_TICKS) mountNow(joey, mother);
     return;
   }
@@ -642,7 +674,11 @@ function stepFamily(state: WorldState, fam: Family): void {
         const d = Math.hypot(p.pos.x - target.x, p.pos.y - target.y);
         if (d > ARRIVE_DIST) {
           setIfFree(p, { id: 'gather', ticks: 0, minTicks: 30, targetPos: target });
-        } else if (p.activity.id === 'gather') {
+        } else if (p.activity.id === 'gather' && !isMourningGather(p.activity)) {
+          // M13 fix-wave (Finding 1): a parent who happens to be sitting a
+          // mourning vigil inside this ring's ARRIVE_DIST must never be
+          // released here — the vigil is released only by removeCreature,
+          // once the memorial forms.
           p.activity = { id: 'idle', ticks: 0, minTicks: 0 };
         }
       });
@@ -853,12 +889,37 @@ function stepFamily(state: WorldState, fam: Family): void {
             // the hold itself is bounded (<=160 nurse / <=240 carry ticks)
             // and ends on its own, which is what every M12 feeding
             // assertion depends on. Draw-free (feedContactRing).
-            child.activity = {
-              id: 'gather',
-              ticks: child.activity.id === 'gather' ? child.activity.ticks : 0,
-              minTicks: 0,
-              targetPos: feedContactRing(leashAnchor, child.id, landingMediumOf(child.species)),
-            };
+            //
+            // M13 fix-wave (Finding 1): guarded against overwriting a
+            // mourning vigil — a baby paying respects near home who happens
+            // to also be within FEED_RANGE of a feeding parent must not have
+            // its vigil retargeted/shortened into a feed-ring 'gather'.
+            if (!isMourningGather(child.activity)) {
+              child.activity = {
+                id: 'gather',
+                ticks: child.activity.id === 'gather' ? child.activity.ticks : 0,
+                minTicks: 0,
+                targetPos: feedContactRing(leashAnchor, child.id, landingMediumOf(child.species)),
+              };
+            }
+          } else if (
+            child.activity.id === 'gather' &&
+            child.activity.minTicks === 0 &&
+            !isMourningGather(child.activity)
+          ) {
+            // M13 fix-wave (Finding 3): the feed-hold gather (minTicks: 0)
+            // has just gone stale — the hold that was anchoring it ended
+            // this tick (deliveringParent is undefined again), but the child
+            // never got a chance to fall within `leashRadius` of the ring
+            // point before the hold let go. Left alone this falls through
+            // both branches below (it's still 'gather' so the scatter branch
+            // won't touch it; it may still be outside BABY_LEASH so the
+            // arrival branch won't either) and dead-ends on the sim's
+            // GATHER_MAX_TICKS (900-tick) backstop — a routine wait, not the
+            // true last resort that backstop is meant to be. Releasing here
+            // instead lets the ordinary home leash below cleanly re-engage
+            // on the very next tick.
+            child.activity = { id: 'idle', ticks: 0, minTicks: 0 };
           } else if (d > leashRadius && child.activity.id !== 'gather') {
             // Home anchor: a fresh scatter target is drawn only on first
             // crossing the radius, not every tick — re-drawing nextRange
@@ -873,10 +934,17 @@ function stepFamily(state: WorldState, fam: Family): void {
                 y: leashAnchor.y + nextRange(state.rng, -30, 30),
               },
             };
-          } else if (d <= leashRadius && child.activity.id === 'gather') {
+          } else if (
+            d <= leashRadius &&
+            child.activity.id === 'gather' &&
+            !isMourningGather(child.activity)
+          ) {
             // Arrived home (M13). Explicitly released — nothing else ever
             // lets a leashed baby out of 'gather' (mirrors stepPouch's own
-            // release, above).
+            // release, above). M13 fix-wave (Finding 1): guarded so a baby
+            // mourning a passing parent — naturally near home for most
+            // rearing families — is never yanked out of its vigil the
+            // instant it's in leash range.
             child.activity = { id: 'idle', ticks: 0, minTicks: 0 };
           }
         }

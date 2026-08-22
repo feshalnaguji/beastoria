@@ -654,3 +654,76 @@ describe('f) M13 Task 7: an intermediate "mount" errand replaces the instant fli
     expect(sawLeadIn).toBe(true);
   });
 });
+
+/**
+ * M13 fix-wave, Finding 4: the mount approach's turnToward alignment gets
+ * overwritten every tick by applyActivity's own moveToward call (step 0 is
+ * travelling), and the settle step (step 1) never called turnToward at all —
+ * so a joey approaching from roughly BEHIND its mother could still mount
+ * facing the wrong way, the exact facing-pop the render side assumed was
+ * already solved. The fix moves the real alignment into step 1 (settle),
+ * the one window nothing else ever touches heading, at a turn rate strong
+ * enough to close a near-180 degree gap within the settle's short window.
+ *
+ * This drives ONLY the joey through familySystem + applyActivity each tick,
+ * deliberately never calling selectBehavior/applyActivity for the mother —
+ * freezing her position and heading exactly, so the test isolates the
+ * joey's own heading convergence rather than chasing a moving target.
+ */
+describe('g) M13 fix-wave Finding 4: mount settle-step heading alignment', () => {
+  it('a joey approaching from roughly behind its mother ends up facing near her heading by the time it mounts', () => {
+    const { state, mother, joey } = joeyWorld(3);
+    mother.heading = 0; // frozen for the whole test — never re-driven below
+
+    // The flank point (family.ts's flankTarget) sits BEHIND the mother
+    // relative to her own heading — so the worst-case geometry for this fix
+    // is a joey starting out AHEAD of her (in the direction she's facing):
+    // walking from there to the flank point means walking roughly opposite
+    // her heading, which is exactly the "approach direction disagrees with
+    // her facing" case Finding 4 describes. (Starting the joey directly
+    // BEHIND her instead, the naive first guess, is a poor differentiator —
+    // the flank point is also roughly behind her, so the natural direction
+    // of travel already lands close to her heading with or without the
+    // fix.) Just outside CLIMB_RANGE (18) so the joey must walk the
+    // multi-tick approach and pass through the settle step, not the
+    // "already at her side" instant-mount shortcut.
+    const aheadAngle = mother.heading;
+    joey.pos = {
+      x: mother.pos.x + Math.cos(aheadAngle) * 40,
+      y: mother.pos.y + Math.sin(aheadAngle) * 40,
+    };
+    joey.heading = aheadAngle; // facing the same way as her: arbitrary, gets overwritten by movement immediately
+    joey.activity = { id: 'idle', ticks: 0, minTicks: 0 };
+
+    const clock = getClock(0);
+    let mountedTick = -1;
+    let headingAtMount = NaN;
+    for (let t = 0; t < 200 && mountedTick < 0; t++) {
+      state.tick++;
+      familySystem(state); // mother's own position/heading are never touched
+      // Captured HERE, before applyActivity runs: applyActivity's own
+      // isCarried branch unconditionally snaps a carried creature's heading
+      // to match its carrier's, every tick — so by the time applyActivity
+      // has run this same tick, joey.heading would already read as correct
+      // regardless of whether the settle-step fix exists at all. What
+      // Finding 4 is actually about is the JUMP a render frame would show
+      // between the joey's own last free-standing heading (captured here)
+      // and its carrier-synced heading the instant it's reparented — this
+      // is the value that must already be close to hers.
+      if (joey.carriedBy === mother.id && Number.isNaN(headingAtMount)) {
+        mountedTick = t;
+        headingAtMount = joey.heading;
+      }
+      applyActivity(state, joey, clock);
+    }
+    expect(mountedTick).toBeGreaterThan(0); // it really did mount within the window
+
+    let diff = headingAtMount - mother.heading;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    // EXPECTED TO FAIL before the fix: with no settle-step alignment at all,
+    // the joey mounts still facing wherever the flank-point approach left it
+    // (roughly behind her), nowhere near her own heading.
+    expect(Math.abs(diff)).toBeLessThan(0.3);
+  });
+});
