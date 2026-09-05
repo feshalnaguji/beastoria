@@ -437,14 +437,14 @@ const LABEL_HEIGHT: Record<SpeciesId, number> = {
 };
 
 /** Day/night multiply-tint ramp, keyed by fraction of day. */
-const NIGHT = 0x7580b0;
+const NIGHT = 0x98a4d8;
 const TINT_RAMP: [number, number][] = [
   [0.0, NIGHT],
   [0.05, 0xffd9b0], // dawn gold
   [0.1, 0xffffff],
   [0.53, 0xffffff],
   [0.575, 0xffbe8f], // dusk gold
-  [0.615, 0xc79a8f],
+  [0.615, 0xd8b3a4],
   [0.66, NIGHT],
   [1.0, NIGHT],
 ];
@@ -1949,7 +1949,7 @@ export class Renderer {
     this.nightOverlay
       .clear()
       .rect(0, 0, w, h)
-      .fill({ color: 0x16203e, alpha: (1 - this.clock.light) * 0.3 });
+      .fill({ color: 0x16203e, alpha: (1 - this.clock.light) * 0.18 });
   }
 }
 

@@ -53,7 +53,7 @@ export function creatureRole(state: WorldState, c: Creature): string {
       return `${c.sex === 'f' ? 'mother' : 'father'} of the ${familyName(fam.id)} family`;
     }
     const kidIdx = fam.childIds.indexOf(c.id);
-    if (kidIdx !== -1) return `kid ${kidIdx + 1}`;
+    if (kidIdx !== -1) return `little one of the ${familyName(fam.id)} family`;
   }
   if (c.stage === 'elder') return 'elder';
   return 'a wanderer (no family yet)';

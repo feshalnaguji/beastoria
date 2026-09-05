@@ -10,7 +10,7 @@ import { CallScheduler } from './audio/CallScheduler';
 import type { BedName } from './audio/manifest';
 import { computeMix } from './audio/Mixer';
 import { loadSave, saveWorld } from './persist/store';
-import { getClock } from './sim/clock';
+import { getClock, TICKS_PER_DAY } from './sim/clock';
 import { tick } from './sim/Sim';
 import { createWorld, WORLD_HEIGHT, WORLD_WIDTH } from './sim/state';
 import { Hud } from './ui/Hud';
@@ -47,6 +47,9 @@ async function start(): Promise<void> {
 
   const save = await loadSave();
   const state = save ? save.sim : createWorld(1234);
+  /** A fresh valley opens mid-morning, not at grey dawn — first screens should be sunny. */
+  const MORNING_START_TICK = Math.round(0.2 * TICKS_PER_DAY);
+  if (!save) state.tick = MORNING_START_TICK;
   const sinceTick = state.tick;
   let owed = save ? owedTicks(Date.now() - save.savedAtEpochMs) : 0;
 
@@ -193,4 +196,17 @@ async function start(): Promise<void> {
   loop.start();
 }
 
-void start();
+function showBootFailure(err: unknown): void {
+  console.error('[boot] Beastoria could not start:', err);
+  const card = document.createElement('div');
+  card.style.cssText =
+    'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;' +
+    'background:#f6f2e7;color:#3a4a33;font-family:Georgia,serif;text-align:center;z-index:30';
+  card.innerHTML =
+    '<div style="max-width:28rem"><h1 style="font-size:1.5rem;margin:0 0 .5rem">The valley couldn’t wake up</h1>' +
+    '<p>Beastoria needs a browser with WebGL to draw its creatures. Try another browser or device — ' +
+    'or <a href="./guide/" style="color:#4a6b3a">meet the creatures in the guide</a> meanwhile.</p></div>';
+  document.body.appendChild(card);
+}
+
+start().catch(showBootFailure);
