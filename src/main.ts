@@ -12,11 +12,13 @@ import { computeMix } from './audio/Mixer';
 import { loadSave, saveWorld } from './persist/store';
 import { getClock, TICKS_PER_DAY } from './sim/clock';
 import { tick } from './sim/Sim';
-import { createWorld, WORLD_HEIGHT, WORLD_WIDTH } from './sim/state';
+import { createWorld, WORLD_HEIGHT, WORLD_WIDTH, type SpeciesId } from './sim/state';
+import { SPECIES } from './sim/species';
 import { Hud } from './ui/Hud';
 import { InspectCard } from './ui/InspectCard';
 import { showCard, showWelcomeBack } from './ui/WelcomeBack';
 import { Renderer } from './render/Renderer';
+import { renderPortraitStudio } from './app/PortraitStudio';
 
 /** Tap-vs-drag threshold, in CSS px between pointerdown and pointerup — a
  * movement past this reads as a camera drag (Camera.ts owns panning off its
@@ -64,6 +66,12 @@ function showDawnOverlay(): {
 async function start(): Promise<void> {
   const mount = document.getElementById('app');
   if (!mount) throw new Error('#app mount point missing');
+
+  const portrait = new URLSearchParams(location.search).get('portrait');
+  if (portrait && Object.hasOwn(SPECIES, portrait)) {
+    await renderPortraitStudio(mount, portrait as SpeciesId);
+    return; // dev-only: no sim, no HUD, no save
+  }
 
   const save = await loadSave();
   const state = save ? save.sim : createWorld(1234);

@@ -42,7 +42,7 @@ const FALLBACK_RIG = ALL_RIGS[0] as CreatureRig;
 /** Matches src/sim/family.ts MEMORIAL_TICKS — memorials linger two game-days. */
 const MEMORIAL_TICKS = 2 * TICKS_PER_DAY;
 
-function rigFor(species: SpeciesId): CreatureRig {
+export function rigFor(species: SpeciesId): CreatureRig {
   return RIGS[species] ?? FALLBACK_RIG;
 }
 
