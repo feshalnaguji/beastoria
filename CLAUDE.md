@@ -163,10 +163,10 @@ v1 (two open tabs overwrite each other's timeline harmlessly).
   important findings surfaced by the milestone's own final review. Do not
   start v2 Caretaker World or M14 until the user's M13 review happens.
   **G1 (Findable) merged to main and deployed (2026-08-23)**, awaiting
-  the user's live review alongside M13's. **P1 (First Impressions) is
-  built on branch `p1-first-impressions`, awaiting the controller's
-  final review, merge, and deploy** (the controller flips this wording
-  to "merged and deployed" once that happens).
+  the user's live review alongside M13's. **P1 (First Impressions) merged
+  to main and deployed (2026-09-19)**, awaiting the user's live review
+  alongside M13's and G1's — the 2026-09-05 end-user review that scoped
+  it lives in `docs/superpowers/specs/2026-09-05-p1-first-impressions-design.md`.
 - **M14 candidates (deferred out of M13 scope, per the user's own decision
   recorded in this milestone's plan):** (1) feeding still reads as one
   mechanism tuned per species rather than each species' real behavior — not
