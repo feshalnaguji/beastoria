@@ -40,6 +40,10 @@ any design-affecting work. The spec is the source of truth; this file is the sum
 - `npm run icons` — one-time regeneration of the code-crafted icon/OG set (favicon,
   apple-touch-icon, PWA icons, og-image.png); outputs are committed, not built on every run
 - Single test file: `npx vitest run tests/determinism.test.ts`
+- Memory-light full suite (on a loaded machine): `npx vitest run --minWorkers=1 --maxWorkers=2`
+- `?portrait=<species>` — dev-only route (e.g. `/?portrait=robin`) that renders one adult rig
+  in a fixed-size Pixi canvas for guide-portrait capture; PNGs are captured by hand with
+  Playwright into `public/guide/portraits/<id>.png` and committed
 - In-game dev panel: press `~` (speed 1x/8x/64x, seed, creature inspector, FPS)
 
 ## Architecture (the one rule that matters most)
@@ -142,7 +146,13 @@ v1 (two open tabs overwrite each other's timeline harmlessly).
   index + one page per species across all 12, plus a privacy page),
   `sitemap.xml` + `robots.txt`, a code-crafted brand icon set + OG share
   image via a one-time rasterizer script, a PWA `manifest.webmanifest`;
-  250 tests).
+  250 tests), P1 (First impressions, 2026-09-19: sunny morning start +
+  luminous night/soft dusk (render-only), catch-up progress overlay +
+  hidden-tab-safe drain + tab-visible catch-up, interest-ranked welcome
+  card, 🐾 guide pill, first-run hint card, audio preload after first
+  gesture, keyboard camera (arrows, +/−), boot-failure card, playable
+  creature recordings on species pages, real-rig PNG portraits via the
+  dev `?portrait=` route, "little one" wording; 252 tests).
 - **Status: M13 complete and deployed (2026-08-22), still awaiting the
   user's live review** — all four M13 threads above are implemented,
   tested (full suite incl. the 6-seed + 100-day-soak balance property
@@ -152,7 +162,10 @@ v1 (two open tabs overwrite each other's timeline harmlessly).
   important findings surfaced by the milestone's own final review. Do not
   start v2 Caretaker World or M14 until the user's M13 review happens.
   **G1 (Findable) merged to main and deployed (2026-08-23)**, awaiting
-  the user's live review alongside M13's.
+  the user's live review alongside M13's. **P1 (First Impressions) is
+  built on branch `p1-first-impressions`, awaiting the controller's
+  final review, merge, and deploy** (the controller flips this wording
+  to "merged and deployed" once that happens).
 - **M14 candidates (deferred out of M13 scope, per the user's own decision
   recorded in this milestone's plan):** (1) feeding still reads as one
   mechanism tuned per species rather than each species' real behavior — not
@@ -167,7 +180,13 @@ v1 (two open tabs overwrite each other's timeline harmlessly).
   blocking):** kangaroo population hardCap (8) and SHADE_SCRAPES home-site
   count (3) are mismatched (predates M12, explicitly ruled out of scope again
   in M13 per pouch-carry/mount work being independent of home-site balance) —
-  consider whenever a session next touches kangaroo balance.
+  consider whenever a session next touches kangaroo balance. **P1 deferred
+  (per spec, explicitly out of scope for this milestone):** prefers-reduced-
+  motion handling; family-label/creature overlap at homes; mobile perf still
+  needs the user's own device check (same policy as M2/M3). (The phoenixRig
+  leg gap and koi-portrait vertical centring that Task 5's capture pass
+  surfaced are not left open — they're being fixed in this milestone's own
+  final fix wave, not deferred to a later one.)
 - **Open items awaiting user verification:** (1) mobile perf with the
   richer/heavier rig art has NOT yet been confirmed on a real device — this is
   reserved for the user's own physical-device check (same policy as M2/M3
