@@ -26,6 +26,7 @@ export class AudioEngine {
   private buffers = new Map<string, AudioBuffer>();
   private beds = new Map<BedName, Bed>();
   private unlocked = false;
+  private preloaded = false;
   /** In-memory fallback for `muted` when localStorage throws (e.g. privacy modes). */
   private mutedFallback = false;
 
@@ -75,6 +76,7 @@ export class AudioEngine {
   unlock(): void {
     if (this.unlocked) return;
     this.unlocked = true;
+    void this.preload();
     void this.ctx.resume();
     this.ambienceBus.gain.setTargetAtTime(1, this.ctx.currentTime, 0.7); // ~2s fade
     this.onUnlock?.();
@@ -82,6 +84,8 @@ export class AudioEngine {
 
   /** Fetch+decode everything in the manifest; missing files log once and stay silent. */
   async preload(): Promise<void> {
+    if (this.preloaded) return;
+    this.preloaded = true;
     const urls = new Set<string>();
     for (const kinds of Object.values(AUDIO_MANIFEST.families)) {
       for (const variants of Object.values(kinds)) for (const u of variants ?? []) urls.add(u);

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SITE } from '../src/content/site';
 import { GUIDE } from '../src/content/guide';
-import { PORTRAITS } from '../src/content/portraits';
 import {
   headInjectionTags, renderGuideIndex, renderRobotsTxt,
   renderSitemapXml, renderSpeciesPage, sitePaths,
@@ -61,19 +60,6 @@ describe('guide content', () => {
   });
 });
 
-describe('portraits', () => {
-  it('every species has an accessible inline-SVG portrait', () => {
-    for (const e of GUIDE) {
-      const svg = PORTRAITS[e.id];
-      expect(svg, e.id).toMatch(/^<svg /);
-      expect(svg, e.id).toContain('viewBox="0 0 240 180"');
-      expect(svg, e.id).toContain('role="img"');
-      expect(svg, e.id).toContain('aria-label=');
-      expect(svg, e.id).not.toMatch(/<image|href="http/); // self-contained, no external refs
-    }
-  });
-});
-
 describe('page templates', () => {
   it('sitePaths lists every canonical path exactly once', () => {
     const paths = sitePaths();
@@ -102,7 +88,8 @@ describe('page templates', () => {
     const robin = GUIDE.find((e) => e.id === 'robin')!;
     const html = renderSpeciesPage(robin);
     expect(html).toContain(`<link rel="canonical" href="${SITE.baseUrl}guide/robin/"`);
-    expect(html).toContain('viewBox="0 0 240 180"');
+    expect(html).toContain('<img src="../portraits/robin.png"');
+    expect(html).toContain('alt="Robin in Beastoria"');
     expect(html).toContain(robin.tagline);
     if (robin.voice.kind !== 'silent') {
       for (const c of robin.voice.credits) expect(html).toContain(c.url);
@@ -127,5 +114,18 @@ describe('page templates', () => {
     expect(parsed.image).toBe(`${SITE.baseUrl}og-image.png`);
     const ogUrl = tags.find((t) => t.attrs?.property === 'og:url');
     expect(ogUrl?.attrs?.content).toBe(SITE.baseUrl);
+  });
+
+  it('voiced species pages carry a native audio player; silent ones do not', () => {
+    for (const e of GUIDE) {
+      const html = renderSpeciesPage(e);
+      if (e.voice.kind === 'silent') expect(html, e.id).not.toContain('<audio');
+      else {
+        expect(html, e.id).toContain('<audio controls preload="none"');
+        expect(html, e.id).toContain(`../../audio/${e.voice.sample}.webm`);
+        expect(html, e.id).toContain(`../../audio/${e.voice.sample}.m4a`);
+      }
+      expect(html, e.id).not.toContain('<script');
+    }
   });
 });

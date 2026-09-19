@@ -1,6 +1,5 @@
 import { SITE } from './site';
 import { ABOUT_HTML, GUIDE, PRIVACY_SECTIONS, type GuideEntry } from './guide';
-import { PORTRAITS } from './portraits';
 
 const CSS = `
   :root { color-scheme: light; }
@@ -18,11 +17,12 @@ const CSS = `
            gap: 1rem; padding: 0; list-style: none; }
   .cards a { display: block; background: #fffdf6; border-radius: 0.75rem; padding: 0.75rem;
              text-decoration: none; box-shadow: 0 1px 3px rgba(58, 74, 51, 0.15); }
-  .cards svg { width: 100%; height: auto; border-radius: 0.5rem; display: block; }
-  .portrait svg { width: 100%; max-width: 22rem; height: auto; border-radius: 0.75rem; display: block; }
+  .cards img { width: 100%; height: auto; border-radius: 0.5rem; display: block; }
+  .portrait img { width: 100%; max-width: 22rem; height: auto; border-radius: 0.75rem; display: block; }
   .facts li { margin-bottom: 0.5rem; }
   .credits { font-size: 0.85rem; color: #6b7a5e; border-top: 1px solid #d8d2bd;
              margin-top: 2.5rem; padding-top: 1rem; }
+  audio { width: 100%; max-width: 22rem; display:block; margin: .5rem 0 1rem; }
   footer { font-size: 0.85rem; color: #6b7a5e; border-top: 1px solid #d8d2bd;
            margin-top: 3rem; padding-top: 1rem; }
   .breadcrumb { font-size: 0.9rem; }
@@ -63,7 +63,7 @@ function shell(opts: { title: string; description: string; canonicalPath: string
 export function renderGuideIndex(): string {
   const cards = GUIDE.map(
     (e) =>
-      `<li><a href="./${e.id}/">${PORTRAITS[e.id]}<strong>${e.emoji} ${e.name}</strong><br><span>${e.tagline}</span></a></li>`,
+      `<li><a href="./${e.id}/"><img src="./portraits/${e.id}.png" alt="${e.name} in Beastoria" width="600" height="600" loading="lazy"><strong>${e.emoji} ${e.name}</strong><br><span>${e.tagline}</span></a></li>`,
   ).join('');
   const body = `
 <p class="breadcrumb"><a href="../">← back to the valley</a></p>
@@ -91,16 +91,29 @@ export function renderSpeciesPage(entry: GuideEntry): string {
         entry.voice.credits
           .map((c) => `<p>${c.label}: ${c.author}, <a href="${c.url}" rel="external">${c.license}</a></p>`)
           .join('');
+  const audioHtml =
+    entry.voice.kind === 'silent'
+      ? ''
+      : `<h2>${
+          entry.voice.kind === 'designed'
+            ? `Hear the ${entry.name.toLowerCase()}’s voice`
+            : `Hear a real ${entry.name.toLowerCase()}`
+        }</h2>
+<audio controls preload="none" aria-label="${entry.name} call">
+  <source src="../../audio/${entry.voice.sample}.webm" type="audio/webm" />
+  <source src="../../audio/${entry.voice.sample}.m4a" type="audio/mp4" />
+</audio>`;
   const body = `
 <p class="breadcrumb"><a href="../">← all creatures</a></p>
 <h1>${entry.emoji} ${entry.name}</h1>
 <p class="tagline">${entry.tagline}</p>
-<div class="portrait">${PORTRAITS[entry.id]}</div>
+<div class="portrait"><img src="../portraits/${entry.id}.png" alt="${entry.name} in Beastoria" width="600" height="600"></div>
 <h2>Did you know?</h2>
 <ul class="facts">${facts}</ul>
 <h2>In Beastoria</h2>
 <p>${entry.inBeastoria}</p>
 <a class="play" href="../../">Open the valley</a>
+${audioHtml}
 <div class="credits">${creditsHtml}</div>
 <footer><a href="../../privacy/">Privacy</a> · <a href="${SITE.repoUrl}" rel="external">Source on GitHub</a></footer>`;
   return shell({

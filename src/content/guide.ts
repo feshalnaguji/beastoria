@@ -13,7 +13,7 @@ export interface VoiceCredit {
 }
 
 export type VoiceInfo =
-  | { kind: 'recorded' | 'designed'; note: string; credits: VoiceCredit[] }
+  | { kind: 'recorded' | 'designed'; note: string; credits: VoiceCredit[]; sample: string }
   | { kind: 'silent'; note: string };
 
 export interface GuideEntry {
@@ -46,6 +46,7 @@ export const GUIDE: GuideEntry[] = [
     voice: {
       kind: 'recorded',
       note: 'Rabbits are mostly quiet animals, so in Beastoria you hear their soft foot-thumps.',
+      sample: 'families/rabbit/call1',
       credits: [
         {
           label: 'Soft thump foley',
@@ -72,6 +73,7 @@ export const GUIDE: GuideEntry[] = [
     voice: {
       kind: 'recorded',
       note: 'Real American Robin song, recorded in Ontario.',
+      sample: 'families/robin/call1',
       credits: [
         {
           label: 'American Robin song',
@@ -99,6 +101,7 @@ export const GUIDE: GuideEntry[] = [
       kind: 'designed',
       note:
         "A gentle bleat, adapted from a real lamb recording — the classic film stand-in for a deer's call.",
+      sample: 'families/deer/call1',
       credits: [
         {
           label: 'Lamb bleat (deer-call stand-in)',
@@ -125,6 +128,7 @@ export const GUIDE: GuideEntry[] = [
     voice: {
       kind: 'recorded',
       note: "A real mallard quack from the British Library's wildlife collection.",
+      sample: 'families/duck/call1',
       credits: [
         {
           label: 'Mallard quack',
@@ -151,6 +155,7 @@ export const GUIDE: GuideEntry[] = [
     voice: {
       kind: 'recorded',
       note: "Koi don't call — you hear the small, real splashes of the pond.",
+      sample: 'families/koi/call1',
       credits: [
         {
           label: 'Small water splash',
@@ -183,6 +188,7 @@ export const GUIDE: GuideEntry[] = [
     voice: {
       kind: 'recorded',
       note: 'Real Tawny Owl hoots, recorded in France and Sweden.',
+      sample: 'families/owl/call1',
       credits: [
         {
           label: 'Tawny Owl male hoot',
@@ -215,6 +221,7 @@ export const GUIDE: GuideEntry[] = [
     voice: {
       kind: 'recorded',
       note: "A real Douglas Squirrel's chatter, recorded at Puget Sound.",
+      sample: 'families/squirrel/call1',
       credits: [
         {
           label: 'Douglas Squirrel chatter',
@@ -241,6 +248,7 @@ export const GUIDE: GuideEntry[] = [
     voice: {
       kind: 'recorded',
       note: 'Real Wood Frogs calling in spring, recorded in Ottawa.',
+      sample: 'families/frog/call1',
       credits: [
         {
           label: 'Wood Frogs calling in spring',
@@ -309,6 +317,7 @@ export const GUIDE: GuideEntry[] = [
       note:
         'No dodo was ever recorded, so its voice here is designed from its real closest relatives: dove ' +
         'coos, deepened to fit a big, gentle ground bird.',
+      sample: 'families/dodo/call1',
       credits: [
         {
           label: 'Dove cooing',
@@ -341,6 +350,7 @@ export const GUIDE: GuideEntry[] = [
     voice: {
       kind: 'designed',
       note: 'A mythical bird needs a designed voice: real crane, swan, and loon calls layered into one.',
+      sample: 'families/phoenix/call1',
       credits: [
         {
           label: 'Sandhill Crane bugle',

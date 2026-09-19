@@ -88,6 +88,14 @@ export class Hud {
     document.addEventListener('fullscreenchange', () => this.renderFullscreenChip());
     this.renderFullscreenChip();
 
+    const guide = document.createElement('a');
+    guide.href = './guide/';
+    guide.textContent = '🐾 creatures';
+    guide.setAttribute('aria-label', 'creature guide');
+    guide.title = 'Meet the creatures';
+    guide.style.cssText = [...PILL_CSS, 'top:54px', 'left:12px', 'text-decoration:none', 'font-size:14px'].join(';');
+    document.body.appendChild(guide);
+
     this.audio.onUnlock = () => this.renderChip();
     this.renderChip();
   }

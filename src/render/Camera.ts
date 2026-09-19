@@ -35,6 +35,7 @@ export class Camera {
     canvas.addEventListener('pointerup', this.onPointerUp);
     canvas.addEventListener('pointercancel', this.onPointerUp);
     canvas.addEventListener('wheel', this.onWheel, { passive: false });
+    window.addEventListener('keydown', this.onKey);
   }
 
   centerOn(x: number, y: number, zoom?: number): void {
@@ -160,6 +161,22 @@ export class Camera {
   private onPointerUp = (e: PointerEvent): void => {
     this.pointers.delete(e.pointerId);
     if (this.pointers.size < 2) this.lastPinchDist = null;
+  };
+
+  private onKey = (e: KeyboardEvent): void => {
+    const t = e.target as HTMLElement | null;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'BUTTON')) return;
+    const pan = 120 / this.targetZoom;
+    switch (e.key) {
+      case 'ArrowLeft': this.targetX -= pan; break;
+      case 'ArrowRight': this.targetX += pan; break;
+      case 'ArrowUp': this.targetY -= pan; break;
+      case 'ArrowDown': this.targetY += pan; break;
+      case '+': case '=': this.targetZoom = clamp(this.targetZoom * 1.25, this.minZoom(), MAX_ZOOM); break;
+      case '-': case '_': this.targetZoom = clamp(this.targetZoom / 1.25, this.minZoom(), MAX_ZOOM); break;
+      default: return;
+    }
+    e.preventDefault();
   };
 
   private onWheel = (e: WheelEvent): void => {

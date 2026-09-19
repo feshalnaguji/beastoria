@@ -4,19 +4,21 @@
  */
 import { DevPanel } from './app/DevPanel';
 import { GameLoop } from './app/GameLoop';
-import { owedTicks, runCatchUp, summarizeEvents } from './app/CatchUp';
+import { drainCatchUp, owedTicks, summarizeEvents } from './app/CatchUp';
 import { AudioEngine } from './audio/AudioEngine';
 import { CallScheduler } from './audio/CallScheduler';
 import type { BedName } from './audio/manifest';
 import { computeMix } from './audio/Mixer';
 import { loadSave, saveWorld } from './persist/store';
-import { getClock } from './sim/clock';
+import { getClock, TICKS_PER_DAY } from './sim/clock';
 import { tick } from './sim/Sim';
-import { createWorld, WORLD_HEIGHT, WORLD_WIDTH } from './sim/state';
+import { createWorld, WORLD_HEIGHT, WORLD_WIDTH, type SpeciesId } from './sim/state';
+import { SPECIES } from './sim/species';
 import { Hud } from './ui/Hud';
 import { InspectCard } from './ui/InspectCard';
-import { showWelcomeBack } from './ui/WelcomeBack';
+import { showCard, showWelcomeBack } from './ui/WelcomeBack';
 import { Renderer } from './render/Renderer';
+import { renderPortraitStudio } from './app/PortraitStudio';
 
 /** Tap-vs-drag threshold, in CSS px between pointerdown and pointerup — a
  * movement past this reads as a camera drag (Camera.ts owns panning off its
@@ -27,28 +29,57 @@ const TAP_DRAG_THRESHOLD_PX = 6;
 
 const AUTOSAVE_INTERVAL_TICKS = 300; // 30s of sim time at 1x
 
-/** Full-screen dawn overlay shown while offline catch-up drains (spec §4.6). */
-function showDawnOverlay(): HTMLDivElement {
-  const overlay = document.createElement('div');
-  overlay.style.cssText = [
+/** Full-screen catch-up overlay: text line + a thin progress bar, shown while
+ * offline catch-up drains (spec §4.6). `setProgress` updates both. */
+function showDawnOverlay(): {
+  el: HTMLDivElement;
+  setProgress: (done: number, total: number, fromDay: number, toDay: number) => void;
+} {
+  const el = document.createElement('div');
+  el.style.cssText = [
     'position:fixed', 'inset:0', 'z-index:15',
-    'display:flex', 'align-items:center', 'justify-content:center',
+    'display:flex', 'flex-direction:column', 'align-items:center', 'justify-content:center',
+    'gap:12px',
     'background:rgba(252,247,235,.92)', 'color:#3a3a2e',
     'font-family:Georgia,serif', 'font-size:18px',
   ].join(';');
-  overlay.textContent = 'A new day drifts in…';
-  document.body.appendChild(overlay);
-  return overlay;
+
+  const text = document.createElement('div');
+  el.appendChild(text);
+
+  const track = document.createElement('div');
+  track.style.cssText = 'width:240px;height:4px;background:rgba(58,74,51,.15);border-radius:2px;overflow:hidden;';
+  const bar = document.createElement('div');
+  bar.style.cssText = 'width:0%;height:100%;background:#87a96b;';
+  track.appendChild(bar);
+  el.appendChild(track);
+
+  document.body.appendChild(el);
+
+  const setProgress = (done: number, total: number, fromDay: number, toDay: number): void => {
+    text.textContent = `Catching up with the valley… Day ${fromDay} → Day ${toDay}`;
+    bar.style.width = `${total > 0 ? Math.min(100, (100 * done) / total) : 100}%`;
+  };
+  return { el, setProgress };
 }
 
 async function start(): Promise<void> {
   const mount = document.getElementById('app');
   if (!mount) throw new Error('#app mount point missing');
 
+  const portrait = new URLSearchParams(location.search).get('portrait');
+  if (portrait && Object.hasOwn(SPECIES, portrait)) {
+    await renderPortraitStudio(mount, portrait as SpeciesId);
+    return; // dev-only: no sim, no HUD, no save
+  }
+
   const save = await loadSave();
   const state = save ? save.sim : createWorld(1234);
+  /** A fresh valley opens mid-morning, not at grey dawn — first screens should be sunny. */
+  const MORNING_START_TICK = Math.round(0.2 * TICKS_PER_DAY);
+  if (!save) state.tick = MORNING_START_TICK;
   const sinceTick = state.tick;
-  let owed = save ? owedTicks(Date.now() - save.savedAtEpochMs) : 0;
+  const owed = save ? owedTicks(Date.now() - save.savedAtEpochMs) : 0;
 
   const renderer = new Renderer();
   await renderer.init(mount);
@@ -58,7 +89,6 @@ async function start(): Promise<void> {
 
   const audio = new AudioEngine();
   const scheduler = new CallScheduler(audio);
-  void audio.preload();
   window.addEventListener('pointerdown', () => audio.unlock(), { once: true });
   const hud = new Hud(audio);
   hud.setClock(getClock(state.tick)); // render the clock pill immediately, don't wait ~100ms for the first sim tick
@@ -68,27 +98,10 @@ async function start(): Promise<void> {
   // and the welcome card reflects a settled, post-catch-up state.
   if (owed > 0) {
     const overlay = showDawnOverlay();
-    // Fail open: a throw inside runCatchUp must never strand the player on a
-    // frozen overlay. Every exit from drain() — normal completion or error —
-    // resolves the promise, so the await below always settles and boot
-    // continues with whatever (still-valid) state was reached.
-    await new Promise<void>((resolve) => {
-      const drain = (): void => {
-        try {
-          const res = runCatchUp(state, owed, 8, () => performance.now());
-          owed -= res.ticksRun;
-          if (!res.done && owed > 0) {
-            requestAnimationFrame(drain);
-            return;
-          }
-        } catch (err) {
-          console.warn('[catchup] aborted:', err);
-        }
-        resolve();
-      };
-      drain();
-    });
-    overlay.remove();
+    const fromDay = getClock(state.tick).day;
+    const toDay = getClock(state.tick + owed).day;
+    await drainCatchUp(state, owed, (d, t) => overlay.setProgress(d, t, fromDay, toDay));
+    overlay.el.remove();
     renderer.sync(state);
     showWelcomeBack(summarizeEvents(state.eventLog, sinceTick));
   }
@@ -185,12 +198,56 @@ async function start(): Promise<void> {
   );
   const devPanel = new DevPanel(state, loop, renderer);
 
+  let hiddenAt: { epochMs: number; tick: number } | null = null;
+  let draining = false;
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') void saveWorld(state, Date.now());
+    if (document.visibilityState === 'hidden') {
+      hiddenAt = { epochMs: Date.now(), tick: state.tick };
+      void saveWorld(state, Date.now());
+      return;
+    }
+    if (!hiddenAt) return;
+    const { epochMs, tick: tickAtHide } = hiddenAt;
+    hiddenAt = null;
+    // The throttled loop already ran some ticks while hidden; only the shortfall is owed.
+    const owedNow = Math.max(0, owedTicks(Date.now() - epochMs) - (state.tick - tickAtHide));
+    if (owedNow < 50) return; // a quick tab-flip — nothing worth a ceremony
+    if (draining) return; // a drain is already in flight — don't stack another
+    draining = true;
+    loop.stop();
+    const overlay = showDawnOverlay();
+    const fromDay = getClock(state.tick).day;
+    const toDay = getClock(state.tick + owedNow).day;
+    void drainCatchUp(state, owedNow, (d, t) => overlay.setProgress(d, t, fromDay, toDay)).then(() => {
+      overlay.el.remove();
+      renderer.sync(state);
+      showWelcomeBack(summarizeEvents(state.eventLog, tickAtHide));
+    }).catch((err) => console.warn('[catchup] resume after error:', err))
+      .finally(() => { draining = false; loop.start(); });
   });
   window.addEventListener('pagehide', () => void saveWorld(state, Date.now()));
 
   loop.start();
+  if (!save) {
+    showCard('Welcome to Beastoria', [
+      'A calm little valley where creature families live their lives.',
+      'Drag to look around · pinch or scroll to zoom in close.',
+      'Tap any creature to meet them.',
+    ]);
+  }
 }
 
-void start();
+function showBootFailure(err: unknown): void {
+  console.error('[boot] Beastoria could not start:', err);
+  const card = document.createElement('div');
+  card.style.cssText =
+    'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;' +
+    'background:#f6f2e7;color:#3a4a33;font-family:Georgia,serif;text-align:center;z-index:30';
+  card.innerHTML =
+    '<div style="max-width:28rem"><h1 style="font-size:1.5rem;margin:0 0 .5rem">The valley couldn’t wake up</h1>' +
+    '<p>Beastoria needs a browser with WebGL to draw its creatures. Try another browser or device — ' +
+    'or <a href="./guide/" style="color:#4a6b3a">meet the creatures in the guide</a> meanwhile.</p></div>';
+  document.body.appendChild(card);
+}
+
+start().catch(showBootFailure);
