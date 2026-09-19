@@ -3,7 +3,7 @@
  * migrate() walks unknown data up to SAVE_VERSION or returns null if the
  * data is unrecognizable — a bad save must never crash the game.
  */
-import { SAVE_VERSION, type SaveFile } from './schema';
+import { emptyNames, LEGACY_SEED, SAVE_VERSION, type SaveFile, type SaveNames } from './schema';
 import type { HomeKind, Vec2, WorldState } from '../sim/state';
 import { DREY_SITES, FROG_SPAWN_CLUMPS, TURTLE_SAND_NESTS, SHADE_SCRAPES } from '../sim/valley';
 import { isMourningGather, GATHER_MAX_TICKS } from '../sim/behaviors';
@@ -33,8 +33,11 @@ const NEW_HOME_SITE_GROUPS: [HomeKind, Vec2[]][] = [
   ['shadeScrape', SHADE_SCRAPES],
 ];
 
-/** v(n) → v(n+1) steps, indexed by source version. Empty until v2 exists. */
-const STEPS: Record<number, (save: SaveFile) => SaveFile> = {};
+/** v(n) → v(n+1) steps, indexed by source version. */
+const STEPS: Record<number, (save: SaveFile) => SaveFile> = {
+  // v1 → v2 (G2): every v1 valley was created from LEGACY_SEED; names start empty.
+  1: (save) => ({ ...save, version: 2, seed: LEGACY_SEED, names: emptyNames() }),
+};
 
 export function migrate(raw: unknown): SaveFile | null {
   if (typeof raw !== 'object' || raw === null) return null;
@@ -58,6 +61,8 @@ export function migrate(raw: unknown): SaveFile | null {
   }
   // Defensive defaulting for fields added after older hand-rolled/tampered
   // saves were written — never reject on this alone.
+  if (typeof save.seed !== 'number' || !Number.isFinite(save.seed)) save.seed = LEGACY_SEED;
+  save.names = sanitizeNames(save.names);
   if (typeof save.sim.lastWandererTick !== 'object' || save.sim.lastWandererTick === null) {
     save.sim.lastWandererTick = {};
   }
@@ -134,6 +139,24 @@ export function migrate(raw: unknown): SaveFile | null {
     }
   }
   return save;
+}
+
+/**
+ * Defensive normalization for a hand-edited/tampered `names` block: drop any
+ * non-string name and any key that isn't a plain integer id, rather than
+ * rejecting the whole save over it.
+ */
+function sanitizeNames(raw: unknown): SaveNames {
+  const out = emptyNames();
+  if (typeof raw !== 'object' || raw === null) return out;
+  for (const bucket of ['creatures', 'families'] as const) {
+    const src = (raw as Record<string, unknown>)[bucket];
+    if (typeof src !== 'object' || src === null) continue;
+    for (const [id, name] of Object.entries(src as Record<string, unknown>)) {
+      if (typeof name === 'string' && /^\d+$/.test(id)) out[bucket][Number(id)] = name;
+    }
+  }
+  return out;
 }
 
 /**

@@ -4,7 +4,7 @@
  */
 import { del, get, set } from 'idb-keyval';
 import { migrate } from './migrations';
-import { SAVE_VERSION, type SaveFile } from './schema';
+import { emptyNames, LEGACY_SEED, SAVE_VERSION, type SaveFile, type SaveNames } from './schema';
 import type { WorldState } from '../sim/state';
 
 const SAVE_KEY = 'beastoria.save';
@@ -29,11 +29,21 @@ export function resumeSaves(): void {
 let warnedSave = false;
 let warnedLoad = false;
 
+export interface SaveMeta { seed: number; names: SaveNames }
+let meta: SaveMeta = { seed: LEGACY_SEED, names: emptyNames() };
+/** Boot calls this once; the `names` object is shared with the NameBook and read live at each save. */
+export function setSaveMeta(m: SaveMeta): void {
+  meta = m;
+}
+
 export async function saveWorld(state: WorldState, nowMs: number): Promise<void> {
   if (suppressed) return;
   const file: SaveFile = {
     version: SAVE_VERSION,
     savedAtEpochMs: nowMs,
+    seed: meta.seed,
+    // Snapshot at save time — detached from the live, still-mutating names object.
+    names: JSON.parse(JSON.stringify(meta.names)) as SaveNames,
     // Structured clone via JSON keeps the stored value detached from the live sim.
     sim: JSON.parse(JSON.stringify(state)) as WorldState,
   };
