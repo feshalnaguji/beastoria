@@ -18,6 +18,7 @@ import { createWorld, WORLD_HEIGHT, WORLD_WIDTH, type SpeciesId } from './sim/st
 import { SPECIES } from './sim/species';
 import { Hud, PILL_CSS } from './ui/Hud';
 import { InspectCard } from './ui/InspectCard';
+import { NameBook } from './ui/names';
 import { showCard, showWelcomeBack } from './ui/WelcomeBack';
 import { Renderer } from './render/Renderer';
 import { renderPortraitStudio } from './app/PortraitStudio';
@@ -84,6 +85,7 @@ async function start(): Promise<void> {
   const fresh = visiting || save === null;
   const state = save === null || visiting ? createWorld(seed) : save.sim;
   const names = save === null || visiting ? emptyNames() : save.names;
+  const nameBook = new NameBook(names);
   /** A fresh valley opens mid-morning, not at grey dawn — first screens should be sunny. */
   const MORNING_START_TICK = Math.round(0.2 * TICKS_PER_DAY);
   if (fresh) state.tick = MORNING_START_TICK;
@@ -93,6 +95,7 @@ async function start(): Promise<void> {
 
   const renderer = new Renderer();
   await renderer.init(mount);
+  renderer.familyDisplayName = (id) => nameBook.family(id);
   renderer.sync(state); // initial snapshot so frame 0 has positions
 
   renderer.centerOn(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 0.21); // as far out as the min-zoom floor allows (whole valley where the viewport fits it)
@@ -113,7 +116,7 @@ async function start(): Promise<void> {
     await drainCatchUp(state, owed, (d, t) => overlay.setProgress(d, t, fromDay, toDay));
     overlay.el.remove();
     renderer.sync(state);
-    showWelcomeBack(summarizeEvents(state.eventLog, sinceTick));
+    showWelcomeBack(summarizeEvents(state.eventLog, sinceTick, (id) => nameBook.customFamily(id)));
   }
 
   // Tap-to-inspect (M10 task 5): available always, not just in the DevPanel.
@@ -123,7 +126,7 @@ async function start(): Promise<void> {
   // one showing it, so the tick loop below can tell "still selected, just
   // update the text" apart from "gone — renderer.sync() already cleared
   // selectedId for us, now hide the card" without racing that clear.
-  const inspectCard = new InspectCard(() => dismissInspect());
+  const inspectCard = new InspectCard(() => dismissInspect(), nameBook);
   let inspectedId: number | null = null;
   function dismissInspect(): void {
     renderer.selectedId = null;
@@ -197,6 +200,7 @@ async function start(): Promise<void> {
       ticksSinceSave++;
       if (ticksSinceSave >= AUTOSAVE_INTERVAL_TICKS) {
         ticksSinceSave = 0;
+        nameBook.prune(state);
         void saveWorld(state, Date.now());
       }
     },
@@ -214,6 +218,7 @@ async function start(): Promise<void> {
     if (visiting) return;
     if (document.visibilityState === 'hidden') {
       hiddenAt = { epochMs: Date.now(), tick: state.tick };
+      nameBook.prune(state);
       void saveWorld(state, Date.now());
       return;
     }
@@ -232,11 +237,14 @@ async function start(): Promise<void> {
     void drainCatchUp(state, owedNow, (d, t) => overlay.setProgress(d, t, fromDay, toDay)).then(() => {
       overlay.el.remove();
       renderer.sync(state);
-      showWelcomeBack(summarizeEvents(state.eventLog, tickAtHide));
+      showWelcomeBack(summarizeEvents(state.eventLog, tickAtHide, (id) => nameBook.customFamily(id)));
     }).catch((err) => console.warn('[catchup] resume after error:', err))
       .finally(() => { draining = false; loop.start(); });
   });
-  window.addEventListener('pagehide', () => void saveWorld(state, Date.now()));
+  window.addEventListener('pagehide', () => {
+    nameBook.prune(state);
+    void saveWorld(state, Date.now());
+  });
 
   loop.start();
   if (visiting) {

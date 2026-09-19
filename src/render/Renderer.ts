@@ -450,6 +450,9 @@ const TINT_RAMP: [number, number][] = [
 ];
 
 export class Renderer {
+  /** Hook for NameBook-resolved family names (G2 task 3) — defaults to the
+   * generated fallback so tests/callers that never set it keep working. */
+  familyDisplayName: (id: number) => string = familyName;
   private app!: Application;
   private world!: Container;
   private camera!: Camera;
@@ -1153,7 +1156,7 @@ export class Renderer {
         this.homeLabels.set(home.id, label);
         this.homeLabelLayer.addChild(label);
       }
-      label.text = `The ${familyName(fam.id)} family`;
+      label.text = `The ${this.familyDisplayName(fam.id)} family`;
       label.position.set(home.pos.x, home.pos.y - 34);
       this.homeLabelPos.set(home.id, home.pos);
     }

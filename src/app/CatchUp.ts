@@ -89,21 +89,45 @@ export function drainCatchUp(
 /** Up to six warm lines about what happened after `sinceTick`, ranked by
  * interest (reborn > born/hatched > passed > paired > eggLaid >
  * wandererArrived > nested) and grouped by (kind, species) so repeats
- * collapse into one line ("3 rabbit families settled into new homes"). */
-export function summarizeEvents(events: SimEvent[], sinceTick: number): string[] {
-  const groups = new Map<string, { kind: SimEvent['kind']; species: string; n: number; count: number }>();
+ * collapse into one line ("3 rabbit families settled into new homes").
+ * `familyNameOf` (optional) resolves a family's custom name for a group
+ * whose single event is that family's — nested/born/hatched/eggLaid get a
+ * named phrase below; every other kind falls through to PHRASES unchanged. */
+export function summarizeEvents(
+  events: SimEvent[],
+  sinceTick: number,
+  familyNameOf?: (id: number) => string | undefined,
+): string[] {
+  const groups = new Map<string, { kind: SimEvent['kind']; species: string; n: number; count: number; familyId: number | undefined }>();
   for (const e of events) {
     if (e.tick <= sinceTick) continue;
     if (!(e.kind in PHRASES)) continue; // unknown kind from a tampered/future save — skip, don't crash
     const key = `${e.kind}|${e.species}`;
-    const g = groups.get(key) ?? { kind: e.kind, species: e.species, n: 0, count: 0 };
+    const g = groups.get(key) ?? { kind: e.kind, species: e.species, n: 0, count: 0, familyId: e.familyId };
     g.n++;
     g.count += e.count ?? 1;
     groups.set(key, g);
   }
   const ranked = [...groups.values()].sort((a, b) => INTEREST[b.kind] - INTEREST[a.kind]);
   if (ranked.length === 0) return ['The valley dozed quietly in your absence.'];
-  const lines = ranked.map((g) => PHRASES[g.kind](g.species, g.n, g.count));
+  const lines = ranked.map((g) => {
+    const f = g.n === 1 && g.familyId !== undefined ? familyNameOf?.(g.familyId) : undefined;
+    if (f) {
+      switch (g.kind) {
+        case 'nested':
+          return `the ${f} family settled into a new home`;
+        case 'born':
+          return `the ${f} family welcomed ${g.count} little ${speciesPlural(g.species, g.count)}`;
+        case 'hatched':
+          return `${g.count} ${f} family ${plural('egg', g.count)} hatched`;
+        case 'eggLaid':
+          return `the ${f} family laid ${g.count} ${plural('egg', g.count)}`;
+        default:
+          break;
+      }
+    }
+    return PHRASES[g.kind](g.species, g.n, g.count);
+  });
   if (lines.length <= 6) return lines;
   const hiddenEvents = ranked.slice(5).reduce((sum, g) => sum + g.n, 0);
   return [...lines.slice(0, 5), `…and ${hiddenEvents} other little happenings.`];

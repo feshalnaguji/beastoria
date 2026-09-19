@@ -5,11 +5,11 @@
  * main.ts owns the tap-vs-drag discriminator and wires taps to show()/hide();
  * this file only renders and computes the card's text.
  */
-import { familyName } from '../render/Renderer';
-import { idHash, MOURNING_GATHER_MIN_TICKS } from '../sim/behaviors';
+import { MOURNING_GATHER_MIN_TICKS } from '../sim/behaviors';
 import { SPECIES } from '../sim/species';
 import type { Creature, WorldState } from '../sim/state';
 import { PILL_CSS } from './Hud';
+import { NameBook } from './names';
 
 /** Render-only presentation hint from Renderer.presentationFor() — whether
  * the creature currently reads as airborne/swimming, same inference the
@@ -19,41 +19,14 @@ export interface Presentation {
   swimming: boolean;
 }
 
-/** 24 gentle, nature-flavored given names — deliberately distinct from
- * Renderer's FAMILY_NAMES (plant names for the family surname) so a card
- * never reads like "Willow of the Willow family". */
-const CREATURE_NAMES = [
-  'Pip', 'Wren', 'Moss', 'Dew', 'Sage', 'Briar', 'Juniper', 'Fennel',
-  'Thistle', 'Meadow', 'Marigold', 'Olive', 'Plum', 'Cricket', 'Sprig',
-  'Acorn', 'Pebble', 'Breeze', 'Feather', 'Petal', 'Clay', 'Ember',
-  'Frost', 'Lark',
-];
-
-/** This creature's index within its family's parents+children (0 for a
- * family-less wanderer) — added into the name hash so siblings in the same
- * family never land on the same list index, even though two creatures
- * elsewhere in the valley may still share a name. */
-function familyPosition(state: WorldState, c: Creature): number {
-  if (c.familyId === null) return 0;
-  const fam = state.families.find((f) => f.id === c.familyId);
-  if (!fam) return 0;
-  const idx = [...fam.parentIds, ...fam.childIds].indexOf(c.id);
-  return idx === -1 ? 0 : idx;
-}
-
-export function creatureName(state: WorldState, c: Creature): string {
-  const idx = (idHash(c.id) + familyPosition(state, c)) % CREATURE_NAMES.length;
-  return CREATURE_NAMES[idx] ?? 'Meadow';
-}
-
-export function creatureRole(state: WorldState, c: Creature): string {
+export function creatureRole(state: WorldState, c: Creature, familyOf: (id: number) => string): string {
   const fam = c.familyId === null ? undefined : state.families.find((f) => f.id === c.familyId);
   if (fam) {
     if (fam.parentIds.includes(c.id)) {
-      return `${c.sex === 'f' ? 'mother' : 'father'} of the ${familyName(fam.id)} family`;
+      return `${c.sex === 'f' ? 'mother' : 'father'} of the ${familyOf(fam.id)} family`;
     }
     const kidIdx = fam.childIds.indexOf(c.id);
-    if (kidIdx !== -1) return `little one of the ${familyName(fam.id)} family`;
+    if (kidIdx !== -1) return `little one of the ${familyOf(fam.id)} family`;
   }
   if (c.stage === 'elder') return 'elder';
   return 'a wanderer (no family yet)';
@@ -181,7 +154,7 @@ export class InspectCard {
   private metaEl: HTMLDivElement;
   private doingEl: HTMLDivElement;
 
-  constructor(onDismiss: () => void) {
+  constructor(onDismiss: () => void, private names: NameBook) {
     this.root = document.createElement('div');
     this.root.style.cssText = [
       ...PILL_CSS,
@@ -230,8 +203,8 @@ export class InspectCard {
   }
 
   show(state: WorldState, c: Creature, presentation: Presentation | undefined): void {
-    this.nameEl.textContent = creatureName(state, c);
-    this.roleEl.textContent = creatureRole(state, c);
+    this.nameEl.textContent = this.names.creature(state, c);
+    this.roleEl.textContent = creatureRole(state, c, (id) => this.names.family(id));
     this.metaEl.textContent = `${capitalize(c.species)} · ${c.stage}`;
     let doing = creatureDoing(c, presentation);
     // M12 task 5: a riding joey is excluded from pickCreature's own hit
