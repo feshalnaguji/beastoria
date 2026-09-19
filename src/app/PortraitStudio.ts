@@ -26,7 +26,10 @@ export async function renderPortraitStudio(mount: HTMLElement, species: SpeciesI
   const s = (SIZE * 0.7) / Math.max(b.width, b.height);
   rig.root.scale.set(rig.root.scale.x * s);
   const bb = rig.root.getBounds();
-  rig.root.position.set(SIZE / 2 - (bb.x + bb.width / 2), SIZE * 0.78 - (bb.y + bb.height));
+  const y = species === 'koi'
+    ? SIZE / 2 - (bb.y + bb.height / 2) // no feet to plant on a ground line — centre it instead
+    : SIZE * 0.78 - (bb.y + bb.height);
+  rig.root.position.set(SIZE / 2 - (bb.x + bb.width / 2), y);
   app.render();
   document.title = `portrait:${species}`;
   (window as unknown as { __portraitReady?: boolean }).__portraitReady = true;

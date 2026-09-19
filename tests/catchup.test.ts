@@ -145,6 +145,19 @@ describe('summarizeEvents ranking', () => {
     expect(lines).toContain('3 rabbit families settled into new homes');
     expect(lines.length).toBeLessThanOrEqual(6);
   });
+  it('pluralizes irregular species names (deer/koi invariant, phoenix takes -es)', () => {
+    expect(summarizeEvents([{ kind: 'born', tick: 100, species: 'deer', count: 2 }], 60))
+      .toContain('2 little deer were born');
+    expect(summarizeEvents([{ kind: 'passed', tick: 100, species: 'koi' }, { kind: 'passed', tick: 101, species: 'koi' }], 60))
+      .toContain('2 elder koi passed peacefully');
+    expect(summarizeEvents([{ kind: 'paired', tick: 100, species: 'phoenix' }], 60))
+      .toContain('two phoenixes became a pair');
+    expect(summarizeEvents(
+      [{ kind: 'wandererArrived', tick: 100, species: 'deer' }, { kind: 'wandererArrived', tick: 101, species: 'deer' }, { kind: 'wandererArrived', tick: 102, species: 'deer' }],
+      60,
+    )).toContain('3 wandering deer found the valley');
+  });
+
   it('tail counts hidden events, not hidden lines', () => {
     const events: SimEvent[] = Array.from({ length: 9 }, (_, i) => ({
       kind: 'nested' as const, tick: 100 + i, species: (['rabbit','deer','duck','owl','koi','frog','robin','dodo','turtle'] as const)[i]!,

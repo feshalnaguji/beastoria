@@ -24,9 +24,9 @@ export const phoenixRig: CreatureRig = {
     // Parented to body (was root-level); offset = old root offset minus
     // body's base offset (0, -34), so the resting pose is unchanged.
     { id: 'legB', parent: 'body', x: -4, y: 34, z: -2,
-      shapes: [{ kind: 'line', x1: 0, y1: 0, x2: -2, y2: -16, width: 2.2, fill: { color: 0xc98a3c } }] },
+      shapes: [{ kind: 'line', x1: 0, y1: 0, x2: -2, y2: -24, width: 2.2, fill: { color: 0xc98a3c } }] },
     { id: 'legF', parent: 'body', x: 4, y: 34, z: -1,
-      shapes: [{ kind: 'line', x1: 0, y1: 0, x2: 2, y2: -16, width: 2.2, fill: { color: 0xc98a3c } }] },
+      shapes: [{ kind: 'line', x1: 0, y1: 0, x2: 2, y2: -24, width: 2.2, fill: { color: 0xc98a3c } }] },
     { id: 'plumeFar', parent: 'body', x: -15, y: 2, z: -2,
       shapes: [
         { kind: 'path', d: 'M 0 0 Q -28 10 -46 4 Q -32 14 -14 10 Z', fill: { color: FLAME, alpha: 0.8 } },

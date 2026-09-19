@@ -199,6 +199,7 @@ async function start(): Promise<void> {
   const devPanel = new DevPanel(state, loop, renderer);
 
   let hiddenAt: { epochMs: number; tick: number } | null = null;
+  let draining = false;
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
       hiddenAt = { epochMs: Date.now(), tick: state.tick };
@@ -211,6 +212,8 @@ async function start(): Promise<void> {
     // The throttled loop already ran some ticks while hidden; only the shortfall is owed.
     const owedNow = Math.max(0, owedTicks(Date.now() - epochMs) - (state.tick - tickAtHide));
     if (owedNow < 50) return; // a quick tab-flip — nothing worth a ceremony
+    if (draining) return; // a drain is already in flight — don't stack another
+    draining = true;
     loop.stop();
     const overlay = showDawnOverlay();
     const fromDay = getClock(state.tick).day;
@@ -219,8 +222,8 @@ async function start(): Promise<void> {
       overlay.el.remove();
       renderer.sync(state);
       showWelcomeBack(summarizeEvents(state.eventLog, tickAtHide));
-      loop.start();
-    });
+    }).catch((err) => console.warn('[catchup] resume after error:', err))
+      .finally(() => { draining = false; loop.start(); });
   });
   window.addEventListener('pagehide', () => void saveWorld(state, Date.now()));
 

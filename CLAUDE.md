@@ -41,7 +41,8 @@ any design-affecting work. The spec is the source of truth; this file is the sum
   apple-touch-icon, PWA icons, og-image.png); outputs are committed, not built on every run
 - Single test file: `npx vitest run tests/determinism.test.ts`
 - Memory-light full suite (on a loaded machine): `npx vitest run --minWorkers=1 --maxWorkers=2`
-- `?portrait=<species>` — dev-only route (e.g. `/?portrait=robin`) that renders one adult rig
+- `?portrait=<species>` — unlisted capture route (ships in the bundle, harmless: no sim, HUD,
+  or save; e.g. `/?portrait=robin`) that renders one adult rig
   in a fixed-size Pixi canvas for guide-portrait capture; PNGs are captured by hand with
   Playwright into `public/guide/portraits/<id>.png` and committed
 - In-game dev panel: press `~` (speed 1x/8x/64x, seed, creature inspector, FPS)

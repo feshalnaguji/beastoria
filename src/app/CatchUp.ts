@@ -34,18 +34,25 @@ export function runCatchUp(
 }
 
 const INTEREST: Record<SimEvent['kind'], number> = {
-  reborn: 7, born: 6, hatched: 6, passed: 5, paired: 4, eggLaid: 3, wandererArrived: 2, nested: 1,
+  born: 6, hatched: 6, passed: 5, reborn: 4.5, paired: 4, eggLaid: 3, wandererArrived: 2, nested: 1,
 };
 const plural = (s: string, n: number): string => (n === 1 ? s : `${s}s`);
+/** Species names pluralize irregularly (deer/koi are invariant, phoenix takes -es). */
+const speciesPlural = (s: string, n: number): string => {
+  if (n === 1) return s;
+  if (s === 'deer' || s === 'koi') return s;
+  if (s === 'phoenix') return 'phoenixes';
+  return `${s}s`;
+};
 /** One warm line per (kind, species) group; `n` = events in the group, `count` = summed babies/eggs. */
 const PHRASES: Record<SimEvent['kind'], (s: string, n: number, count: number) => string> = {
-  born: (s, _n, c) => `${c} little ${plural(s, c)} ${c > 1 ? 'were' : 'was'} born`,
+  born: (s, _n, c) => `${c} little ${speciesPlural(s, c)} ${c > 1 ? 'were' : 'was'} born`,
   hatched: (s, _n, c) => `${c} ${s} ${plural('egg', c)} hatched`,
   eggLaid: (s, n, c) => n > 1 ? `${n} ${s} families laid eggs` : `a ${s} family laid ${c} ${plural('egg', c)}`,
-  paired: (s, n) => n > 1 ? `${n} new ${s} pairs formed` : `two ${s}s became a pair`,
+  paired: (s, n) => n > 1 ? `${n} new ${s} pairs formed` : `two ${speciesPlural(s, 2)} became a pair`,
   nested: (s, n) => n > 1 ? `${n} ${s} families settled into new homes` : `a ${s} family settled into a new home`,
-  passed: (s, n) => n > 1 ? `${n} elder ${s}s passed peacefully` : `an elder ${s} passed peacefully`,
-  wandererArrived: (s, n) => n > 1 ? `${n} wandering ${s}s found the valley` : `a wandering ${s} found the valley`,
+  passed: (s, n) => n > 1 ? `${n} elder ${speciesPlural(s, n)} passed peacefully` : `an elder ${s} passed peacefully`,
+  wandererArrived: (s, n) => n > 1 ? `${n} wandering ${speciesPlural(s, n)} found the valley` : `a wandering ${s} found the valley`,
   reborn: () => `the phoenix rose again from soft embers`,
 };
 
