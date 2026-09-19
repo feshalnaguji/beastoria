@@ -23,6 +23,7 @@ const CSS = `
   .facts li { margin-bottom: 0.5rem; }
   .credits { font-size: 0.85rem; color: #6b7a5e; border-top: 1px solid #d8d2bd;
              margin-top: 2.5rem; padding-top: 1rem; }
+  audio { width: 100%; max-width: 22rem; display:block; margin: .5rem 0 1rem; }
   footer { font-size: 0.85rem; color: #6b7a5e; border-top: 1px solid #d8d2bd;
            margin-top: 3rem; padding-top: 1rem; }
   .breadcrumb { font-size: 0.9rem; }
@@ -91,6 +92,18 @@ export function renderSpeciesPage(entry: GuideEntry): string {
         entry.voice.credits
           .map((c) => `<p>${c.label}: ${c.author}, <a href="${c.url}" rel="external">${c.license}</a></p>`)
           .join('');
+  const audioHtml =
+    entry.voice.kind === 'silent'
+      ? ''
+      : `<h2>${
+          entry.voice.kind === 'designed'
+            ? `Hear the ${entry.name.toLowerCase()}’s voice`
+            : `Hear a real ${entry.name.toLowerCase()}`
+        }</h2>
+<audio controls preload="none" aria-label="${entry.name} call">
+  <source src="../../audio/${entry.voice.sample}.webm" type="audio/webm" />
+  <source src="../../audio/${entry.voice.sample}.m4a" type="audio/mp4" />
+</audio>`;
   const body = `
 <p class="breadcrumb"><a href="../">← all creatures</a></p>
 <h1>${entry.emoji} ${entry.name}</h1>
@@ -101,6 +114,7 @@ export function renderSpeciesPage(entry: GuideEntry): string {
 <h2>In Beastoria</h2>
 <p>${entry.inBeastoria}</p>
 <a class="play" href="../../">Open the valley</a>
+${audioHtml}
 <div class="credits">${creditsHtml}</div>
 <footer><a href="../../privacy/">Privacy</a> · <a href="${SITE.repoUrl}" rel="external">Source on GitHub</a></footer>`;
   return shell({

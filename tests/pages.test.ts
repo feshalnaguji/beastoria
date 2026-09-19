@@ -128,4 +128,17 @@ describe('page templates', () => {
     const ogUrl = tags.find((t) => t.attrs?.property === 'og:url');
     expect(ogUrl?.attrs?.content).toBe(SITE.baseUrl);
   });
+
+  it('voiced species pages carry a native audio player; silent ones do not', () => {
+    for (const e of GUIDE) {
+      const html = renderSpeciesPage(e);
+      if (e.voice.kind === 'silent') expect(html, e.id).not.toContain('<audio');
+      else {
+        expect(html, e.id).toContain('<audio controls preload="none"');
+        expect(html, e.id).toContain(`../../audio/${e.voice.sample}.webm`);
+        expect(html, e.id).toContain(`../../audio/${e.voice.sample}.m4a`);
+      }
+      expect(html, e.id).not.toContain('<script');
+    }
+  });
 });
