@@ -5,7 +5,7 @@
 import { DevPanel } from './app/DevPanel';
 import { GameLoop } from './app/GameLoop';
 import { drainCatchUp, owedTicks, summarizeEvents } from './app/CatchUp';
-import { parseValleyParam, randomSeed } from './app/share';
+import { formatValleyUrl, parseValleyParam, randomSeed } from './app/share';
 import { AudioEngine } from './audio/AudioEngine';
 import { CallScheduler } from './audio/CallScheduler';
 import type { BedName } from './audio/manifest';
@@ -19,6 +19,8 @@ import { SPECIES } from './sim/species';
 import { Hud, PILL_CSS } from './ui/Hud';
 import { InspectCard } from './ui/InspectCard';
 import { NameBook } from './ui/names';
+import { buildPostcard, canvasToPng } from './ui/postcard';
+import { showShareCard } from './ui/ShareCard';
 import { showCard, showWelcomeBack } from './ui/WelcomeBack';
 import { Renderer } from './render/Renderer';
 import { renderPortraitStudio } from './app/PortraitStudio';
@@ -105,6 +107,15 @@ async function start(): Promise<void> {
   window.addEventListener('pointerdown', () => audio.unlock(), { once: true });
   const hud = new Hud(audio);
   hud.setClock(getClock(state.tick)); // render the clock pill immediately, don't wait ~100ms for the first sim tick
+  hud.onShare = () => {
+    const day = getClock(state.tick).day;
+    const url = formatValleyUrl(seed);
+    showShareCard({
+      url,
+      day,
+      postcard: () => canvasToPng(buildPostcard(renderer.snapshot(), `Beastoria · Day ${day}`, url.replace(/^https?:\/\//, ''))),
+    });
+  };
 
   // Offline catch-up (spec §4.6): drain owed ticks under a dawn overlay before
   // the live loop starts, so vocalizations from unobserved ticks stay unheard

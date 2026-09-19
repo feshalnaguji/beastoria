@@ -13,6 +13,9 @@
  *   document.fullscreenElement directly rather than needing state pushed in,
  *   since (unlike audio/clock) fullscreen has no sim or engine dependency.
  *   Hidden entirely when the browser doesn't support the Fullscreen API.
+ * - Share pill (top-left, below the creature guide link): "🔗 share" opens
+ *   the ShareCard (G2 Task 5) via `onShare`, set by main.ts once it has the
+ *   seed/renderer this needs.
  */
 import type { AudioEngine } from '../audio/AudioEngine';
 import type { Clock } from '../sim/clock';
@@ -37,8 +40,12 @@ export class Hud {
   private chip: HTMLDivElement;
   private clockPill: HTMLDivElement;
   private fullscreenChip: HTMLDivElement;
+  private sharePill: HTMLDivElement;
   private lastDay: number | null = null;
   private lastPhase: Clock['phase'] | null = null;
+
+  /** Set by main.ts once it has the seed/renderer a share needs. */
+  onShare?: () => void;
 
   constructor(private readonly audio: AudioEngine) {
     const style = document.createElement('style');
@@ -95,6 +102,22 @@ export class Hud {
     guide.title = 'Meet the creatures';
     guide.style.cssText = [...PILL_CSS, 'top:54px', 'left:12px', 'text-decoration:none', 'font-size:14px'].join(';');
     document.body.appendChild(guide);
+
+    this.sharePill = document.createElement('div');
+    this.sharePill.style.cssText = [...PILL_CSS, 'top:96px', 'left:12px', 'cursor:pointer', 'font-size:14px'].join(';');
+    this.sharePill.setAttribute('role', 'button');
+    this.sharePill.setAttribute('tabindex', '0');
+    this.sharePill.setAttribute('aria-label', 'share your valley');
+    this.sharePill.setAttribute('data-testid', 'share-pill');
+    this.sharePill.textContent = '🔗 share';
+    this.sharePill.addEventListener('click', () => this.onShare?.());
+    this.sharePill.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        this.onShare?.();
+      }
+    });
+    document.body.appendChild(this.sharePill);
 
     this.audio.onUnlock = () => this.renderChip();
     this.renderChip();

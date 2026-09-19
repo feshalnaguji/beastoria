@@ -590,6 +590,11 @@ export class Renderer {
     return this.app.canvas;
   }
 
+  /** The current frame as a canvas (Pixi extract), for the share postcard. */
+  snapshot(): HTMLCanvasElement {
+    return this.app.renderer.extract.canvas(this.app.stage) as HTMLCanvasElement;
+  }
+
   centerOn(x: number, y: number, zoom?: number): void {
     this.camera.centerOn(x, y, zoom);
   }
