@@ -15,7 +15,7 @@ import { tick } from './sim/Sim';
 import { createWorld, WORLD_HEIGHT, WORLD_WIDTH } from './sim/state';
 import { Hud } from './ui/Hud';
 import { InspectCard } from './ui/InspectCard';
-import { showWelcomeBack } from './ui/WelcomeBack';
+import { showCard, showWelcomeBack } from './ui/WelcomeBack';
 import { Renderer } from './render/Renderer';
 
 /** Tap-vs-drag threshold, in CSS px between pointerdown and pointerup — a
@@ -81,7 +81,6 @@ async function start(): Promise<void> {
 
   const audio = new AudioEngine();
   const scheduler = new CallScheduler(audio);
-  void audio.preload();
   window.addEventListener('pointerdown', () => audio.unlock(), { once: true });
   const hud = new Hud(audio);
   hud.setClock(getClock(state.tick)); // render the clock pill immediately, don't wait ~100ms for the first sim tick
@@ -218,6 +217,13 @@ async function start(): Promise<void> {
   window.addEventListener('pagehide', () => void saveWorld(state, Date.now()));
 
   loop.start();
+  if (!save) {
+    showCard('Welcome to Beastoria', [
+      'A calm little valley where creature families live their lives.',
+      'Drag to look around · pinch or scroll to zoom in close.',
+      'Tap any creature to meet them.',
+    ]);
+  }
 }
 
 function showBootFailure(err: unknown): void {
