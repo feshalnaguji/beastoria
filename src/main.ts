@@ -164,6 +164,7 @@ async function start(): Promise<void> {
       inspectCard.show(state, picked, renderer.presentationFor(picked.id));
       inspectedId = picked.id;
     } else {
+      if (inspectCard.isEditing()) return; // a stray tap must not abandon an open editor
       dismissInspect(); // tap on empty ground dismisses both card and follow
     }
   });
