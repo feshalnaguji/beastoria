@@ -126,7 +126,7 @@ async function start(): Promise<void> {
   // one showing it, so the tick loop below can tell "still selected, just
   // update the text" apart from "gone — renderer.sync() already cleared
   // selectedId for us, now hide the card" without racing that clear.
-  const inspectCard = new InspectCard(() => dismissInspect(), nameBook);
+  const inspectCard = new InspectCard(() => dismissInspect(), nameBook, { canRename: !visiting });
   let inspectedId: number | null = null;
   function dismissInspect(): void {
     renderer.selectedId = null;

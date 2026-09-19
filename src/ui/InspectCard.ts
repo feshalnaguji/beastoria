@@ -9,7 +9,8 @@ import { MOURNING_GATHER_MIN_TICKS } from '../sim/behaviors';
 import { SPECIES } from '../sim/species';
 import type { Creature, WorldState } from '../sim/state';
 import { PILL_CSS } from './Hud';
-import { NameBook } from './names';
+import { creatureName, NAME_MAX, NameBook } from './names';
+import { familyName } from '../render/Renderer';
 
 /** Render-only presentation hint from Renderer.presentationFor() — whether
  * the creature currently reads as airborne/swimming, same inference the
@@ -153,8 +154,15 @@ export class InspectCard {
   private roleEl: HTMLDivElement;
   private metaEl: HTMLDivElement;
   private doingEl: HTMLDivElement;
+  // G2 task 4: which field (if any) is mid-edit. show() is called every tick
+  // by main.ts's loop to keep doingEl live; while a field is open this must
+  // stop it from clobbering the input the child is typing into.
+  private editing: 'creature' | 'family' | null = null;
+  // The most recent show() args, kept so a save/cancel can re-render the
+  // card immediately (without waiting for next tick's show() call).
+  private lastArgs: { state: WorldState; c: Creature; presentation: Presentation | undefined } | null = null;
 
-  constructor(onDismiss: () => void, private names: NameBook) {
+  constructor(onDismiss: () => void, private names: NameBook, private opts: { canRename: boolean }) {
     this.root = document.createElement('div');
     this.root.style.cssText = [
       ...PILL_CSS,
@@ -203,9 +211,14 @@ export class InspectCard {
   }
 
   show(state: WorldState, c: Creature, presentation: Presentation | undefined): void {
-    this.nameEl.textContent = this.names.creature(state, c);
-    this.roleEl.textContent = creatureRole(state, c, (id) => this.names.family(id));
-    this.metaEl.textContent = `${capitalize(c.species)} · ${c.stage}`;
+    this.lastArgs = { state, c, presentation };
+    // Mid-edit: leave nameEl/roleEl (they hold the open input) alone — only
+    // doingEl tracks the sim every tick.
+    if (this.editing === null) {
+      this.renderName(state, c);
+      this.renderRole(state, c);
+      this.metaEl.textContent = `${capitalize(c.species)} · ${c.stage}`;
+    }
     let doing = creatureDoing(c, presentation);
     // M12 task 5: a riding joey is excluded from pickCreature's own hit
     // test (it shares its mother's exact position), so her card is the
@@ -224,5 +237,127 @@ export class InspectCard {
 
   hide(): void {
     this.root.style.display = 'none';
+    this.editing = null;
+  }
+
+  isEditing(): boolean {
+    return this.editing !== null;
+  }
+
+  private renderName(state: WorldState, c: Creature): void {
+    this.nameEl.textContent = '';
+    const name = this.names.creature(state, c);
+    this.nameEl.appendChild(document.createTextNode(name));
+    if (this.opts.canRename) {
+      this.nameEl.appendChild(this.makeEditButton(`rename ${name}`, () => this.openCreatureEditor(state, c)));
+    }
+  }
+
+  private renderRole(state: WorldState, c: Creature): void {
+    this.roleEl.textContent = '';
+    this.roleEl.appendChild(document.createTextNode(creatureRole(state, c, (id) => this.names.family(id))));
+    if (this.opts.canRename && c.familyId !== null) {
+      const fam = state.families.find((f) => f.id === c.familyId);
+      if (fam) {
+        const famDisplayName = this.names.family(fam.id);
+        this.roleEl.appendChild(
+          this.makeEditButton(`rename the ${famDisplayName} family`, () => this.openFamilyEditor(fam.id)),
+        );
+      }
+    }
+  }
+
+  private makeEditButton(label: string, onOpen: () => void): HTMLButtonElement {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = '✎';
+    btn.setAttribute('aria-label', label);
+    btn.style.cssText = [
+      'background:none', 'border:none', 'color:inherit', 'font-size:13px',
+      'opacity:.7', 'margin-left:6px', 'cursor:pointer',
+    ].join(';');
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      onOpen();
+    });
+    return btn;
+  }
+
+  private openCreatureEditor(state: WorldState, c: Creature): void {
+    this.editing = 'creature';
+    this.buildEditor(this.nameEl, this.names.data.creatures[c.id] ?? '', creatureName(state, c), (value) =>
+      this.names.setCreature(c.id, value),
+    );
+  }
+
+  private openFamilyEditor(familyId: number): void {
+    this.editing = 'family';
+    this.buildEditor(this.roleEl, this.names.data.families[familyId] ?? '', familyName(familyId), (value) =>
+      this.names.setFamily(familyId, value),
+    );
+  }
+
+  /** Replaces `container`'s content with an inline text editor: an input
+   * pre-filled with the current custom name (blank if none, placeholder
+   * shows the generated fallback), plus ✓ (save) and ✕ (cancel) buttons.
+   * Enter/✓ saves via `onSave`, Escape/✕ discards — either way `editing`
+   * clears and the card re-renders from the last-shown creature. */
+  private buildEditor(container: HTMLElement, current: string, placeholder: string, onSave: (value: string) => void): void {
+    container.textContent = '';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.maxLength = NAME_MAX;
+    input.placeholder = placeholder;
+    input.value = current;
+    input.style.cssText = 'font:inherit;width:110px;max-width:100%;';
+    // Never let the editor's keys/taps reach window-level listeners (Camera's
+    // keydown pan/zoom, DevPanel's backtick toggle, WelcomeBack's
+    // dismiss-on-pointerdown) — Camera already ignores INPUT targets, but the
+    // others don't check the target at all.
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        finish(true);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        finish(false);
+      }
+    });
+    input.addEventListener('pointerdown', (e) => e.stopPropagation());
+
+    const finish = (save: boolean): void => {
+      if (save) onSave(input.value);
+      this.editing = null;
+      if (this.lastArgs) this.show(this.lastArgs.state, this.lastArgs.c, this.lastArgs.presentation);
+    };
+
+    const okBtn = document.createElement('button');
+    okBtn.type = 'button';
+    okBtn.textContent = '✓';
+    okBtn.setAttribute('aria-label', 'save name');
+    okBtn.style.cssText = 'background:none;border:none;color:inherit;font-size:13px;opacity:.7;margin-left:4px;cursor:pointer;';
+    okBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+    okBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      finish(true);
+    });
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.textContent = '✕';
+    cancelBtn.setAttribute('aria-label', 'cancel');
+    cancelBtn.style.cssText = okBtn.style.cssText;
+    cancelBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+    cancelBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      finish(false);
+    });
+
+    container.appendChild(input);
+    container.appendChild(okBtn);
+    container.appendChild(cancelBtn);
+    input.focus();
+    input.select();
   }
 }
