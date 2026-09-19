@@ -5,16 +5,18 @@
 import { DevPanel } from './app/DevPanel';
 import { GameLoop } from './app/GameLoop';
 import { drainCatchUp, owedTicks, summarizeEvents } from './app/CatchUp';
+import { parseValleyParam, randomSeed } from './app/share';
 import { AudioEngine } from './audio/AudioEngine';
 import { CallScheduler } from './audio/CallScheduler';
 import type { BedName } from './audio/manifest';
 import { computeMix } from './audio/Mixer';
-import { loadSave, saveWorld } from './persist/store';
+import { emptyNames } from './persist/schema';
+import { loadSave, saveWorld, setSaveMeta, suppressSaves } from './persist/store';
 import { getClock, TICKS_PER_DAY } from './sim/clock';
 import { tick } from './sim/Sim';
 import { createWorld, WORLD_HEIGHT, WORLD_WIDTH, type SpeciesId } from './sim/state';
 import { SPECIES } from './sim/species';
-import { Hud } from './ui/Hud';
+import { Hud, PILL_CSS } from './ui/Hud';
 import { InspectCard } from './ui/InspectCard';
 import { showCard, showWelcomeBack } from './ui/WelcomeBack';
 import { Renderer } from './render/Renderer';
@@ -73,13 +75,21 @@ async function start(): Promise<void> {
     return; // dev-only: no sim, no HUD, no save
   }
 
+  const sharedSeed = parseValleyParam(location.search);
   const save = await loadSave();
-  const state = save ? save.sim : createWorld(1234);
+  /** A friend's link opened by someone who already has a valley: live, in memory, never saved. */
+  const visiting = sharedSeed !== null && save !== null;
+  const adopting = sharedSeed !== null && save === null;
+  const seed = sharedSeed ?? save?.seed ?? randomSeed();
+  const fresh = visiting || save === null;
+  const state = save === null || visiting ? createWorld(seed) : save.sim;
+  const names = save === null || visiting ? emptyNames() : save.names;
   /** A fresh valley opens mid-morning, not at grey dawn — first screens should be sunny. */
   const MORNING_START_TICK = Math.round(0.2 * TICKS_PER_DAY);
-  if (!save) state.tick = MORNING_START_TICK;
+  if (fresh) state.tick = MORNING_START_TICK;
+  if (visiting) suppressSaves(); else setSaveMeta({ seed, names });
   const sinceTick = state.tick;
-  const owed = save ? owedTicks(Date.now() - save.savedAtEpochMs) : 0;
+  const owed = save && !visiting ? owedTicks(Date.now() - save.savedAtEpochMs) : 0;
 
   const renderer = new Renderer();
   await renderer.init(mount);
@@ -196,11 +206,12 @@ async function start(): Promise<void> {
       renderer.renderFrame(); // single render loop — draw last, after camera/ambient updates
     },
   );
-  const devPanel = new DevPanel(state, loop, renderer);
+  const devPanel = new DevPanel(state, loop, renderer, { allowReset: !visiting });
 
   let hiddenAt: { epochMs: number; tick: number } | null = null;
   let draining = false;
   document.addEventListener('visibilitychange', () => {
+    if (visiting) return;
     if (document.visibilityState === 'hidden') {
       hiddenAt = { epochMs: Date.now(), tick: state.tick };
       void saveWorld(state, Date.now());
@@ -228,13 +239,30 @@ async function start(): Promise<void> {
   window.addEventListener('pagehide', () => void saveWorld(state, Date.now()));
 
   loop.start();
-  if (!save) {
+  if (visiting) {
+    showVisitBanner();
+  } else if (save === null) {
     showCard('Welcome to Beastoria', [
+      ...(adopting ? ['This valley came from a friend’s link — it’s yours now.'] : []),
       'A calm little valley where creature families live their lives.',
       'Drag to look around · pinch or scroll to zoom in close.',
       'Tap any creature to meet them.',
     ]);
   }
+}
+
+/** Visit mode: a friend's valley, running live but never saved over your own (spec G2 §3). */
+function showVisitBanner(): void {
+  const bar = document.createElement('div');
+  bar.style.cssText = [...PILL_CSS, 'top:12px', 'left:50%', 'transform:translateX(-50%)', 'font-size:14px', 'white-space:nowrap'].join(';');
+  bar.setAttribute('data-testid', 'visit-banner');
+  bar.append('Visiting a friend’s valley · ');
+  const back = document.createElement('a');
+  back.href = './';
+  back.textContent = '⟵ back to mine';
+  back.style.cssText = 'color:#fff;text-decoration:underline;';
+  bar.appendChild(back);
+  document.body.appendChild(bar);
 }
 
 function showBootFailure(err: unknown): void {
