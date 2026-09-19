@@ -7,7 +7,7 @@ const AUTO_DISMISS_MS = 14000;
 const FADE_MS = 400;
 
 /** No-op if `lines` is empty (nothing worth telling). */
-export function showWelcomeBack(lines: string[]): void {
+export function showCard(header: string, lines: string[]): void {
   if (lines.length === 0) return;
 
   const card = document.createElement('div');
@@ -21,10 +21,10 @@ export function showWelcomeBack(lines: string[]): void {
     'user-select:none', 'cursor:pointer',
   ].join(';');
 
-  const header = document.createElement('div');
-  header.textContent = 'While you were away…';
-  header.style.cssText = 'font-weight:bold;font-size:16px;margin:0 0 8px;';
-  card.appendChild(header);
+  const headerEl = document.createElement('div');
+  headerEl.textContent = header;
+  headerEl.style.cssText = 'font-weight:bold;font-size:16px;margin:0 0 8px;';
+  card.appendChild(headerEl);
 
   for (const line of lines) {
     const p = document.createElement('p');
@@ -53,4 +53,9 @@ export function showWelcomeBack(lines: string[]): void {
   };
   window.addEventListener('pointerdown', dismiss);
   const timer = window.setTimeout(dismiss, AUTO_DISMISS_MS);
+}
+
+/** The catch-up-specific card: same visuals as `showCard`, fixed header. */
+export function showWelcomeBack(lines: string[]): void {
+  showCard('While you were away…', lines);
 }

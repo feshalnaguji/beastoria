@@ -4,7 +4,7 @@
  */
 import { DevPanel } from './app/DevPanel';
 import { GameLoop } from './app/GameLoop';
-import { owedTicks, runCatchUp, summarizeEvents } from './app/CatchUp';
+import { drainCatchUp, owedTicks, summarizeEvents } from './app/CatchUp';
 import { AudioEngine } from './audio/AudioEngine';
 import { CallScheduler } from './audio/CallScheduler';
 import type { BedName } from './audio/manifest';
@@ -27,18 +27,38 @@ const TAP_DRAG_THRESHOLD_PX = 6;
 
 const AUTOSAVE_INTERVAL_TICKS = 300; // 30s of sim time at 1x
 
-/** Full-screen dawn overlay shown while offline catch-up drains (spec §4.6). */
-function showDawnOverlay(): HTMLDivElement {
-  const overlay = document.createElement('div');
-  overlay.style.cssText = [
+/** Full-screen catch-up overlay: text line + a thin progress bar, shown while
+ * offline catch-up drains (spec §4.6). `setProgress` updates both. */
+function showDawnOverlay(): {
+  el: HTMLDivElement;
+  setProgress: (done: number, total: number, fromDay: number, toDay: number) => void;
+} {
+  const el = document.createElement('div');
+  el.style.cssText = [
     'position:fixed', 'inset:0', 'z-index:15',
-    'display:flex', 'align-items:center', 'justify-content:center',
+    'display:flex', 'flex-direction:column', 'align-items:center', 'justify-content:center',
+    'gap:12px',
     'background:rgba(252,247,235,.92)', 'color:#3a3a2e',
     'font-family:Georgia,serif', 'font-size:18px',
   ].join(';');
-  overlay.textContent = 'A new day drifts in…';
-  document.body.appendChild(overlay);
-  return overlay;
+
+  const text = document.createElement('div');
+  el.appendChild(text);
+
+  const track = document.createElement('div');
+  track.style.cssText = 'width:240px;height:4px;background:rgba(58,74,51,.15);border-radius:2px;overflow:hidden;';
+  const bar = document.createElement('div');
+  bar.style.cssText = 'width:0%;height:100%;background:#87a96b;';
+  track.appendChild(bar);
+  el.appendChild(track);
+
+  document.body.appendChild(el);
+
+  const setProgress = (done: number, total: number, fromDay: number, toDay: number): void => {
+    text.textContent = `Catching up with the valley… Day ${fromDay} → Day ${toDay}`;
+    bar.style.width = `${total > 0 ? Math.min(100, (100 * done) / total) : 100}%`;
+  };
+  return { el, setProgress };
 }
 
 async function start(): Promise<void> {
@@ -51,7 +71,7 @@ async function start(): Promise<void> {
   const MORNING_START_TICK = Math.round(0.2 * TICKS_PER_DAY);
   if (!save) state.tick = MORNING_START_TICK;
   const sinceTick = state.tick;
-  let owed = save ? owedTicks(Date.now() - save.savedAtEpochMs) : 0;
+  const owed = save ? owedTicks(Date.now() - save.savedAtEpochMs) : 0;
 
   const renderer = new Renderer();
   await renderer.init(mount);
@@ -71,27 +91,10 @@ async function start(): Promise<void> {
   // and the welcome card reflects a settled, post-catch-up state.
   if (owed > 0) {
     const overlay = showDawnOverlay();
-    // Fail open: a throw inside runCatchUp must never strand the player on a
-    // frozen overlay. Every exit from drain() — normal completion or error —
-    // resolves the promise, so the await below always settles and boot
-    // continues with whatever (still-valid) state was reached.
-    await new Promise<void>((resolve) => {
-      const drain = (): void => {
-        try {
-          const res = runCatchUp(state, owed, 8, () => performance.now());
-          owed -= res.ticksRun;
-          if (!res.done && owed > 0) {
-            requestAnimationFrame(drain);
-            return;
-          }
-        } catch (err) {
-          console.warn('[catchup] aborted:', err);
-        }
-        resolve();
-      };
-      drain();
-    });
-    overlay.remove();
+    const fromDay = getClock(state.tick).day;
+    const toDay = getClock(state.tick + owed).day;
+    await drainCatchUp(state, owed, (d, t) => overlay.setProgress(d, t, fromDay, toDay));
+    overlay.el.remove();
     renderer.sync(state);
     showWelcomeBack(summarizeEvents(state.eventLog, sinceTick));
   }
@@ -188,8 +191,29 @@ async function start(): Promise<void> {
   );
   const devPanel = new DevPanel(state, loop, renderer);
 
+  let hiddenAt: { epochMs: number; tick: number } | null = null;
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') void saveWorld(state, Date.now());
+    if (document.visibilityState === 'hidden') {
+      hiddenAt = { epochMs: Date.now(), tick: state.tick };
+      void saveWorld(state, Date.now());
+      return;
+    }
+    if (!hiddenAt) return;
+    const { epochMs, tick: tickAtHide } = hiddenAt;
+    hiddenAt = null;
+    // The throttled loop already ran some ticks while hidden; only the shortfall is owed.
+    const owedNow = Math.max(0, owedTicks(Date.now() - epochMs) - (state.tick - tickAtHide));
+    if (owedNow < 50) return; // a quick tab-flip — nothing worth a ceremony
+    loop.stop();
+    const overlay = showDawnOverlay();
+    const fromDay = getClock(state.tick).day;
+    const toDay = getClock(state.tick + owedNow).day;
+    void drainCatchUp(state, owedNow, (d, t) => overlay.setProgress(d, t, fromDay, toDay)).then(() => {
+      overlay.el.remove();
+      renderer.sync(state);
+      showWelcomeBack(summarizeEvents(state.eventLog, tickAtHide));
+      loop.start();
+    });
   });
   window.addEventListener('pagehide', () => void saveWorld(state, Date.now()));
 

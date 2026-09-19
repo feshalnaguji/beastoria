@@ -127,3 +127,30 @@ describe('summarizeEvents', () => {
     expect(lines[5]).toBe('…and 3 other little happenings.');
   });
 });
+
+describe('summarizeEvents ranking', () => {
+  it('puts births before house-moves and groups repeats', () => {
+    const events: SimEvent[] = [
+      { kind: 'nested', tick: 100, species: 'rabbit' },
+      { kind: 'nested', tick: 101, species: 'deer' },
+      { kind: 'nested', tick: 102, species: 'rabbit' },
+      { kind: 'nested', tick: 103, species: 'rabbit' },
+      { kind: 'nested', tick: 104, species: 'duck' },
+      { kind: 'nested', tick: 105, species: 'owl' },
+      { kind: 'born', tick: 900, species: 'rabbit', count: 3 },
+      { kind: 'born', tick: 950, species: 'rabbit', count: 2 },
+    ];
+    const lines = summarizeEvents(events, 60);
+    expect(lines[0]).toBe('5 little rabbits were born');
+    expect(lines).toContain('3 rabbit families settled into new homes');
+    expect(lines.length).toBeLessThanOrEqual(6);
+  });
+  it('tail counts hidden events, not hidden lines', () => {
+    const events: SimEvent[] = Array.from({ length: 9 }, (_, i) => ({
+      kind: 'nested' as const, tick: 100 + i, species: (['rabbit','deer','duck','owl','koi','frog','robin','dodo','turtle'] as const)[i]!,
+    }));
+    const lines = summarizeEvents(events, 60);
+    expect(lines.length).toBe(6);
+    expect(lines[5]).toBe('…and 4 other little happenings.');
+  });
+});
