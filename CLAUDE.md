@@ -153,7 +153,7 @@ v1 (two open tabs overwrite each other's timeline harmlessly).
   card, 🐾 guide pill, first-run hint card, audio preload after first
   gesture, keyboard camera (arrows, +/−), boot-failure card, playable
   creature recordings on species pages, real-rig PNG portraits via the
-  dev `?portrait=` route, "little one" wording; 252 tests).
+  dev `?portrait=` route, "little one" wording; 253 tests).
 - **Status: M13 complete and deployed (2026-08-22), still awaiting the
   user's live review** — all four M13 threads above are implemented,
   tested (full suite incl. the 6-seed + 100-day-soak balance property
