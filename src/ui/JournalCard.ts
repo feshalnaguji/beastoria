@@ -97,7 +97,11 @@ function renderList(card: HTMLDivElement, view: JournalView): void {
     title.textContent = `${EMOJI[page.species] ?? '🐾'} The ${view.familyName(page.familyId)} family`;
     title.style.fontWeight = 'bold';
     const sub = document.createElement('div');
-    sub.textContent = `${little} little ${little === 1 ? 'one' : 'ones'} · ${grown} grown`;
+    // A family with no little ones yet shows its latest moment instead of a row of zeros.
+    const latest = page.entries[page.entries.length - 1];
+    sub.textContent = little > 0 || !latest
+      ? `${little} little ${little === 1 ? 'one' : 'ones'} · ${grown} grown`
+      : entryText(latest, view.creatureName);
     sub.style.cssText = 'font-size:12px;opacity:.75;';
     row.append(title, sub);
     row.addEventListener('click', () => renderPage(card, view, page));

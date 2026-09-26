@@ -130,3 +130,16 @@ describe('journal storage', () => {
     expect(entryText(out.pages[1]!.entries[0]!, keep)).toBe('A and B became a pair');
   });
 });
+
+describe('journal names', () => {
+  it('keeps the name a page first used for a creature, even if its generated name shifts', () => {
+    const j = emptyJournal();
+    addEntry(j, 1, 'rabbit', { tick: 1, kind: 'paired', pairIds: [10, 11], pairNames: ['Meadow', 'Wren'] });
+    addEntry(j, 1, 'rabbit', { tick: 2, kind: 'growing', creatureId: 12, name: 'Feather' });
+    addEntry(j, 1, 'rabbit', { tick: 3, kind: 'grown', creatureId: 12, name: 'Acorn' });
+    addEntry(j, 1, 'rabbit', { tick: 4, kind: 'elder', creatureId: 11, name: 'Briar' });
+    expect(texts(j)).toEqual([
+      'Meadow and Wren became a pair', 'Feather is growing up', 'Feather is all grown up', 'Wren is an elder now',
+    ]);
+  });
+});

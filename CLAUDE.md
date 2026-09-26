@@ -67,7 +67,7 @@ never new art) · `src/audio/` (Web Audio bus graph, zoom mixer, CallScheduler c
 'vocalize' events) · `src/persist/` (idb-keyval, versioned SaveFile = WorldState passthrough,
 migration chain) · `src/ui/` (vanilla TS HUD, WelcomeBack).
 
-`SaveFile` v2 = `{ version, savedAtEpochMs, seed, names, sim }`; `seed`/`names` are app/persist
+`SaveFile` v3 = `{ version, savedAtEpochMs, seed, names, journal, sim }`; `seed`/`names`/`journal` are app/persist
 concerns fed through `setSaveMeta()` — never part of `WorldState`.
 
 Other invariants: creatures iterated in array order (determinism); cosmetic RNG is a separate
@@ -168,7 +168,17 @@ v1 (two open tabs overwrite each other's timeline harmlessly).
   pills and DevPanel hidden, tap-to-start after reload or lost fullscreen,
   hold-🔒-3s + multiplication gate with a 3-strike 30 s cooldown, gentle
   play timer (visible time only, survives reloads) ending on a calm sleep
-  screen; state in localStorage `beastoria.child`, not the save; 272 tests).
+  screen; state in localStorage `beastoria.child`, not the save; 272 tests), G4 (Return
+  rhythm, 2026-09-26: real-calendar seasons — hemisphere from the IANA time zone, no
+  location — repaint the baked valley (spring/summer/autumn/winter palettes, same RNG
+  draw order) with drifting petals/leaves/snow on a separate cosmetic stream, real full
+  moons brighten the night with a moon in the sky, season + 🌕 in the clock pill, a
+  one-time "season has come" card for returning players (`beastoria.season` in
+  localStorage); a family-storybook journal (📖 pill, kept in child mode, hidden when
+  visiting) recorded by the app-layer `JournalRecorder` observer — pairing, home,
+  eggs/births, growing up, setting off, elders, gentle passings, phoenix rebirth —
+  capped at 60 families × 40 entries; save v3 carries it; `?season=`/`?moon=full`
+  preview overrides; 286 tests).
 - **Status: M13 complete and deployed (2026-08-22), still awaiting the
   user's live review** — all four M13 threads above are implemented,
   tested (full suite incl. the 6-seed + 100-day-soak balance property
@@ -190,6 +200,9 @@ v1 (two open tabs overwrite each other's timeline harmlessly).
   save over newer-version saves, protecting every future version bump).
   **G3 (Child mode) merged to main and deployed (2026-09-26)**, awaiting the
   user's live review. Not device-tested: tablet Guided Access / App pinning copy.
+  **G4 (Return rhythm) merged to main and deployed (2026-09-26)**, awaiting the
+  user's live review. Known limit: a very long catch-up can outrun the 500-entry
+  event log, so the journal may miss a few moments from deep offline stretches.
 - **M14 candidates (deferred out of M13 scope, per the user's own decision
   recorded in this milestone's plan):** (1) feeding still reads as one
   mechanism tuned per species rather than each species' real behavior — not
@@ -238,8 +251,9 @@ deliberately so ads don't feel intrusive. Tracked as its own G-series in
 this track. **G1 (Findable)** is built and deployed (see Current status above), awaiting the user's live review.
 **G2 (Shareable)** — seed/world-link sharing, naming — is built (see Current status above),
 merged and deployed, awaiting the user's live review. **G3** (child mode) is built (spec
-`docs/superpowers/specs/2026-09-26-g3-child-mode-design.md`). **G4** (return rhythm) is next,
-pending its own `superpowers:brainstorming` session. One decision from G1's brainstorm binds all later
+`docs/superpowers/specs/2026-09-26-g3-child-mode-design.md`). **G4** (return rhythm) is built (spec
+`docs/superpowers/specs/2026-09-26-g4-return-rhythm-design.md`). That completes the planned G1–G4 track; ads stay paper-only until
+their prerequisites (custom domain, traffic, approved account) are met. One decision from G1's brainstorm binds all later
 ad work and is worth keeping visible: **contextual-only ads, zero tracking** — the child-directed
 content + ads combination is a regulated one (COPPA and equivalents), so no behavioral/remarketing
 ads or personal-data collection, full stop.

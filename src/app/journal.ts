@@ -61,6 +61,12 @@ export function addEntry(journal: Journal, familyId: number, species: SpeciesId,
     page = { familyId, species, firstTick: entry.tick, lastTick: entry.tick, entries: [] };
     journal.pages.push(page);
   }
+  // Generated names follow family position, so a little one can be renamed when a
+  // sibling leaves — keep the name this page first used for them, so it reads as one story.
+  if (entry.creatureId !== undefined) {
+    const known = pageNameFor(page, entry.creatureId);
+    if (known !== undefined) entry.name = known;
+  }
   page.entries.push(entry);
   if (page.entries.length > MAX_ENTRIES) page.entries.splice(0, page.entries.length - MAX_ENTRIES);
   page.lastTick = Math.max(page.lastTick, entry.tick);
@@ -73,6 +79,15 @@ export function addEntry(journal: Journal, familyId: number, species: SpeciesId,
     }
     journal.pages.splice(oldest, 1);
   }
+}
+
+function pageNameFor(page: FamilyPage, id: number): string | undefined {
+  for (const e of page.entries) {
+    if (e.creatureId === id && e.name !== undefined) return e.name;
+    const i = e.pairIds?.indexOf(id) ?? -1;
+    if (i !== -1 && e.pairNames?.[i] !== undefined) return e.pairNames[i];
+  }
+  return undefined;
 }
 
 /** Whatever a save holds, return a valid journal (bad pages/entries are dropped, caps applied). */
