@@ -166,4 +166,17 @@ describe('summarizeEvents ranking', () => {
     expect(lines.length).toBe(6);
     expect(lines[5]).toBe('…and 4 other little happenings.');
   });
+
+  it('uses a family\'s custom name when a single event is theirs', () => {
+    const events: SimEvent[] = [
+      { kind: 'nested', tick: 100, species: 'rabbit', familyId: 7 },
+      { kind: 'born', tick: 200, species: 'rabbit', familyId: 7, count: 3 },
+      { kind: 'nested', tick: 300, species: 'deer', familyId: 8 },
+    ];
+    const lines = summarizeEvents(events, 60, (id) => (id === 7 ? 'Sunny' : undefined));
+    expect(lines).toContain('the Sunny family welcomed 3 little rabbits');
+    expect(lines).toContain('the Sunny family settled into a new home');
+    expect(lines).toContain('a deer family settled into a new home');
+    expect(summarizeEvents(events, 60)).toContain('3 little rabbits were born'); // no resolver → unchanged
+  });
 });

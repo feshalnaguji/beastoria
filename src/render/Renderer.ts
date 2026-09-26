@@ -450,6 +450,9 @@ const TINT_RAMP: [number, number][] = [
 ];
 
 export class Renderer {
+  /** Hook for NameBook-resolved family names (G2 task 3) — defaults to the
+   * generated fallback so tests/callers that never set it keep working. */
+  familyDisplayName: (id: number) => string = familyName;
   private app!: Application;
   private world!: Container;
   private camera!: Camera;
@@ -585,6 +588,24 @@ export class Renderer {
 
   get canvas(): HTMLCanvasElement {
     return this.app.canvas;
+  }
+
+  /** The current frame as a canvas (Pixi extract), for the share postcard.
+   * `extract.canvas(this.app.stage)` alone captures the stage's full bounds
+   * (the whole world), not just what's on screen — the postcard would show
+   * dark bands for off-screen world. `frame` restricts extraction to the
+   * viewport: it's in the target's local/world coordinates, and for the
+   * stage that's CSS pixels of the screen (0,0 to renderer width/height
+   * divided by resolution, since width/height are device pixels). */
+  snapshot(): HTMLCanvasElement {
+    const resolution = this.app.renderer.resolution;
+    const w = this.app.renderer.width / resolution;
+    const h = this.app.renderer.height / resolution;
+    return this.app.renderer.extract.canvas({
+      target: this.app.stage,
+      frame: new Rectangle(0, 0, w, h),
+      resolution,
+    }) as HTMLCanvasElement;
   }
 
   centerOn(x: number, y: number, zoom?: number): void {
@@ -1153,7 +1174,7 @@ export class Renderer {
         this.homeLabels.set(home.id, label);
         this.homeLabelLayer.addChild(label);
       }
-      label.text = `The ${familyName(fam.id)} family`;
+      label.text = `The ${this.familyDisplayName(fam.id)} family`;
       label.position.set(home.pos.x, home.pos.y - 34);
       this.homeLabelPos.set(home.id, home.pos);
     }

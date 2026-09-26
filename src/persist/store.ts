@@ -4,7 +4,7 @@
  */
 import { del, get, set } from 'idb-keyval';
 import { migrate } from './migrations';
-import { SAVE_VERSION, type SaveFile } from './schema';
+import { emptyNames, LEGACY_SEED, SAVE_VERSION, type SaveFile, type SaveNames } from './schema';
 import type { WorldState } from '../sim/state';
 
 const SAVE_KEY = 'beastoria.save';
@@ -29,11 +29,21 @@ export function resumeSaves(): void {
 let warnedSave = false;
 let warnedLoad = false;
 
+export interface SaveMeta { seed: number; names: SaveNames }
+let meta: SaveMeta = { seed: LEGACY_SEED, names: emptyNames() };
+/** Boot calls this once; the `names` object is shared with the NameBook and read live at each save. */
+export function setSaveMeta(m: SaveMeta): void {
+  meta = m;
+}
+
 export async function saveWorld(state: WorldState, nowMs: number): Promise<void> {
   if (suppressed) return;
   const file: SaveFile = {
     version: SAVE_VERSION,
     savedAtEpochMs: nowMs,
+    seed: meta.seed,
+    // Snapshot at save time — detached from the live, still-mutating names object.
+    names: JSON.parse(JSON.stringify(meta.names)) as SaveNames,
     // Structured clone via JSON keeps the stored value detached from the live sim.
     sim: JSON.parse(JSON.stringify(state)) as WorldState,
   };
@@ -49,7 +59,23 @@ export async function saveWorld(state: WorldState, nowMs: number): Promise<void>
 
 export async function loadSave(): Promise<SaveFile | null> {
   try {
-    return migrate(await get(SAVE_KEY));
+    const raw = await get(SAVE_KEY);
+    // A save from a newer Beastoria (version > this build's SAVE_VERSION):
+    // migrate() already refuses to walk it forward and returns null, but
+    // silently doing so would let this session's next autosave overwrite it
+    // with a brand-new, older-shaped world — destroying the newer save.
+    // Disable saving for the rest of this session instead, so opening an
+    // old build against a newer save is a read-only no-op, not data loss.
+    if (
+      typeof raw === 'object' && raw !== null &&
+      typeof (raw as { version?: unknown }).version === 'number' &&
+      (raw as { version: number }).version > SAVE_VERSION
+    ) {
+      suppressSaves();
+      console.warn('[persist] save is from a newer Beastoria; saving disabled this session to protect it');
+      return null;
+    }
+    return migrate(raw);
   } catch (err) {
     if (!warnedLoad) {
       warnedLoad = true;

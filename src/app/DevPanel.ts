@@ -26,6 +26,7 @@ export class DevPanel {
     private readonly state: WorldState,
     private readonly loop: GameLoop,
     private readonly renderer: Renderer,
+    private readonly opts: { allowReset?: boolean } = {},
   ) {
     this.root = document.createElement('div');
     this.root.style.cssText = [
@@ -51,17 +52,19 @@ export class DevPanel {
     });
     buttons.appendChild(labelToggle);
 
-    const resetButton = document.createElement('button');
-    resetButton.textContent = '🌱 reset valley';
-    resetButton.style.cssText = 'font:12px monospace;cursor:pointer;margin-left:6px;';
-    resetButton.addEventListener('click', () => {
-      // Suppress saves first: location.reload() fires visibilitychange/pagehide
-      // on the way out, and those handlers would otherwise re-persist the
-      // world we're about to clear (see src/persist/store.ts suppressSaves).
-      suppressSaves();
-      void clearSave().then(() => location.reload());
-    });
-    buttons.appendChild(resetButton);
+    if (this.opts.allowReset !== false) {
+      const resetButton = document.createElement('button');
+      resetButton.textContent = '🌱 reset valley';
+      resetButton.style.cssText = 'font:12px monospace;cursor:pointer;margin-left:6px;';
+      resetButton.addEventListener('click', () => {
+        // Suppress saves first: location.reload() fires visibilitychange/pagehide
+        // on the way out, and those handlers would otherwise re-persist the
+        // world we're about to clear (see src/persist/store.ts suppressSaves).
+        suppressSaves();
+        void clearSave().then(() => location.reload());
+      });
+      buttons.appendChild(resetButton);
+    }
 
     this.root.appendChild(buttons);
 

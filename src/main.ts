@@ -5,17 +5,22 @@
 import { DevPanel } from './app/DevPanel';
 import { GameLoop } from './app/GameLoop';
 import { drainCatchUp, owedTicks, summarizeEvents } from './app/CatchUp';
+import { formatValleyUrl, parseValleyParam, randomSeed } from './app/share';
 import { AudioEngine } from './audio/AudioEngine';
 import { CallScheduler } from './audio/CallScheduler';
 import type { BedName } from './audio/manifest';
 import { computeMix } from './audio/Mixer';
-import { loadSave, saveWorld } from './persist/store';
+import { emptyNames } from './persist/schema';
+import { loadSave, saveWorld, setSaveMeta, suppressSaves } from './persist/store';
 import { getClock, TICKS_PER_DAY } from './sim/clock';
 import { tick } from './sim/Sim';
 import { createWorld, WORLD_HEIGHT, WORLD_WIDTH, type SpeciesId } from './sim/state';
 import { SPECIES } from './sim/species';
-import { Hud } from './ui/Hud';
+import { Hud, PILL_CSS } from './ui/Hud';
 import { InspectCard } from './ui/InspectCard';
+import { NameBook } from './ui/names';
+import { buildPostcard, canvasToPng } from './ui/postcard';
+import { showShareCard } from './ui/ShareCard';
 import { showCard, showWelcomeBack } from './ui/WelcomeBack';
 import { Renderer } from './render/Renderer';
 import { renderPortraitStudio } from './app/PortraitStudio';
@@ -73,16 +78,36 @@ async function start(): Promise<void> {
     return; // dev-only: no sim, no HUD, no save
   }
 
+  const sharedSeed = parseValleyParam(location.search);
   const save = await loadSave();
-  const state = save ? save.sim : createWorld(1234);
+  // A `?valley=` link pointing at the exact seed already saved on this
+  // device is neither a visit nor an adoption — it's the child's own valley
+  // (e.g. their own share link, reopened). Only a *different* seed than the
+  // existing save counts as visiting someone else's.
+  const ownValley = sharedSeed !== null && save !== null && sharedSeed === save.seed;
+  /** A friend's link opened by someone who already has a different valley: live, in memory, never saved. */
+  const visiting = sharedSeed !== null && save !== null && sharedSeed !== save.seed;
+  const adopting = sharedSeed !== null && save === null;
+  // Strip `?valley=` once its one-time job (adopt / no-op own-valley
+  // recognition) is done, so a reload doesn't re-enter the link path — e.g.
+  // re-adopting on every refresh, or drifting `visiting` back to true if the
+  // save is later cleared.
+  if (adopting || ownValley) history.replaceState(null, '', location.pathname);
+  const seed = sharedSeed ?? save?.seed ?? randomSeed();
+  const fresh = visiting || save === null;
+  const state = save === null || visiting ? createWorld(seed) : save.sim;
+  const names = save === null || visiting ? emptyNames() : save.names;
+  const nameBook = new NameBook(names);
   /** A fresh valley opens mid-morning, not at grey dawn — first screens should be sunny. */
   const MORNING_START_TICK = Math.round(0.2 * TICKS_PER_DAY);
-  if (!save) state.tick = MORNING_START_TICK;
+  if (fresh) state.tick = MORNING_START_TICK;
+  if (visiting) suppressSaves(); else setSaveMeta({ seed, names });
   const sinceTick = state.tick;
-  const owed = save ? owedTicks(Date.now() - save.savedAtEpochMs) : 0;
+  const owed = save && !visiting ? owedTicks(Date.now() - save.savedAtEpochMs) : 0;
 
   const renderer = new Renderer();
   await renderer.init(mount);
+  renderer.familyDisplayName = (id) => nameBook.family(id);
   renderer.sync(state); // initial snapshot so frame 0 has positions
 
   renderer.centerOn(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 0.21); // as far out as the min-zoom floor allows (whole valley where the viewport fits it)
@@ -92,6 +117,15 @@ async function start(): Promise<void> {
   window.addEventListener('pointerdown', () => audio.unlock(), { once: true });
   const hud = new Hud(audio);
   hud.setClock(getClock(state.tick)); // render the clock pill immediately, don't wait ~100ms for the first sim tick
+  hud.onShare = () => {
+    const day = getClock(state.tick).day;
+    const url = formatValleyUrl(seed);
+    showShareCard({
+      url,
+      day,
+      postcard: () => canvasToPng(buildPostcard(renderer.snapshot(), `Beastoria · Day ${day}`, url.replace(/^https?:\/\//, ''))),
+    });
+  };
 
   // Offline catch-up (spec §4.6): drain owed ticks under a dawn overlay before
   // the live loop starts, so vocalizations from unobserved ticks stay unheard
@@ -103,7 +137,7 @@ async function start(): Promise<void> {
     await drainCatchUp(state, owed, (d, t) => overlay.setProgress(d, t, fromDay, toDay));
     overlay.el.remove();
     renderer.sync(state);
-    showWelcomeBack(summarizeEvents(state.eventLog, sinceTick));
+    showWelcomeBack(summarizeEvents(state.eventLog, sinceTick, (id) => nameBook.customFamily(id)));
   }
 
   // Tap-to-inspect (M10 task 5): available always, not just in the DevPanel.
@@ -113,7 +147,7 @@ async function start(): Promise<void> {
   // one showing it, so the tick loop below can tell "still selected, just
   // update the text" apart from "gone — renderer.sync() already cleared
   // selectedId for us, now hide the card" without racing that clear.
-  const inspectCard = new InspectCard(() => dismissInspect());
+  const inspectCard = new InspectCard(() => dismissInspect(), nameBook, { canRename: !visiting });
   let inspectedId: number | null = null;
   function dismissInspect(): void {
     renderer.selectedId = null;
@@ -151,6 +185,7 @@ async function start(): Promise<void> {
       inspectCard.show(state, picked, renderer.presentationFor(picked.id));
       inspectedId = picked.id;
     } else {
+      if (inspectCard.isEditing()) return; // a stray tap must not abandon an open editor
       dismissInspect(); // tap on empty ground dismisses both card and follow
     }
   });
@@ -187,6 +222,7 @@ async function start(): Promise<void> {
       ticksSinceSave++;
       if (ticksSinceSave >= AUTOSAVE_INTERVAL_TICKS) {
         ticksSinceSave = 0;
+        nameBook.prune(state);
         void saveWorld(state, Date.now());
       }
     },
@@ -196,13 +232,15 @@ async function start(): Promise<void> {
       renderer.renderFrame(); // single render loop — draw last, after camera/ambient updates
     },
   );
-  const devPanel = new DevPanel(state, loop, renderer);
+  const devPanel = new DevPanel(state, loop, renderer, { allowReset: !visiting });
 
   let hiddenAt: { epochMs: number; tick: number } | null = null;
   let draining = false;
   document.addEventListener('visibilitychange', () => {
+    if (visiting) return;
     if (document.visibilityState === 'hidden') {
       hiddenAt = { epochMs: Date.now(), tick: state.tick };
+      nameBook.prune(state);
       void saveWorld(state, Date.now());
       return;
     }
@@ -221,20 +259,48 @@ async function start(): Promise<void> {
     void drainCatchUp(state, owedNow, (d, t) => overlay.setProgress(d, t, fromDay, toDay)).then(() => {
       overlay.el.remove();
       renderer.sync(state);
-      showWelcomeBack(summarizeEvents(state.eventLog, tickAtHide));
+      showWelcomeBack(summarizeEvents(state.eventLog, tickAtHide, (id) => nameBook.customFamily(id)));
     }).catch((err) => console.warn('[catchup] resume after error:', err))
       .finally(() => { draining = false; loop.start(); });
   });
-  window.addEventListener('pagehide', () => void saveWorld(state, Date.now()));
+  window.addEventListener('pagehide', () => {
+    nameBook.prune(state);
+    void saveWorld(state, Date.now());
+  });
 
   loop.start();
-  if (!save) {
+  if (visiting) {
+    showVisitBanner();
+  } else if (save === null) {
     showCard('Welcome to Beastoria', [
+      ...(adopting ? ['This valley came from a friend’s link — it’s yours now.'] : []),
       'A calm little valley where creature families live their lives.',
       'Drag to look around · pinch or scroll to zoom in close.',
       'Tap any creature to meet them.',
     ]);
   }
+}
+
+/** Visit mode: a friend's valley, running live but never saved over your own (spec G2 §3). */
+function showVisitBanner(): void {
+  const bar = document.createElement('div');
+  // Sits below the whole HUD column (clock/creatures/share pills end ~130px)
+  // rather than between the top-corner pills: at 375px only ~120px is free
+  // between the clock and sound pills, which forced a 3-4 line banner that
+  // still collided with the sound chip.
+  bar.style.cssText = [
+    ...PILL_CSS, 'top:140px', 'left:50%', 'transform:translateX(-50%)',
+    'max-width:calc(100% - 24px)', 'box-sizing:border-box', 'font-size:13px',
+    'white-space:normal', 'text-align:center',
+  ].join(';');
+  bar.setAttribute('data-testid', 'visit-banner');
+  bar.append('Visiting a friend’s valley · ');
+  const back = document.createElement('a');
+  back.href = './';
+  back.textContent = '⟵ back to mine';
+  back.style.cssText = 'color:#fff;text-decoration:underline;';
+  bar.appendChild(back);
+  document.body.appendChild(bar);
 }
 
 function showBootFailure(err: unknown): void {

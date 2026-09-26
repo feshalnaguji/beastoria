@@ -7,9 +7,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { tick } from '../src/sim/Sim';
 import { createWorld, spawnCreature, type Family, type WorldState } from '../src/sim/state';
 import { migrate } from '../src/persist/migrations';
-import { SAVE_VERSION } from '../src/persist/schema';
-import { clearSave, loadSave, resumeSaves, saveWorld, suppressSaves } from '../src/persist/store';
+import { LEGACY_SEED, SAVE_VERSION, type SaveNames } from '../src/persist/schema';
+import { clearSave, loadSave, resumeSaves, saveWorld, setSaveMeta, suppressSaves } from '../src/persist/store';
 import fixtureV1 from './fixtures/save-v1.json';
+import fixtureV2 from './fixtures/save-v2.json';
 
 function runTicks(state: ReturnType<typeof createWorld>, n: number): void {
   for (let i = 0; i < n; i++) tick(state, []);
@@ -463,6 +464,16 @@ describe('migrations', () => {
     await set('beastoria.save', { junk: true });
     expect(await loadSave()).toBeNull();
   });
+
+  it('a save from a newer Beastoria disables saving this session rather than being overwritten', async () => {
+    const { get, set } = await import('idb-keyval');
+    await set('beastoria.save', { ...fixtureV2, version: 99 });
+    expect(await loadSave()).toBeNull();
+    await saveWorld(createWorld(1), 1);
+    const stillStored = (await get('beastoria.save')) as { version: number };
+    expect(stillStored.version).toBe(99);
+    resumeSaves();
+  });
 });
 
 // Regression for the reset-resurrection race: DevPanel's reset button calls
@@ -476,5 +487,50 @@ describe('suppressSaves latch', () => {
     await saveWorld(createWorld(1), 0);
     expect(await loadSave()).toBeNull();
     resumeSaves();
+  });
+});
+
+describe('save v2: seed + names', () => {
+  it('migrates a v1 save by stamping the legacy seed and empty names', () => {
+    const save = migrate(JSON.parse(JSON.stringify(fixtureV1)));
+    expect(save?.version).toBe(SAVE_VERSION);
+    expect(save?.seed).toBe(LEGACY_SEED);
+    expect(save?.names).toEqual({ creatures: {}, families: {} });
+  });
+
+  // Controller ruling (amends the brief's original "unchanged" assertion):
+  // migrate() runs defensive passes (carriedBy normalisation, lastWandererTick
+  // default, etc.) that can ADD fields to a raw fixture copy, so a direct
+  // `toEqual(fixtureV2)` isn't guaranteed. Assert idempotence instead: the
+  // fixture migrates to a well-formed v2 save, and migrating that result
+  // again changes nothing further.
+  it('is idempotent on the frozen v2 fixture', () => {
+    const once = migrate(JSON.parse(JSON.stringify(fixtureV2)));
+    expect(once?.version).toBe(SAVE_VERSION);
+    expect(once?.seed).toBe(LEGACY_SEED);
+    expect(once?.names).toEqual({ creatures: {}, families: {} });
+    const twice = migrate(JSON.parse(JSON.stringify(once)));
+    expect(twice).toEqual(once);
+  });
+
+  it('defaults a tampered v2 save that lost seed/names', () => {
+    const raw = JSON.parse(JSON.stringify(fixtureV2)) as Record<string, unknown>;
+    delete raw.seed;
+    raw.names = { creatures: { 1: 42, 2: 'ok' } }; // non-string entry, missing families
+    const save = migrate(raw);
+    expect(save?.seed).toBe(LEGACY_SEED);
+    expect(save?.names).toEqual({ creatures: { 2: 'ok' }, families: {} });
+  });
+
+  it('round-trips seed and names through saveWorld/loadSave', async () => {
+    const state = createWorld(7);
+    const names: SaveNames = { creatures: { 5: 'Biscuit' }, families: { 3: 'Sunny' } };
+    setSaveMeta({ seed: 0xdeadbeef, names });
+    await saveWorld(state, 1000);
+    const loaded = await loadSave();
+    expect(loaded?.seed).toBe(0xdeadbeef);
+    expect(loaded?.names).toEqual(names);
+    names.creatures[9] = 'Later'; // saved copy must be detached from the live object
+    expect((await loadSave())?.names.creatures[9]).toBeUndefined();
   });
 });
