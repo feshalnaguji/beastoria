@@ -11,6 +11,8 @@ import { LEGACY_SEED, SAVE_VERSION, type SaveNames } from '../src/persist/schema
 import { clearSave, loadSave, resumeSaves, saveWorld, setSaveMeta, suppressSaves } from '../src/persist/store';
 import fixtureV1 from './fixtures/save-v1.json';
 import fixtureV2 from './fixtures/save-v2.json';
+import fixtureV3 from './fixtures/save-v3.json';
+import type { Journal } from '../src/app/journal';
 
 function runTicks(state: ReturnType<typeof createWorld>, n: number): void {
   for (let i = 0; i < n; i++) tick(state, []);
@@ -532,5 +534,33 @@ describe('save v2: seed + names', () => {
     expect(loaded?.names).toEqual(names);
     names.creatures[9] = 'Later'; // saved copy must be detached from the live object
     expect((await loadSave())?.names.creatures[9]).toBeUndefined();
+  });
+});
+
+describe('save v3: journal', () => {
+  it('migrates a v2 save with an empty journal and accepts the frozen v3 fixture', () => {
+    const fromV2 = migrate(JSON.parse(JSON.stringify(fixtureV2)));
+    expect(fromV2?.version).toBe(SAVE_VERSION);
+    expect(fromV2?.journal).toEqual({ pages: [] });
+    const once = migrate(JSON.parse(JSON.stringify(fixtureV3)));
+    expect(once?.version).toBe(3);
+    expect(once?.journal).toEqual({ pages: [] });
+    expect(migrate(JSON.parse(JSON.stringify(once)))).toEqual(once);
+  });
+
+  it('sanitizes a tampered journal instead of rejecting the save', () => {
+    const raw = JSON.parse(JSON.stringify(fixtureV3));
+    raw.journal = { pages: [{ familyId: 'x' }, { familyId: 4, species: 'rabbit', entries: [{ tick: 1, kind: 'nested' }] }] };
+    const save = migrate(raw);
+    expect(save?.journal.pages.map((p) => p.familyId)).toEqual([4]);
+  });
+
+  it('round-trips the journal through saveWorld/loadSave, detached from the live object', async () => {
+    const journal: Journal = { pages: [{ familyId: 3, species: 'robin', firstTick: 1, lastTick: 2, entries: [{ tick: 2, kind: 'hatched', count: 2 }] }] };
+    setSaveMeta({ seed: 42, names: { creatures: {}, families: {} }, journal });
+    await saveWorld(createWorld(5), 1000);
+    journal.pages[0]!.entries.push({ tick: 9, kind: 'nested' });
+    const loaded = await loadSave();
+    expect(loaded?.journal.pages[0]!.entries).toEqual([{ tick: 2, kind: 'hatched', count: 2 }]);
   });
 });

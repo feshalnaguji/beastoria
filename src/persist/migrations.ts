@@ -8,6 +8,7 @@ import type { HomeKind, Vec2, WorldState } from '../sim/state';
 import { DREY_SITES, FROG_SPAWN_CLUMPS, TURTLE_SAND_NESTS, SHADE_SCRAPES } from '../sim/valley';
 import { isMourningGather, GATHER_MAX_TICKS } from '../sim/behaviors';
 import { SPECIES } from '../sim/species';
+import { emptyJournal, sanitizeJournal } from '../app/journal';
 
 /**
  * M10 added three home kinds (drey/spawnClump/sandNest) but SAVE_VERSION
@@ -37,6 +38,8 @@ const NEW_HOME_SITE_GROUPS: [HomeKind, Vec2[]][] = [
 const STEPS: Record<number, (save: SaveFile) => SaveFile> = {
   // v1 → v2 (G2): every v1 valley was created from LEGACY_SEED; names start empty.
   1: (save) => ({ ...save, version: 2, seed: LEGACY_SEED, names: emptyNames() }),
+  // v2 → v3 (G4): the valley journal starts empty.
+  2: (save) => ({ ...save, version: 3, journal: emptyJournal() }),
 };
 
 export function migrate(raw: unknown): SaveFile | null {
@@ -63,6 +66,7 @@ export function migrate(raw: unknown): SaveFile | null {
   // saves were written — never reject on this alone.
   if (typeof save.seed !== 'number' || !Number.isFinite(save.seed)) save.seed = LEGACY_SEED;
   save.names = sanitizeNames(save.names);
+  save.journal = sanitizeJournal(save.journal);
   if (typeof save.sim.lastWandererTick !== 'object' || save.sim.lastWandererTick === null) {
     save.sim.lastWandererTick = {};
   }
