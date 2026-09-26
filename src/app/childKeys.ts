@@ -8,6 +8,12 @@ export function shouldSwallowKey(
   e: { key: string; ctrlKey: boolean; metaKey: boolean; altKey: boolean },
   targetTag: string | null,
 ): boolean {
+  if (targetTag === 'INPUT') {
+    // Renaming: dead keys and IME composition (accents, CJK) and AltGr characters (Windows
+    // reports AltGr as Ctrl+Alt) must reach the field.
+    if (e.key === 'Dead' || e.key === 'Process') return false;
+    if (e.ctrlKey && e.altKey && !e.metaKey && e.key.length === 1) return false;
+  }
   if (e.ctrlKey || e.metaKey || e.altKey) return true;
   if (targetTag === 'INPUT' && (e.key.length === 1 || EDITING_KEYS.has(e.key))) return false; // renaming
   return !CAMERA_KEYS.has(e.key);

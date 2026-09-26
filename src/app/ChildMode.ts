@@ -18,6 +18,8 @@ export interface ChildHooks {
   onChange(on: boolean): void;
   onSleep(): void;
   onWake(): void;
+  /** The child's tap on the start veil — a user gesture main.ts can use to unlock audio. */
+  onTap(): void;
 }
 
 type KeyboardLock = { lock?: (keys?: string[]) => Promise<void>; unlock?: () => void };
@@ -66,8 +68,14 @@ export class ChildMode {
     return this.settings.on;
   }
 
+  /** True while the play timer has put the valley to sleep — nothing may restart the loop. */
+  get isAsleep(): boolean {
+    return this.asleep;
+  }
+
   /** Must run inside a user gesture (the start card's button). */
   start(timerMin: number | null): void {
+    if (this.settings.on) return; // a stray second start card must never reset the timer
     this.settings = offSettings();
     this.settings.on = true;
     setTimer(this.settings, timerMin);
@@ -143,6 +151,7 @@ export class ChildMode {
     if (this.tapCard) return;
     this.tapCard = showTapCard(() => {
       this.tapCard = null;
+      this.hooks.onTap();
       void this.enterLock();
     });
   }
@@ -196,7 +205,10 @@ export class ChildMode {
   // --- gentle play timer -------------------------------------------------
 
   private heartbeat(): void {
-    if (!this.settings.on || this.settings.expired || this.overlayOpen || document.hidden) return;
+    // Only the tap veil and the grown-ups panel pause play time. The gate question card does
+    // not: a child can open it by holding the 🔒 and would otherwise freeze the timer.
+    const paused = this.tapCard !== null || this.card?.dataset.testid === 'child-panel';
+    if (!this.settings.on || this.settings.expired || paused || document.hidden) return;
     if (addPlayTime(this.settings, HEARTBEAT_MS)) {
       this.persist();
       this.sleep();

@@ -259,6 +259,7 @@ async function start(): Promise<void> {
       audio.setSleeping(false);
       loop.start();
     },
+    onTap: () => audio.unlock(),
   });
   hud.setChildModeAvailable(!visiting);
   hud.onChildMode = () =>
@@ -294,7 +295,10 @@ async function start(): Promise<void> {
       renderer.sync(state);
       showWelcomeBack(summarizeEvents(state.eventLog, tickAtHide, (id) => nameBook.customFamily(id)));
     }).catch((err) => console.warn('[catchup] resume after error:', err))
-      .finally(() => { draining = false; loop.start(); });
+      .finally(() => {
+        draining = false;
+        if (!childMode.isAsleep) loop.start(); // never wake a child-mode bedtime from under the sleep screen
+      });
   });
   window.addEventListener('pagehide', () => {
     nameBook.prune(state);

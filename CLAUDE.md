@@ -237,9 +237,9 @@ deliberately so ads don't feel intrusive. Tracked as its own G-series in
 `docs/superpowers/specs/2026-08-22-growth-distribution-design.md` — read that spec before touching
 this track. **G1 (Findable)** is built and deployed (see Current status above), awaiting the user's live review.
 **G2 (Shareable)** — seed/world-link sharing, naming — is built (see Current status above),
-merged and deployed, awaiting the user's live review. **G3** (child mode) is next, pending
-its own `superpowers:brainstorming` session per this project's working process. **G4** (return
-rhythm) is queued behind it. One decision from G1's brainstorm binds all later
+merged and deployed, awaiting the user's live review. **G3** (child mode) is built (spec
+`docs/superpowers/specs/2026-09-26-g3-child-mode-design.md`). **G4** (return rhythm) is next,
+pending its own `superpowers:brainstorming` session. One decision from G1's brainstorm binds all later
 ad work and is worth keeping visible: **contextual-only ads, zero tracking** — the child-directed
 content + ads combination is a regulated one (COPPA and equivalents), so no behavioral/remarketing
 ads or personal-data collection, full stop.

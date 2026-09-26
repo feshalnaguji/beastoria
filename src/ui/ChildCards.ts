@@ -3,7 +3,7 @@
  * the grown-up question, the grown-ups panel and the sleep screen. Rendering
  * only — every decision lives in ChildMode / the pure child modules.
  */
-import { TIMER_CHOICES } from '../app/childSettings';
+import { DEFAULT_TIMER_MIN, TIMER_CHOICES } from '../app/childSettings';
 import { HOLD_MS, type GateQuestion } from '../app/parentGate';
 
 const CARD_CSS = [
@@ -73,18 +73,19 @@ function timerRow(current: number | null, onPick: (m: number | null) => void): H
 }
 
 export function showChildStartCard(opts: { touch: boolean; onStart: (timerMin: number | null) => void }): void {
+  document.querySelector('[data-testid="child-start"]')?.remove(); // replace, never stack
   const card = makeCard('child-start');
   heading(card, 'Child mode');
   para(card, 'Keeps little hands in the valley: no links, no sharing, no settings.');
   para(card, 'To leave, a grown-up holds the 🔒 for 3 seconds and answers a question.');
-  para(
-    card,
-    opts.touch
-      ? 'For a full lock on a tablet: iPad — Settings › Accessibility › Guided Access (triple-click to start). ' +
-          'Android — Settings › Security › App pinning.'
-      : 'Holding Esc leaves full screen, but child mode stays on. Ctrl+Alt+Del and power keys can’t be blocked.',
-  );
-  let chosen: number | null = 30;
+  if (opts.touch) {
+    para(card, 'For a full lock on a tablet:');
+    para(card, '• iPad: Settings › Accessibility › Guided Access, then triple-click the side or home button.');
+    para(card, '• Android: turn on App pinning (in Security settings), then pin this app from Recents.');
+  } else {
+    para(card, 'Holding Esc leaves full screen, but child mode stays on. Ctrl+Alt+Del and power keys can’t be blocked.');
+  }
+  let chosen: number | null = DEFAULT_TIMER_MIN;
   let row = timerRow(chosen, pick);
   card.append(row);
   function pick(m: number | null): void {
@@ -151,6 +152,7 @@ export function showLockButton(onHeld: () => void): HTMLButtonElement {
   };
   btn.addEventListener('pointerdown', (e) => {
     e.stopPropagation();
+    if (startedAt !== null) return; // a second finger must not start a second, unclearable hold
     try {
       btn.setPointerCapture(e.pointerId);
     } catch {

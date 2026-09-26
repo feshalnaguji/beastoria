@@ -138,6 +138,13 @@ describe('child key and card policy', () => {
     }
     expect(shouldSwallowKey(k('w', { ctrlKey: true }), 'INPUT')).toBe(true);
     expect(shouldSwallowKey(k('Tab'), 'INPUT')).toBe(true);
+    // accents, IME and AltGr (Windows reports AltGr as Ctrl+Alt) reach the rename field…
+    expect(shouldSwallowKey(k('Dead'), 'INPUT')).toBe(false);
+    expect(shouldSwallowKey(k('Process'), 'INPUT')).toBe(false);
+    expect(shouldSwallowKey(k('@', { ctrlKey: true, altKey: true }), 'INPUT')).toBe(false);
+    // …but not outside it
+    expect(shouldSwallowKey(k('@', { ctrlKey: true, altKey: true }), 'BODY')).toBe(true);
+    expect(shouldSwallowKey(k('Dead'), 'BODY')).toBe(true);
     expect(shouldSwallowKey(k('F5'), 'INPUT')).toBe(true);
   });
 
