@@ -17,6 +17,10 @@ function closeCurrent(): void {
   currentCleanup = null;
 }
 
+export function closeShareCard(): void {
+  closeCurrent();
+}
+
 export function showShareCard(opts: { url: string; day: number; postcard: () => Promise<Blob> }): void {
   closeCurrent(); // opening twice replaces, never stacks
 

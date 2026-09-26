@@ -20,7 +20,10 @@ import { Hud, PILL_CSS } from './ui/Hud';
 import { InspectCard } from './ui/InspectCard';
 import { NameBook } from './ui/names';
 import { buildPostcard, canvasToPng } from './ui/postcard';
-import { showShareCard } from './ui/ShareCard';
+import { closeShareCard, showShareCard } from './ui/ShareCard';
+import { showChildStartCard } from './ui/ChildCards';
+import { ChildMode } from './app/ChildMode';
+import { browserStore, loadChildSettings } from './app/childSettings';
 import { showCard, showWelcomeBack } from './ui/WelcomeBack';
 import { Renderer } from './render/Renderer';
 import { renderPortraitStudio } from './app/PortraitStudio';
@@ -78,7 +81,12 @@ async function start(): Promise<void> {
     return; // dev-only: no sim, no HUD, no save
   }
 
-  const sharedSeed = parseValleyParam(location.search);
+  const childSettings = loadChildSettings(browserStore());
+  // Child mode never visits: a `?valley=` link is ignored (and stripped) while it's on.
+  const sharedSeed = childSettings.on ? null : parseValleyParam(location.search);
+  if (childSettings.on && new URLSearchParams(location.search).has('valley')) {
+    history.replaceState(null, '', location.pathname);
+  }
   const save = await loadSave();
   // A `?valley=` link pointing at the exact seed already saved on this
   // device is neither a visit nor an adoption — it's the child's own valley
@@ -234,6 +242,31 @@ async function start(): Promise<void> {
   );
   const devPanel = new DevPanel(state, loop, renderer, { allowReset: !visiting });
 
+  const childMode = new ChildMode(childSettings, {
+    onChange: (on) => {
+      hud.setChildMode(on);
+      devPanel.setLocked(on);
+      if (on) {
+        closeShareCard();
+        loop.setSpeed(1);
+      }
+    },
+    onSleep: () => {
+      loop.stop();
+      audio.setSleeping(true);
+    },
+    onWake: () => {
+      audio.setSleeping(false);
+      loop.start();
+    },
+  });
+  hud.setChildModeAvailable(!visiting);
+  hud.onChildMode = () =>
+    showChildStartCard({
+      touch: window.matchMedia('(pointer: coarse)').matches,
+      onStart: (timerMin) => childMode.start(timerMin),
+    });
+
   let hiddenAt: { epochMs: number; tick: number } | null = null;
   let draining = false;
   document.addEventListener('visibilitychange', () => {
@@ -269,7 +302,9 @@ async function start(): Promise<void> {
   });
 
   loop.start();
-  if (visiting) {
+  if (childMode.on) {
+    childMode.resumeSticky();
+  } else if (visiting) {
     showVisitBanner();
   } else if (save === null) {
     showCard('Welcome to Beastoria', [

@@ -82,6 +82,11 @@ export class AudioEngine {
     this.onUnlock?.();
   }
 
+  /** Child-mode sleep: breathe the ambience out (and back in on wake), without touching the mute setting. */
+  setSleeping(sleeping: boolean): void {
+    this.ambienceBus.gain.setTargetAtTime(sleeping || !this.unlocked ? 0 : 1, this.ctx.currentTime, 0.7);
+  }
+
   /** Fetch+decode everything in the manifest; missing files log once and stay silent. */
   async preload(): Promise<void> {
     if (this.preloaded) return;
