@@ -136,20 +136,17 @@ export function showLockButton(onHeld: () => void): HTMLButtonElement {
   paint(0);
   let startedAt: number | null = null;
   let raf = 0;
+  let holdTimer = 0;
   const reset = () => {
     startedAt = null;
     cancelAnimationFrame(raf);
+    clearTimeout(holdTimer);
     paint(0);
   };
+  // The ring is cosmetic (animation frames can be throttled); completion runs off a plain timer.
   const step = () => {
     if (startedAt === null) return;
-    const frac = (performance.now() - startedAt) / HOLD_MS;
-    if (frac >= 1) {
-      reset();
-      onHeld();
-      return;
-    }
-    paint(frac);
+    paint(Math.min(1, (performance.now() - startedAt) / HOLD_MS));
     raf = requestAnimationFrame(step);
   };
   btn.addEventListener('pointerdown', (e) => {
@@ -161,6 +158,10 @@ export function showLockButton(onHeld: () => void): HTMLButtonElement {
     }
     startedAt = performance.now();
     raf = requestAnimationFrame(step);
+    holdTimer = window.setTimeout(() => {
+      reset();
+      onHeld();
+    }, HOLD_MS);
   });
   for (const ev of ['pointerup', 'pointercancel', 'pointerleave'] as const) btn.addEventListener(ev, reset);
   btn.addEventListener('keydown', (e) => e.stopPropagation());

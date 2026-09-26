@@ -161,7 +161,14 @@ v1 (two open tabs overwrite each other's timeline harmlessly).
   `?valley=` share links + a postcard image (Web Share / clipboard /
   download), adopt-from-link and never-destructive visit mode, local-only
   creature/family naming from the inspect card (family names also carried
-  into home labels and the welcome-back card); 264 tests).
+  into home labels and the welcome-back card); 264 tests), G3 (Child mode,
+  2026-09-26: sticky parent-gated child mode — fullscreen + Chromium
+  keyboard lock where available, page key/right-click/ctrl-zoom/leave-site
+  guards (camera keys and rename typing still work), guide/share/fullscreen
+  pills and DevPanel hidden, tap-to-start after reload or lost fullscreen,
+  hold-🔒-3s + multiplication gate with a 3-strike 30 s cooldown, gentle
+  play timer (visible time only, survives reloads) ending on a calm sleep
+  screen; state in localStorage `beastoria.child`, not the save; 272 tests).
 - **Status: M13 complete and deployed (2026-08-22), still awaiting the
   user's live review** — all four M13 threads above are implemented,
   tested (full suite incl. the 6-seed + 100-day-soak balance property
@@ -181,6 +188,8 @@ v1 (two open tabs overwrite each other's timeline harmlessly).
   device-tested; a tab still running the pre-G2 build could overwrite a
   v2 save during the deploy window (accepted — `loadSave` now refuses to
   save over newer-version saves, protecting every future version bump).
+  **G3 (Child mode) is built on branch `g3-child-mode`**, awaiting final
+  review, merge, and deploy (flip this at merge).
 - **M14 candidates (deferred out of M13 scope, per the user's own decision
   recorded in this milestone's plan):** (1) feeding still reads as one
   mechanism tuned per species rather than each species' real behavior — not
