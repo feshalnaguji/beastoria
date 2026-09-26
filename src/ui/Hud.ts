@@ -41,11 +41,16 @@ export class Hud {
   private clockPill: HTMLDivElement;
   private fullscreenChip: HTMLDivElement;
   private sharePill: HTMLDivElement;
+  private guideLink: HTMLAnchorElement;
+  private childPill: HTMLDivElement;
+  private childAvailable = true;
   private lastDay: number | null = null;
   private lastPhase: Clock['phase'] | null = null;
 
   /** Set by main.ts once it has the seed/renderer a share needs. */
   onShare?: () => void;
+  /** Set by main.ts: opens the child-mode start card. */
+  onChildMode?: () => void;
 
   constructor(private readonly audio: AudioEngine) {
     const style = document.createElement('style');
@@ -91,17 +96,17 @@ export class Hud {
       }
     });
     document.body.appendChild(this.fullscreenChip);
-    if (!document.fullscreenEnabled) this.fullscreenChip.style.display = 'none';
+    this.fullscreenChip.hidden = !document.fullscreenEnabled;
     document.addEventListener('fullscreenchange', () => this.renderFullscreenChip());
     this.renderFullscreenChip();
 
-    const guide = document.createElement('a');
-    guide.href = './guide/';
-    guide.textContent = '🐾 creatures';
-    guide.setAttribute('aria-label', 'creature guide');
-    guide.title = 'Meet the creatures';
-    guide.style.cssText = [...PILL_CSS, 'top:54px', 'left:12px', 'text-decoration:none', 'font-size:14px'].join(';');
-    document.body.appendChild(guide);
+    this.guideLink = document.createElement('a');
+    this.guideLink.href = './guide/';
+    this.guideLink.textContent = '🐾 creatures';
+    this.guideLink.setAttribute('aria-label', 'creature guide');
+    this.guideLink.title = 'Meet the creatures';
+    this.guideLink.style.cssText = [...PILL_CSS, 'top:54px', 'left:12px', 'text-decoration:none', 'font-size:14px'].join(';');
+    document.body.appendChild(this.guideLink);
 
     this.sharePill = document.createElement('div');
     this.sharePill.style.cssText = [...PILL_CSS, 'top:96px', 'left:12px', 'cursor:pointer', 'font-size:14px'].join(';');
@@ -119,8 +124,39 @@ export class Hud {
     });
     document.body.appendChild(this.sharePill);
 
+    this.childPill = document.createElement('div');
+    this.childPill.style.cssText = [...PILL_CSS, 'top:138px', 'left:12px', 'cursor:pointer', 'font-size:14px'].join(';');
+    this.childPill.setAttribute('role', 'button');
+    this.childPill.setAttribute('tabindex', '0');
+    this.childPill.setAttribute('aria-label', 'child mode');
+    this.childPill.setAttribute('data-testid', 'child-pill');
+    this.childPill.textContent = '👪 child mode';
+    this.childPill.addEventListener('pointerdown', (e) => e.stopPropagation());
+    this.childPill.addEventListener('click', () => this.onChildMode?.());
+    this.childPill.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        this.onChildMode?.();
+      }
+    });
+    document.body.appendChild(this.childPill);
+
     this.audio.onUnlock = () => this.renderChip();
     this.renderChip();
+  }
+
+  /** Child mode can't be started from some states (visiting a friend's valley). */
+  setChildModeAvailable(available: boolean): void {
+    this.childAvailable = available;
+    this.childPill.hidden = !available;
+  }
+
+  /** Child mode hides everything that leaves the valley or changes settings. */
+  setChildMode(on: boolean): void {
+    this.guideLink.hidden = on;
+    this.sharePill.hidden = on;
+    this.fullscreenChip.hidden = on || !document.fullscreenEnabled;
+    this.childPill.hidden = on || !this.childAvailable;
   }
 
   private toggleFullscreen(): void {

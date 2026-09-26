@@ -18,6 +18,7 @@ export class DevPanel {
   private root: HTMLDivElement;
   private info!: HTMLPreElement;
   private visible = false;
+  private locked = false;
   private frames = 0;
   private fps = 0;
   private lastFpsTime = performance.now();
@@ -74,11 +75,21 @@ export class DevPanel {
     document.body.appendChild(this.root);
 
     window.addEventListener('keydown', (e) => {
+      if (this.locked) return;
       if (e.key === '`' || e.key === '~') {
         this.visible = !this.visible;
         this.root.style.display = this.visible ? 'block' : 'none';
       }
     });
+  }
+
+  /** Child mode: hide the panel and ignore its toggle (its speed and reset controls are grown-up only). */
+  setLocked(locked: boolean): void {
+    this.locked = locked;
+    if (locked) {
+      this.visible = false;
+      this.root.style.display = 'none';
+    }
   }
 
   /** Call once per rendered frame. */
