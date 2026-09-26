@@ -4,8 +4,9 @@
  * a migrations.ts entry + frozen fixture test, never casual edits.
  */
 import type { WorldState } from '../sim/state';
+import type { Journal } from '../app/journal';
 
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 /** Every save written before v2 was created from this hardcoded seed. */
 export const LEGACY_SEED = 1234;
 
@@ -22,5 +23,7 @@ export interface SaveFile {
   seed: number;
   /** Player-given names, local-only (spec: never in links or postcards). */
   names: SaveNames;
+  /** The valley journal (G4): a family storybook, local-only. */
+  journal: Journal;
   sim: WorldState;
 }

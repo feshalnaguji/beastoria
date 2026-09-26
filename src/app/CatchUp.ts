@@ -22,11 +22,13 @@ export function runCatchUp(
   ticksOwed: number,
   budgetMs: number,
   nowFn: () => number,
+  onTick?: () => void,
 ): { done: boolean; ticksRun: number } {
   const start = nowFn();
   let ran = 0;
   while (ran < ticksOwed) {
     tick(state, []); // vocalizations from unobserved ticks drift away unheard
+    onTick?.();
     ran++;
     if (nowFn() - start >= budgetMs) break;
   }
@@ -63,13 +65,15 @@ export function drainCatchUp(
   state: WorldState,
   ticksOwed: number,
   onProgress?: (done: number, total: number) => void,
+  /** Called after every drained tick — observers (the journal) see each tick, not just the end state. */
+  onTick?: () => void,
 ): Promise<void> {
   return new Promise((resolve) => {
     let owed = ticksOwed;
     const total = ticksOwed;
     const step = (): void => {
       try {
-        const res = runCatchUp(state, owed, 8, () => performance.now());
+        const res = runCatchUp(state, owed, 8, () => performance.now(), onTick);
         owed -= res.ticksRun;
         onProgress?.(total - owed, total);
         if (!res.done && owed > 0) {

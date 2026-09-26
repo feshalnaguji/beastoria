@@ -44,6 +44,9 @@ export class Hud {
   private guideLink: HTMLAnchorElement;
   private childPill: HTMLDivElement;
   private childAvailable = true;
+  private journalPill: HTMLDivElement;
+  private seasonSuffix = '';
+  private seasonTitle = '';
   private lastDay: number | null = null;
   private lastPhase: Clock['phase'] | null = null;
 
@@ -51,6 +54,8 @@ export class Hud {
   onShare?: () => void;
   /** Set by main.ts: opens the child-mode start card. */
   onChildMode?: () => void;
+  /** Set by main.ts: opens the valley journal (G4). */
+  onJournal?: () => void;
 
   constructor(private readonly audio: AudioEngine) {
     const style = document.createElement('style');
@@ -141,8 +146,38 @@ export class Hud {
     });
     document.body.appendChild(this.childPill);
 
+    // Valley journal (G4): harmless to read, so it stays visible in child mode.
+    this.journalPill = document.createElement('div');
+    this.journalPill.style.cssText = [...PILL_CSS, 'top:180px', 'left:12px', 'cursor:pointer', 'font-size:14px'].join(';');
+    this.journalPill.setAttribute('role', 'button');
+    this.journalPill.setAttribute('tabindex', '0');
+    this.journalPill.setAttribute('aria-label', 'valley journal');
+    this.journalPill.setAttribute('data-testid', 'journal-pill');
+    this.journalPill.textContent = '📖 journal';
+    this.journalPill.addEventListener('pointerdown', (e) => e.stopPropagation());
+    this.journalPill.addEventListener('click', () => this.onJournal?.());
+    this.journalPill.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        this.onJournal?.();
+      }
+    });
+    document.body.appendChild(this.journalPill);
+
     this.audio.onUnlock = () => this.renderChip();
     this.renderChip();
+  }
+
+  /** The journal belongs to your own valley — hidden while visiting a friend's. */
+  setJournalAvailable(available: boolean): void {
+    this.journalPill.hidden = !available;
+  }
+
+  /** Real-calendar season (G4) shown after the day/phase in the clock pill. */
+  setSeason(icon: string, name: string, fullMoon: boolean): void {
+    this.seasonSuffix = ` · ${icon}${fullMoon ? ' 🌕' : ''}`;
+    this.seasonTitle = `${name}${fullMoon ? ', full moon' : ''}`;
+    this.lastDay = null; // force the next setClock to re-render
   }
 
   /** Child mode can't be started from some states (visiting a friend's valley). */
@@ -179,8 +214,8 @@ export class Hud {
     this.lastDay = clock.day;
     this.lastPhase = clock.phase;
     const icon = PHASE_ICON[clock.phase];
-    this.clockPill.textContent = `Day ${clock.day} · ${icon}`;
-    this.clockPill.title = `Day ${clock.day} — ${clock.phase}`;
+    this.clockPill.textContent = `Day ${clock.day} · ${icon}${this.seasonSuffix}`;
+    this.clockPill.title = `Day ${clock.day} — ${clock.phase}${this.seasonTitle ? ` · ${this.seasonTitle}` : ''}`;
   }
 
   private onChipActivate(): void {
