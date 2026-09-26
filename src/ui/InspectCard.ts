@@ -234,6 +234,13 @@ export class InspectCard {
   }
 
   show(state: WorldState, c: Creature, presentation: Presentation | undefined): void {
+    // A different creature than the one currently open for editing (e.g. a
+    // fresh tap elsewhere while a rename editor was still open) discards the
+    // in-progress edit rather than leaving it dangling on the wrong subject —
+    // updateName/updateRole below restore the persistent name/role rows.
+    if (this.editing !== null && this.lastArgs !== null && this.lastArgs.c.id !== c.id) {
+      this.editing = null;
+    }
     this.lastArgs = { state, c, presentation };
     // Mid-edit: leave nameEl/roleEl (they hold the open input) alone — only
     // doingEl tracks the sim every tick.

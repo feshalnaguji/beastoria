@@ -464,6 +464,16 @@ describe('migrations', () => {
     await set('beastoria.save', { junk: true });
     expect(await loadSave()).toBeNull();
   });
+
+  it('a save from a newer Beastoria disables saving this session rather than being overwritten', async () => {
+    const { get, set } = await import('idb-keyval');
+    await set('beastoria.save', { ...fixtureV2, version: 99 });
+    expect(await loadSave()).toBeNull();
+    await saveWorld(createWorld(1), 1);
+    const stillStored = (await get('beastoria.save')) as { version: number };
+    expect(stillStored.version).toBe(99);
+    resumeSaves();
+  });
 });
 
 // Regression for the reset-resurrection race: DevPanel's reset button calls

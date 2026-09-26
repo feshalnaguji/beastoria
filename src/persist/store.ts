@@ -59,7 +59,23 @@ export async function saveWorld(state: WorldState, nowMs: number): Promise<void>
 
 export async function loadSave(): Promise<SaveFile | null> {
   try {
-    return migrate(await get(SAVE_KEY));
+    const raw = await get(SAVE_KEY);
+    // A save from a newer Beastoria (version > this build's SAVE_VERSION):
+    // migrate() already refuses to walk it forward and returns null, but
+    // silently doing so would let this session's next autosave overwrite it
+    // with a brand-new, older-shaped world — destroying the newer save.
+    // Disable saving for the rest of this session instead, so opening an
+    // old build against a newer save is a read-only no-op, not data loss.
+    if (
+      typeof raw === 'object' && raw !== null &&
+      typeof (raw as { version?: unknown }).version === 'number' &&
+      (raw as { version: number }).version > SAVE_VERSION
+    ) {
+      suppressSaves();
+      console.warn('[persist] save is from a newer Beastoria; saving disabled this session to protect it');
+      return null;
+    }
+    return migrate(raw);
   } catch (err) {
     if (!warnedLoad) {
       warnedLoad = true;

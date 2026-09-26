@@ -20,6 +20,15 @@ function closeCurrent(): void {
 export function showShareCard(opts: { url: string; day: number; postcard: () => Promise<Blob> }): void {
   closeCurrent(); // opening twice replaces, never stacks
 
+  // Start building the postcard the moment the card opens, not on click:
+  // iOS WebKit drops navigator.share()'s user-activation grant across any
+  // `await` between the click and the call, so by the time Share… is
+  // clicked the File must already exist for the click handler to pass
+  // synchronously. Save postcard reuses this same promise instead of
+  // capturing a second frame.
+  const postcardPromise = opts.postcard();
+  postcardPromise.catch((err: unknown) => console.warn('[share] postcard capture failed:', err));
+
   const card = document.createElement('div');
   current = card;
   card.style.cssText = [
@@ -91,27 +100,6 @@ export function showShareCard(opts: { url: string; day: number; postcard: () => 
     return btn;
   };
 
-  // Feature-detection probe: canShare only checks the file's type, not its
-  // content, so an empty placeholder answers whether Share… should show at
-  // all without generating a real postcard just to ask.
-  const probeFile = new File([], 'beastoria.png', { type: 'image/png' });
-  if (navigator.canShare?.({ files: [probeFile] })) {
-    const shareBtn = makeButton('Share…');
-    shareBtn.addEventListener('click', () => {
-      void (async () => {
-        const blob = await opts.postcard();
-        const shareFile = new File([blob], 'beastoria.png', { type: 'image/png' });
-        try {
-          await navigator.share({ files: [shareFile], url: opts.url, title: 'Beastoria' });
-        } catch (err) {
-          if ((err as { name?: string }).name !== 'AbortError') {
-            console.warn('[share] native share failed:', err);
-          }
-        }
-      })();
-    });
-  }
-
   const copyBtn = makeButton('Copy link');
   copyBtn.addEventListener('click', () => {
     void (async () => {
@@ -129,7 +117,7 @@ export function showShareCard(opts: { url: string; day: number; postcard: () => 
   const postcardBtn = makeButton('Save postcard');
   postcardBtn.addEventListener('click', () => {
     void (async () => {
-      const blob = await opts.postcard();
+      const blob = await postcardPromise;
       const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = blobUrl;
@@ -142,6 +130,27 @@ export function showShareCard(opts: { url: string; day: number; postcard: () => 
   });
 
   document.body.appendChild(card);
+
+  // Share… only appears once the real postcard blob is ready — canShare()
+  // needs a File built from the actual capture (an empty placeholder can't
+  // tell us whether the real, larger image will actually share) — and its
+  // click handler calls navigator.share() with that already-built File as
+  // its very first statement, no await beforehand, to preserve iOS
+  // WebKit's transient user-activation grant.
+  void postcardPromise.then((blob) => {
+    if (current !== card) return; // this card was closed/replaced before capture finished
+    const shareFile = new File([blob], 'beastoria.png', { type: 'image/png' });
+    if (!navigator.canShare?.({ files: [shareFile] })) return;
+    const shareBtn = makeButton('Share…');
+    row.insertBefore(shareBtn, row.firstChild); // restore Share…/Copy/Save order
+    shareBtn.addEventListener('click', () => {
+      navigator.share({ files: [shareFile], url: opts.url, title: 'Beastoria' }).catch((err: unknown) => {
+        if ((err as { name?: string }).name !== 'AbortError') {
+          console.warn('[share] native share failed:', err);
+        }
+      });
+    });
+  });
 
   // Escape closes even when focus is outside the card entirely. When focus
   // IS inside the card, the card's own keydown handler above stops the

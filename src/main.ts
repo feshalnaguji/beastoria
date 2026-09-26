@@ -80,9 +80,19 @@ async function start(): Promise<void> {
 
   const sharedSeed = parseValleyParam(location.search);
   const save = await loadSave();
-  /** A friend's link opened by someone who already has a valley: live, in memory, never saved. */
-  const visiting = sharedSeed !== null && save !== null;
+  // A `?valley=` link pointing at the exact seed already saved on this
+  // device is neither a visit nor an adoption — it's the child's own valley
+  // (e.g. their own share link, reopened). Only a *different* seed than the
+  // existing save counts as visiting someone else's.
+  const ownValley = sharedSeed !== null && save !== null && sharedSeed === save.seed;
+  /** A friend's link opened by someone who already has a different valley: live, in memory, never saved. */
+  const visiting = sharedSeed !== null && save !== null && sharedSeed !== save.seed;
   const adopting = sharedSeed !== null && save === null;
+  // Strip `?valley=` once its one-time job (adopt / no-op own-valley
+  // recognition) is done, so a reload doesn't re-enter the link path — e.g.
+  // re-adopting on every refresh, or drifting `visiting` back to true if the
+  // save is later cleared.
+  if (adopting || ownValley) history.replaceState(null, '', location.pathname);
   const seed = sharedSeed ?? save?.seed ?? randomSeed();
   const fresh = visiting || save === null;
   const state = save === null || visiting ? createWorld(seed) : save.sim;
@@ -274,7 +284,16 @@ async function start(): Promise<void> {
 /** Visit mode: a friend's valley, running live but never saved over your own (spec G2 §3). */
 function showVisitBanner(): void {
   const bar = document.createElement('div');
-  bar.style.cssText = [...PILL_CSS, 'top:12px', 'left:50%', 'transform:translateX(-50%)', 'font-size:14px', 'white-space:nowrap'].join(';');
+  // Constrained to the middle column (not full-width) so it can never
+  // overlap the clock/sound pills pinned at the top corners on a phone —
+  // at 375px width the clock pill is ~100px and the sound pill ~115px
+  // (before unlock), so `calc(100% - 260px)` leaves clearance on both sides
+  // even with a little margin. Wraps rather than truncating/overflowing.
+  bar.style.cssText = [
+    ...PILL_CSS, 'top:12px', 'left:50%', 'transform:translateX(-50%)',
+    'max-width:calc(100% - 260px)', 'font-size:13px',
+    'white-space:normal', 'text-align:center',
+  ].join(';');
   bar.setAttribute('data-testid', 'visit-banner');
   bar.append('Visiting a friend’s valley · ');
   const back = document.createElement('a');
