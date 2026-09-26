@@ -27,6 +27,9 @@ import { browserStore, loadChildSettings } from './app/childSettings';
 import { showCard, showWelcomeBack } from './ui/WelcomeBack';
 import { Renderer } from './render/Renderer';
 import { renderPortraitStudio } from './app/PortraitStudio';
+import { hemisphereFor, isFullMoon, SEASON_ICON, SEASON_WELCOME, seasonFor, seasonOverrides, type Season } from './app/season';
+import { emptyJournal, JournalRecorder } from './app/journal';
+import { showJournal } from './ui/JournalCard';
 
 /** Tap-vs-drag threshold, in CSS px between pointerdown and pointerup — a
  * movement past this reads as a camera drag (Camera.ts owns panning off its
@@ -109,12 +112,25 @@ async function start(): Promise<void> {
   /** A fresh valley opens mid-morning, not at grey dawn — first screens should be sunny. */
   const MORNING_START_TICK = Math.round(0.2 * TICKS_PER_DAY);
   if (fresh) state.tick = MORNING_START_TICK;
-  if (visiting) suppressSaves(); else setSaveMeta({ seed, names });
+  const journal = save === null || visiting ? emptyJournal() : save.journal;
+  if (visiting) suppressSaves(); else setSaveMeta({ seed, names, journal });
+  // The family storybook (G4) records only your own valley, never a friend's.
+  const recorder = visiting ? null : new JournalRecorder(journal, (s, c) => nameBook.creature(s, c));
+  recorder?.prime(state);
   const sinceTick = state.tick;
   const owed = save && !visiting ? owedTicks(Date.now() - save.savedAtEpochMs) : 0;
 
+  // Real-calendar season + full moon (G4): visual only, never touches the sim.
+  const looks = seasonOverrides(location.search);
+  const now = new Date();
+  const season = looks.season ?? seasonFor(now, hemisphereFor(Intl.DateTimeFormat().resolvedOptions().timeZone ?? ''));
+  const fullMoon = looks.fullMoon || isFullMoon(now);
+  // Recorded even on a first run, so the next season change can be announced.
+  const turned = !visiting && looks.season === null && seasonTurned(season);
+  const seasonNews = turned && save !== null;
+
   const renderer = new Renderer();
-  await renderer.init(mount);
+  await renderer.init(mount, { season, fullMoon });
   renderer.familyDisplayName = (id) => nameBook.family(id);
   renderer.sync(state); // initial snapshot so frame 0 has positions
 
@@ -124,6 +140,7 @@ async function start(): Promise<void> {
   const scheduler = new CallScheduler(audio);
   window.addEventListener('pointerdown', () => audio.unlock(), { once: true });
   const hud = new Hud(audio);
+  hud.setSeason(SEASON_ICON[season], season, fullMoon);
   hud.setClock(getClock(state.tick)); // render the clock pill immediately, don't wait ~100ms for the first sim tick
   hud.onShare = () => {
     const day = getClock(state.tick).day;
@@ -145,7 +162,11 @@ async function start(): Promise<void> {
     await drainCatchUp(state, owed, (d, t) => overlay.setProgress(d, t, fromDay, toDay));
     overlay.el.remove();
     renderer.sync(state);
-    showWelcomeBack(summarizeEvents(state.eventLog, sinceTick, (id) => nameBook.customFamily(id)));
+    recorder?.observe(state);
+    showWelcomeBack([
+      ...(seasonNews ? [SEASON_WELCOME[season].title] : []),
+      ...summarizeEvents(state.eventLog, sinceTick, (id) => nameBook.customFamily(id)),
+    ]);
   }
 
   // Tap-to-inspect (M10 task 5): available always, not just in the DevPanel.
@@ -209,6 +230,7 @@ async function start(): Promise<void> {
   const loop = new GameLoop(
     () => {
       const out = tick(state, []);
+      recorder?.observe(state);
       renderer.sync(state);
       renderer.onFeedings(out.feedings);
       const clock = getClock(state.tick);
@@ -262,6 +284,14 @@ async function start(): Promise<void> {
     onTap: () => audio.unlock(),
   });
   hud.setChildModeAvailable(!visiting);
+  hud.setJournalAvailable(!visiting);
+  hud.onJournal = () =>
+    showJournal({
+      journal,
+      familyName: (id) => nameBook.family(id),
+      hasCustomName: (id) => nameBook.customFamily(id) !== undefined,
+      creatureName: (id, fallback) => nameBook.data.creatures[id] ?? fallback,
+    });
   hud.onChildMode = () =>
     showChildStartCard({
       touch: window.matchMedia('(pointer: coarse)').matches,
@@ -293,6 +323,7 @@ async function start(): Promise<void> {
     void drainCatchUp(state, owedNow, (d, t) => overlay.setProgress(d, t, fromDay, toDay)).then(() => {
       overlay.el.remove();
       renderer.sync(state);
+      recorder?.observe(state);
       showWelcomeBack(summarizeEvents(state.eventLog, tickAtHide, (id) => nameBook.customFamily(id)));
     }).catch((err) => console.warn('[catchup] resume after error:', err))
       .finally(() => {
@@ -317,6 +348,20 @@ async function start(): Promise<void> {
       'Drag to look around · pinch or scroll to zoom in close.',
       'Tap any creature to meet them.',
     ]);
+  } else if (seasonNews && owed === 0) {
+    showCard(SEASON_WELCOME[season].title, [SEASON_WELCOME[season].line]);
+  }
+}
+
+const SEASON_KEY = 'beastoria.season';
+/** True when the real season has turned since this device last opened its valley; records the current one. */
+function seasonTurned(season: Season): boolean {
+  try {
+    const prev = localStorage.getItem(SEASON_KEY);
+    localStorage.setItem(SEASON_KEY, season);
+    return prev !== null && prev !== season;
+  } catch {
+    return false; // storage blocked — just skip the little announcement
   }
 }
 

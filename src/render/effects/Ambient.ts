@@ -16,12 +16,40 @@ import {
   type Texture,
 } from 'pixi.js';
 import type { Clock } from '../../sim/clock';
+import type { Season } from '../../app/season';
 import { nextRange, seedRng, type RngState } from '../../sim/rng';
 import { WORLD_HEIGHT, WORLD_WIDTH, type Vec2 } from '../../sim/state';
 import { FOREST, GROVE, POND, inEllipse } from '../../sim/valley';
 
 const GRASS_COUNT = 140;
 const FIREFLY_COUNT = 40;
+/** Seasonal drift (G4): spring petals, autumn leaves, winter snow — sparse, slow, world-space. */
+const DRIFT_COUNT = 120;
+const DRIFT_SEED_OFFSET = 4099; // its own cosmetic stream: existing effects keep their exact placement
+
+interface DriftLook {
+  tints: number[];
+  /** px/ms downward */
+  fall: number;
+  spin: number;
+  scale: number;
+}
+const DRIFT_LOOKS: Record<Exclude<Season, 'summer'>, DriftLook> = {
+  spring: { tints: [0xf6c9dc, 0xfbe0ea, 0xf2b8cf], fall: 0.014, spin: 0.0012, scale: 1 },
+  autumn: { tints: [0xd98a3c, 0xc4632f, 0xe6b85c, 0xb8642f], fall: 0.022, spin: 0.002, scale: 1.25 },
+  winter: { tints: [0xf7fafc, 0xeef3f8], fall: 0.016, spin: 0, scale: 0.8 },
+};
+
+interface Drift {
+  particle: Particle;
+  baseX: number;
+  y: number;
+  vy: number;
+  swayAmp: number;
+  swayFreq: number;
+  phase: number;
+  spin: number;
+}
 const MEMORIAL_ANCHOR_COUNT = 8;
 const SHIMMER_SPEED = 0.006; // px/ms ≈ 6px/s
 /** Moment sparkles (M9 task 5): a hatch/birth/pairing spawns 10 particles;
@@ -157,6 +185,12 @@ export class AmbientEffects {
   readonly zzzLayer: Container;
   /** Feed motes (M11). */
   readonly feedMoteLayer: Container;
+  /** Seasonal drift: petals / leaves / snow (G4). Empty in summer. */
+  readonly driftLayer: ParticleContainer;
+
+  private readonly drifts: Drift[] = [];
+  private readonly driftRng: RngState;
+  private season: Season = 'summer';
 
   private readonly rng: RngState;
   private elapsedMs = 0;
@@ -177,6 +211,10 @@ export class AmbientEffects {
 
   constructor(world: Container, cosmeticSeed: number) {
     this.rng = seedRng(cosmeticSeed);
+    this.driftRng = seedRng(cosmeticSeed + DRIFT_SEED_OFFSET);
+    this.driftLayer = new ParticleContainer({
+      dynamicProperties: { position: true, rotation: true, color: true },
+    });
     this.shimmerLayer = new Container();
     this.grassLayer = new Container();
     this.dappleLayer = new Container();
@@ -207,6 +245,46 @@ export class AmbientEffects {
     this.buildHatches(renderer);
     this.buildZzzs(renderer);
     this.buildFeedMotes(renderer);
+  }
+
+  /** Real-calendar season (G4): drifting petals/leaves/snow; summer instead brings the fireflies out earlier. */
+  setSeason(season: Season, renderer: PixiRenderer): void {
+    this.season = season;
+    for (const d of this.drifts) this.driftLayer.removeParticle(d.particle);
+    this.drifts.length = 0;
+    if (season === 'summer') return;
+    const look = DRIFT_LOOKS[season];
+    const tex = this.bake(
+      renderer,
+      season === 'winter' ? new Graphics().circle(3, 3, 3).fill(0xffffff) : new Graphics().ellipse(5, 3, 5, 3).fill(0xffffff),
+      season === 'winter' ? 6 : 10,
+      6,
+    );
+    const r = this.driftRng;
+    for (let i = 0; i < DRIFT_COUNT; i++) {
+      const particle = new Particle({
+        texture: tex,
+        x: 0,
+        y: 0,
+        anchorX: 0.5,
+        anchorY: 0.5,
+        scaleX: look.scale,
+        scaleY: look.scale,
+        tint: look.tints[Math.floor(nextRange(r, 0, look.tints.length))] ?? 0xffffff,
+        alpha: 0,
+      });
+      this.driftLayer.addParticle(particle);
+      this.drifts.push({
+        particle,
+        baseX: nextRange(r, 0, WORLD_WIDTH),
+        y: nextRange(r, 0, WORLD_HEIGHT),
+        vy: look.fall * nextRange(r, 0.7, 1.3),
+        swayAmp: nextRange(r, 8, 30),
+        swayFreq: nextRange(r, 0.0006, 0.0015),
+        phase: nextRange(r, 0, Math.PI * 2),
+        spin: look.spin * nextRange(r, -1, 1),
+      });
+    }
   }
 
   /**
@@ -245,11 +323,28 @@ export class AmbientEffects {
       }
     }
 
-    // Fireflies: night only, drifting on slow orbits with a gentle twinkle.
-    const dark = clock.light < 0.35;
+    // Seasonal drift: falls slowly, sways, wraps back to the top. Dimmer by night.
+    if (this.drifts.length > 0) {
+      const driftAlpha = 0.45 + 0.35 * clock.light;
+      for (const d of this.drifts) {
+        d.y += d.vy * dtMs;
+        if (d.y > WORLD_HEIGHT + 20) {
+          d.y = -20;
+          d.baseX = (d.baseX + 1597) % WORLD_WIDTH; // deterministic re-scatter, no allocation
+        }
+        d.particle.x = d.baseX + Math.sin(t * d.swayFreq + d.phase) * d.swayAmp;
+        d.particle.y = d.y;
+        d.particle.rotation += d.spin * dtMs;
+        d.particle.alpha = driftAlpha;
+      }
+    }
+
+    // Fireflies: night only (summer: from dusk, a little brighter), slow orbits with a gentle twinkle.
+    const summer = this.season === 'summer';
+    const dark = clock.light < (summer ? 0.5 : 0.35);
     this.fireflyLayer.visible = dark;
     if (dark) {
-      const nightAmount = 1 - clock.light;
+      const nightAmount = Math.min(1, (1 - clock.light) * (summer ? 1.25 : 1));
       for (const f of this.fireflies) {
         f.particle.x = f.anchor.x + Math.sin(t * f.fx + f.phase) * f.rx;
         f.particle.y = f.anchor.y + Math.sin(t * f.fy + f.phase * 1.7) * f.ry;
