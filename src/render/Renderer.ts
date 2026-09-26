@@ -590,9 +590,22 @@ export class Renderer {
     return this.app.canvas;
   }
 
-  /** The current frame as a canvas (Pixi extract), for the share postcard. */
+  /** The current frame as a canvas (Pixi extract), for the share postcard.
+   * `extract.canvas(this.app.stage)` alone captures the stage's full bounds
+   * (the whole world), not just what's on screen — the postcard would show
+   * dark bands for off-screen world. `frame` restricts extraction to the
+   * viewport: it's in the target's local/world coordinates, and for the
+   * stage that's CSS pixels of the screen (0,0 to renderer width/height
+   * divided by resolution, since width/height are device pixels). */
   snapshot(): HTMLCanvasElement {
-    return this.app.renderer.extract.canvas(this.app.stage) as HTMLCanvasElement;
+    const resolution = this.app.renderer.resolution;
+    const w = this.app.renderer.width / resolution;
+    const h = this.app.renderer.height / resolution;
+    return this.app.renderer.extract.canvas({
+      target: this.app.stage,
+      frame: new Rectangle(0, 0, w, h),
+      resolution,
+    }) as HTMLCanvasElement;
   }
 
   centerOn(x: number, y: number, zoom?: number): void {

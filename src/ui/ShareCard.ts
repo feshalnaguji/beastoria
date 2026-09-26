@@ -104,7 +104,9 @@ export function showShareCard(opts: { url: string; day: number; postcard: () => 
         try {
           await navigator.share({ files: [shareFile], url: opts.url, title: 'Beastoria' });
         } catch (err) {
-          if ((err as { name?: string }).name !== 'AbortError') throw err;
+          if ((err as { name?: string }).name !== 'AbortError') {
+            console.warn('[share] native share failed:', err);
+          }
         }
       })();
     });
@@ -132,8 +134,10 @@ export function showShareCard(opts: { url: string; day: number; postcard: () => 
       const a = document.createElement('a');
       a.href = blobUrl;
       a.download = `beastoria-day-${opts.day}.png`;
+      document.body.appendChild(a);
       a.click();
-      URL.revokeObjectURL(blobUrl);
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
     })();
   });
 

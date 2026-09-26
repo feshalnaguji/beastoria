@@ -154,6 +154,17 @@ export class InspectCard {
   private roleEl: HTMLDivElement;
   private metaEl: HTMLDivElement;
   private doingEl: HTMLDivElement;
+  // G2 fix wave: these four nodes are created ONCE (below, in the
+  // constructor) rather than every show() — show() used to rebuild the name
+  // row and role row (including the ✎ buttons) on every sim tick while no
+  // editor was open, ~10x/s, so a human tap could land on a node mid-teardown
+  // and be lost. Now show() only mutates their textContent/aria-label/hidden.
+  // The inline editor (buildEditor) still replaces nameEl/roleEl's children
+  // wholesale while open; finish() restores these persistent nodes.
+  private nameTextEl: Text;
+  private nameEditBtn: HTMLButtonElement;
+  private roleTextEl: Text;
+  private familyEditBtn: HTMLButtonElement;
   // G2 task 4: which field (if any) is mid-edit. show() is called every tick
   // by main.ts's loop to keep doingEl live; while a field is open this must
   // stop it from clobbering the input the child is typing into.
@@ -193,10 +204,22 @@ export class InspectCard {
 
     this.nameEl = document.createElement('div');
     this.nameEl.style.cssText = 'font-weight:bold;font-size:15px;';
+    this.nameTextEl = document.createTextNode('');
+    this.nameEditBtn = this.makeEditButton('rename', () => {
+      if (this.lastArgs) this.openCreatureEditor(this.lastArgs.state, this.lastArgs.c);
+    });
+    this.nameEl.appendChild(this.nameTextEl);
+    this.nameEl.appendChild(this.nameEditBtn);
     this.root.appendChild(this.nameEl);
 
     this.roleEl = document.createElement('div');
     this.roleEl.style.cssText = 'font-size:13px;opacity:.9;margin-top:1px;';
+    this.roleTextEl = document.createTextNode('');
+    this.familyEditBtn = this.makeEditButton('rename family', () => {
+      if (this.lastArgs && this.lastArgs.c.familyId !== null) this.openFamilyEditor(this.lastArgs.c.familyId);
+    });
+    this.roleEl.appendChild(this.roleTextEl);
+    this.roleEl.appendChild(this.familyEditBtn);
     this.root.appendChild(this.roleEl);
 
     this.metaEl = document.createElement('div');
@@ -215,8 +238,8 @@ export class InspectCard {
     // Mid-edit: leave nameEl/roleEl (they hold the open input) alone — only
     // doingEl tracks the sim every tick.
     if (this.editing === null) {
-      this.renderName(state, c);
-      this.renderRole(state, c);
+      this.updateName(state, c);
+      this.updateRole(state, c);
       this.metaEl.textContent = `${capitalize(c.species)} · ${c.stage}`;
     }
     let doing = creatureDoing(c, presentation);
@@ -244,27 +267,36 @@ export class InspectCard {
     return this.editing !== null;
   }
 
-  private renderName(state: WorldState, c: Creature): void {
-    this.nameEl.textContent = '';
-    const name = this.names.creature(state, c);
-    this.nameEl.appendChild(document.createTextNode(name));
-    if (this.opts.canRename) {
-      this.nameEl.appendChild(this.makeEditButton(`rename ${name}`, () => this.openCreatureEditor(state, c)));
+  /** Updates the persistent name row in place — text + aria-label + hidden —
+   * without touching the DOM nodes themselves (see the field comment above).
+   * If the row currently holds the inline editor instead (nameTextEl/
+   * nameEditBtn detached), restores them first. */
+  private updateName(state: WorldState, c: Creature): void {
+    if (this.nameEl.firstChild !== this.nameTextEl) {
+      this.nameEl.textContent = '';
+      this.nameEl.appendChild(this.nameTextEl);
+      this.nameEl.appendChild(this.nameEditBtn);
     }
+    const name = this.names.creature(state, c);
+    this.nameTextEl.textContent = name;
+    this.nameEditBtn.setAttribute('aria-label', `rename ${name}`);
+    this.nameEditBtn.hidden = !this.opts.canRename;
   }
 
-  private renderRole(state: WorldState, c: Creature): void {
-    this.roleEl.textContent = '';
-    this.roleEl.appendChild(document.createTextNode(creatureRole(state, c, (id) => this.names.family(id))));
-    if (this.opts.canRename && c.familyId !== null) {
-      const fam = state.families.find((f) => f.id === c.familyId);
-      if (fam) {
-        const famDisplayName = this.names.family(fam.id);
-        this.roleEl.appendChild(
-          this.makeEditButton(`rename the ${famDisplayName} family`, () => this.openFamilyEditor(fam.id)),
-        );
-      }
+  /** Same restore-then-update treatment as `updateName`, for the role row's
+   * family-rename button — additionally hidden whenever `c` has no family. */
+  private updateRole(state: WorldState, c: Creature): void {
+    if (this.roleEl.firstChild !== this.roleTextEl) {
+      this.roleEl.textContent = '';
+      this.roleEl.appendChild(this.roleTextEl);
+      this.roleEl.appendChild(this.familyEditBtn);
     }
+    this.roleTextEl.textContent = creatureRole(state, c, (id) => this.names.family(id));
+    const fam = c.familyId === null ? undefined : state.families.find((f) => f.id === c.familyId);
+    if (fam) {
+      this.familyEditBtn.setAttribute('aria-label', `rename the ${this.names.family(fam.id)} family`);
+    }
+    this.familyEditBtn.hidden = !this.opts.canRename || !fam;
   }
 
   private makeEditButton(label: string, onOpen: () => void): HTMLButtonElement {
