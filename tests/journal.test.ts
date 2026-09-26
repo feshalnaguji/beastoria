@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
-  addEntry, emptyJournal, entryText, JournalRecorder, MAX_ENTRIES, MAX_PAGES, pageSummary, sanitizeJournal,
+  addEntry, emptyJournal, entryText, JournalRecorder, journalRefs, MAX_ENTRIES, MAX_PAGES, pageSummary, sanitizeJournal,
   type Journal,
 } from '../src/app/journal';
 import { createWorld, spawnCreature, type Family, type WorldState } from '../src/sim/state';
+import { runCatchUp } from '../src/app/CatchUp';
+import { NameBook } from '../src/ui/names';
 
 const nameOf = (_s: WorldState, c: { id: number }) => `C${c.id}`;
 const keep = (_id: number, fallback: string) => fallback;
@@ -58,7 +60,7 @@ describe('journal recorder', () => {
     expect(j.pages[0]!.entries).toHaveLength(3);
   });
 
-  it('records growing up, setting off (children only), and passing', () => {
+  it('records growing up, setting off (grown children only), and passing', () => {
     const { state, fam, mom, dad, kids } = familyWorld();
     const j = emptyJournal();
     const rec = new JournalRecorder(j, nameOf);
@@ -67,8 +69,11 @@ describe('journal recorder', () => {
     kid.stage = 'juvenile';
     state.tick += 1;
     rec.observe(state);
+    kid.stage = 'adult';
     kid.familyId = null;
-    fam.childIds = fam.childIds.filter((id) => id !== kid.id);
+    // An orphaned little one released by the sim is not "setting off".
+    state.creatures.find((c) => c.id === kids[1])!.familyId = null;
+    fam.childIds = [];
     state.creatures.find((c) => c.id === dad)!.familyId = null; // a parent leaving is NOT "setting off"
     state.tick += 1;
     rec.observe(state);
@@ -77,6 +82,7 @@ describe('journal recorder', () => {
     rec.observe(state);
     expect(texts(j)).toEqual([
       `C${kid.id} is growing up`,
+      `C${kid.id} is all grown up`,
       `C${kid.id} set off to start a family of their own`,
       `C${mom} passed peacefully`,
     ]);
@@ -141,5 +147,32 @@ describe('journal names', () => {
     expect(texts(j)).toEqual([
       'Meadow and Wren became a pair', 'Feather is growing up', 'Feather is all grown up', 'Wren is an elder now',
     ]);
+  });
+});
+
+describe('journal review fixes', () => {
+  it('keeps custom names for creatures and families the journal still mentions', () => {
+    const { state, fam, mom } = familyWorld();
+    const book = new NameBook({ creatures: { [mom]: 'Biscuit', 99999: 'Gone' }, families: { [fam.id]: 'Clover', 88888: 'Old' } });
+    const j = emptyJournal();
+    addEntry(j, fam.id, 'rabbit', { tick: 1, kind: 'passed', creatureId: mom, name: 'Wren' });
+    state.creatures = state.creatures.filter((c) => c.id !== mom);
+    state.families = [];
+    book.prune(state, journalRefs(j));
+    expect(book.data.creatures).toEqual({ [mom]: 'Biscuit' });
+    expect(book.data.families).toEqual({ [fam.id]: 'Clover' });
+  });
+
+  it('observes every drained catch-up tick', () => {
+    const state = createWorld(5);
+    let seen = 0;
+    const res = runCatchUp(state, 25, 1e9, () => 0, () => seen++);
+    expect(res.ticksRun).toBe(25);
+    expect(seen).toBe(25);
+  });
+
+  it('rejects prototype keys as species in a tampered save', () => {
+    const j = sanitizeJournal({ pages: [{ familyId: 1, species: 'constructor', entries: [] }, { familyId: 2, species: 'toString', entries: [] }] });
+    expect(j.pages).toHaveLength(0);
   });
 });

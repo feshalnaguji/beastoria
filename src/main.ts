@@ -28,7 +28,7 @@ import { showCard, showWelcomeBack } from './ui/WelcomeBack';
 import { Renderer } from './render/Renderer';
 import { renderPortraitStudio } from './app/PortraitStudio';
 import { hemisphereFor, isFullMoon, SEASON_ICON, SEASON_WELCOME, seasonFor, seasonOverrides, type Season } from './app/season';
-import { emptyJournal, JournalRecorder } from './app/journal';
+import { emptyJournal, JournalRecorder, journalRefs } from './app/journal';
 import { showJournal } from './ui/JournalCard';
 
 /** Tap-vs-drag threshold, in CSS px between pointerdown and pointerup — a
@@ -117,6 +117,7 @@ async function start(): Promise<void> {
   // The family storybook (G4) records only your own valley, never a friend's.
   const recorder = visiting ? null : new JournalRecorder(journal, (s, c) => nameBook.creature(s, c));
   recorder?.prime(state);
+  const pruneNames = (): void => nameBook.prune(state, journalRefs(journal));
   const sinceTick = state.tick;
   const owed = save && !visiting ? owedTicks(Date.now() - save.savedAtEpochMs) : 0;
 
@@ -126,7 +127,8 @@ async function start(): Promise<void> {
   const season = looks.season ?? seasonFor(now, hemisphereFor(Intl.DateTimeFormat().resolvedOptions().timeZone ?? ''));
   const fullMoon = looks.fullMoon || isFullMoon(now);
   // Recorded even on a first run, so the next season change can be announced.
-  const turned = !visiting && looks.season === null && seasonTurned(season);
+  // Child mode skips the card, so it leaves the season unrecorded for the next grown-up visit.
+  const turned = !visiting && !childSettings.on && looks.season === null && seasonTurned(season);
   const seasonNews = turned && save !== null;
 
   const renderer = new Renderer();
@@ -159,10 +161,9 @@ async function start(): Promise<void> {
     const overlay = showDawnOverlay();
     const fromDay = getClock(state.tick).day;
     const toDay = getClock(state.tick + owed).day;
-    await drainCatchUp(state, owed, (d, t) => overlay.setProgress(d, t, fromDay, toDay));
+    await drainCatchUp(state, owed, (d, t) => overlay.setProgress(d, t, fromDay, toDay), () => recorder?.observe(state));
     overlay.el.remove();
     renderer.sync(state);
-    recorder?.observe(state);
     showWelcomeBack([
       ...(seasonNews ? [SEASON_WELCOME[season].title] : []),
       ...summarizeEvents(state.eventLog, sinceTick, (id) => nameBook.customFamily(id)),
@@ -252,7 +253,7 @@ async function start(): Promise<void> {
       ticksSinceSave++;
       if (ticksSinceSave >= AUTOSAVE_INTERVAL_TICKS) {
         ticksSinceSave = 0;
-        nameBook.prune(state);
+        pruneNames();
         void saveWorld(state, Date.now());
       }
     },
@@ -304,7 +305,7 @@ async function start(): Promise<void> {
     if (visiting) return;
     if (document.visibilityState === 'hidden') {
       hiddenAt = { epochMs: Date.now(), tick: state.tick };
-      nameBook.prune(state);
+      pruneNames();
       void saveWorld(state, Date.now());
       return;
     }
@@ -320,10 +321,9 @@ async function start(): Promise<void> {
     const overlay = showDawnOverlay();
     const fromDay = getClock(state.tick).day;
     const toDay = getClock(state.tick + owedNow).day;
-    void drainCatchUp(state, owedNow, (d, t) => overlay.setProgress(d, t, fromDay, toDay)).then(() => {
+    void drainCatchUp(state, owedNow, (d, t) => overlay.setProgress(d, t, fromDay, toDay), () => recorder?.observe(state)).then(() => {
       overlay.el.remove();
       renderer.sync(state);
-      recorder?.observe(state);
       showWelcomeBack(summarizeEvents(state.eventLog, tickAtHide, (id) => nameBook.customFamily(id)));
     }).catch((err) => console.warn('[catchup] resume after error:', err))
       .finally(() => {
@@ -332,7 +332,7 @@ async function start(): Promise<void> {
       });
   });
   window.addEventListener('pagehide', () => {
-    nameBook.prune(state);
+    pruneNames();
     void saveWorld(state, Date.now());
   });
 

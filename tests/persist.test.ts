@@ -544,7 +544,9 @@ describe('save v3: journal', () => {
     expect(fromV2?.journal).toEqual({ pages: [] });
     const once = migrate(JSON.parse(JSON.stringify(fixtureV3)));
     expect(once?.version).toBe(3);
-    expect(once?.journal).toEqual({ pages: [] });
+    // The frozen page locks the v3 entry shape: a change to it must come with a migration.
+    expect(once?.journal).toEqual(fixtureV3.journal);
+    expect(once?.journal.pages[0]?.entries.map((e) => e.kind)).toEqual(['paired', 'nested', 'born', 'growing', 'passed']);
     expect(migrate(JSON.parse(JSON.stringify(once)))).toEqual(once);
   });
 

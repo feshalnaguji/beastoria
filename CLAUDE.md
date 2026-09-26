@@ -178,7 +178,9 @@ v1 (two open tabs overwrite each other's timeline harmlessly).
   visiting) recorded by the app-layer `JournalRecorder` observer — pairing, home,
   eggs/births, growing up, setting off, elders, gentle passings, phoenix rebirth —
   capped at 60 families × 40 entries; save v3 carries it; `?season=`/`?moon=full`
-  preview overrides; 286 tests).
+  preview overrides; its review also fixed a pre-existing DPR-2 bug — Pixi 8 renderer
+  width is already CSS px, so postcard crop, audio view centre and glyph culling were
+  halved on phones; 289 tests).
 - **Status: M13 complete and deployed (2026-08-22), still awaiting the
   user's live review** — all four M13 threads above are implemented,
   tested (full suite incl. the 6-seed + 100-day-soak balance property

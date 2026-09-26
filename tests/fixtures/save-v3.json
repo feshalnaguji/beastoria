@@ -7,7 +7,49 @@
     "families": {}
   },
   "journal": {
-    "pages": []
+    "pages": [
+      {
+        "familyId": 4,
+        "species": "rabbit",
+        "firstTick": 600,
+        "lastTick": 4200,
+        "entries": [
+          {
+            "tick": 600,
+            "kind": "paired",
+            "pairIds": [
+              1,
+              2
+            ],
+            "pairNames": [
+              "Meadow",
+              "Wren"
+            ]
+          },
+          {
+            "tick": 700,
+            "kind": "nested"
+          },
+          {
+            "tick": 2400,
+            "kind": "born",
+            "count": 2
+          },
+          {
+            "tick": 3300,
+            "kind": "growing",
+            "creatureId": 9,
+            "name": "Briar"
+          },
+          {
+            "tick": 4200,
+            "kind": "passed",
+            "creatureId": 2,
+            "name": "Wren"
+          }
+        ]
+      }
+    ]
   },
   "sim": {
     "tick": 300,

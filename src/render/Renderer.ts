@@ -612,12 +612,11 @@ export class Renderer {
    * (the whole world), not just what's on screen — the postcard would show
    * dark bands for off-screen world. `frame` restricts extraction to the
    * viewport: it's in the target's local/world coordinates, and for the
-   * stage that's CSS pixels of the screen (0,0 to renderer width/height
-   * divided by resolution, since width/height are device pixels). */
+   * stage that's CSS pixels of the screen (0,0 to `renderer.screen` size —
+   * Pixi 8's renderer.width/height are already CSS pixels, never divide by resolution). */
   snapshot(): HTMLCanvasElement {
     const resolution = this.app.renderer.resolution;
-    const w = this.app.renderer.width / resolution;
-    const h = this.app.renderer.height / resolution;
+    const { width: w, height: h } = this.app.renderer.screen;
     return this.app.renderer.extract.canvas({
       target: this.app.stage,
       frame: new Rectangle(0, 0, w, h),
@@ -634,17 +633,16 @@ export class Renderer {
    * expects CSS-pixel screen coordinates (it works from `getBoundingClientRect()`,
    * which is CSS pixels, same space as pointer events' clientX/clientY — see
    * `pickCreature` below, which forwards raw client coords unmodified).
-   * `this.app.renderer.width/height` are DEVICE pixels (the drawing-buffer size;
-   * with `autoDensity: true` the canvas's CSS size is that divided by
-   * `resolution`), so we divide by `this.app.renderer.resolution` first to get
-   * back to CSS pixels before asking for the canvas center. The #app canvas
+   * `this.app.renderer.screen` is the canvas size in CSS pixels (in Pixi 8,
+   * renderer.width/height are CSS pixels too — the drawing buffer is
+   * screen × resolution), so its half-size is the canvas center. The #app canvas
    * fills the full viewport at (0,0) (see index.html), so this canvas-center
    * point resolves to exactly the camera's own (x, y) target.
    */
   viewInfo(): { x: number; y: number; zoom: number } {
     const c = this.camera.toWorld(
-      this.app.renderer.width / this.app.renderer.resolution / 2,
-      this.app.renderer.height / this.app.renderer.resolution / 2,
+      this.app.renderer.screen.width / 2,
+      this.app.renderer.screen.height / 2,
     );
     return { x: c.x, y: c.y, zoom: this.camera.getZoom() };
   }
@@ -1256,8 +1254,8 @@ export class Renderer {
     // per-view loop below (M9 task 5).
     const camCX = this.camera.getCenterX();
     const camCY = this.camera.getCenterY();
-    const cw = this.app.renderer.width / this.app.renderer.resolution;
-    const ch = this.app.renderer.height / this.app.renderer.resolution;
+    const cw = this.app.renderer.screen.width;
+    const ch = this.app.renderer.screen.height;
     const glyphHalfW = cw / 2 / zoom + GLYPH_CULL_MARGIN;
     const glyphHalfH = ch / 2 / zoom + GLYPH_CULL_MARGIN;
     const glyphRadius = clamp(GLYPH_RADIUS_K / zoom, GLYPH_RADIUS_MIN, GLYPH_RADIUS_MAX);
@@ -1992,9 +1990,8 @@ export class Renderer {
     // Full moon: a glowing disc in the sky corner, fading in with the dark.
     this.moonOverlay.clear();
     if (this.fullMoon && this.clock.light < 0.6) {
-      const cssW = w / this.app.renderer.resolution;
       const a = Math.min(1, (0.6 - this.clock.light) / 0.4);
-      const mx = cssW - 110;
+      const mx = w - 110; // w is already CSS pixels
       const my = 150;
       this.moonOverlay
         .circle(mx, my, 62).fill({ color: 0xe8ecff, alpha: 0.06 * a })

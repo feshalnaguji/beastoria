@@ -90,6 +90,20 @@ function pageNameFor(page: FamilyPage, id: number): string | undefined {
   return undefined;
 }
 
+/** Every creature and family id the journal mentions — their custom names must outlive them. */
+export function journalRefs(journal: Journal): { creatures: Set<number>; families: Set<number> } {
+  const creatures = new Set<number>();
+  const families = new Set<number>();
+  for (const p of journal.pages) {
+    families.add(p.familyId);
+    for (const e of p.entries) {
+      if (e.creatureId !== undefined) creatures.add(e.creatureId);
+      for (const id of e.pairIds ?? []) creatures.add(id);
+    }
+  }
+  return { creatures, families };
+}
+
 /** Whatever a save holds, return a valid journal (bad pages/entries are dropped, caps applied). */
 export function sanitizeJournal(raw: unknown): Journal {
   const out = emptyJournal();
@@ -99,7 +113,7 @@ export function sanitizeJournal(raw: unknown): Journal {
   const str = (v: unknown): v is string => typeof v === 'string';
   for (const p of pages as unknown[]) {
     const q = p as Partial<FamilyPage> | null;
-    if (!q || !num(q.familyId) || !str(q.species) || !(q.species in SPECIES) || !Array.isArray(q.entries)) continue;
+    if (!q || !num(q.familyId) || !str(q.species) || !Object.hasOwn(SPECIES, q.species) || !Array.isArray(q.entries)) continue;
     const entries: JournalEntry[] = [];
     for (const e of q.entries as unknown[]) {
       const r = e as Partial<JournalEntry> | null;
@@ -114,13 +128,14 @@ export function sanitizeJournal(raw: unknown): Journal {
       }
       entries.push(clean);
     }
-    const ticks = entries.map((x) => x.tick);
+    const kept = entries.slice(-MAX_ENTRIES);
+    const ticks = kept.map((x) => x.tick);
     out.pages.push({
       familyId: q.familyId,
       species: q.species as SpeciesId,
       firstTick: num(q.firstTick) ? q.firstTick : ticks.length > 0 ? Math.min(...ticks) : 0,
       lastTick: num(q.lastTick) ? q.lastTick : ticks.length > 0 ? Math.max(...ticks) : 0,
-      entries: entries.slice(-MAX_ENTRIES),
+      entries: kept,
     });
   }
   out.pages = out.pages.slice(-MAX_PAGES);
@@ -217,7 +232,10 @@ export class JournalRecorder {
       if (kind && familyId !== null) {
         addEntry(this.journal, familyId, c.species, { tick: state.tick, kind, creatureId: id, name: this.nameOf(state, c) });
       }
-      if (prev.isChild && prev.familyId !== null && c.familyId !== prev.familyId) {
+      // Only a grown child sets off; a little one released because its last parent passed is
+      // not a departure (the passing is already on the page).
+      const grown = c.stage === 'adult' || c.stage === 'elder';
+      if (grown && prev.isChild && prev.familyId !== null && c.familyId !== prev.familyId) {
         addEntry(this.journal, prev.familyId, prev.species, { tick: state.tick, kind: 'setOff', creatureId: id, name: prev.name });
       }
     }

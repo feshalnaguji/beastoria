@@ -55,10 +55,11 @@ export class NameBook {
     const n = normalizeName(raw);
     if (n === null) delete bucket[id]; else bucket[id] = n;
   }
-  /** Drop names for creatures/families that no longer exist. Called before each save. */
-  prune(state: WorldState): void {
-    const cs = new Set(state.creatures.map((c) => c.id));
-    const fs = new Set(state.families.map((f) => f.id));
+  /** Drop names for creatures/families that no longer exist. Called before each save.
+   * `keep` lists ids still remembered elsewhere (the journal), whose names must survive them. */
+  prune(state: WorldState, keep?: { creatures: Set<number>; families: Set<number> }): void {
+    const cs = new Set([...state.creatures.map((c) => c.id), ...(keep?.creatures ?? [])]);
+    const fs = new Set([...state.families.map((f) => f.id), ...(keep?.families ?? [])]);
     for (const id of Object.keys(this.data.creatures)) if (!cs.has(Number(id))) delete this.data.creatures[Number(id)];
     for (const id of Object.keys(this.data.families)) if (!fs.has(Number(id))) delete this.data.families[Number(id)];
   }
