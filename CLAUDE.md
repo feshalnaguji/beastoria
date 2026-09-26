@@ -168,7 +168,7 @@ v1 (two open tabs overwrite each other's timeline harmlessly).
   pills and DevPanel hidden, tap-to-start after reload or lost fullscreen,
   hold-🔒-3s + multiplication gate with a 3-strike 30 s cooldown, gentle
   play timer (visible time only, survives reloads) ending on a calm sleep
-  screen; state in localStorage `beastoria.child`, not the save; 274 tests).
+  screen; state in localStorage `beastoria.child`, not the save; 272 tests).
 - **Status: M13 complete and deployed (2026-08-22), still awaiting the
   user's live review** — all four M13 threads above are implemented,
   tested (full suite incl. the 6-seed + 100-day-soak balance property
