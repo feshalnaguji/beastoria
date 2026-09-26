@@ -284,14 +284,13 @@ async function start(): Promise<void> {
 /** Visit mode: a friend's valley, running live but never saved over your own (spec G2 §3). */
 function showVisitBanner(): void {
   const bar = document.createElement('div');
-  // Constrained to the middle column (not full-width) so it can never
-  // overlap the clock/sound pills pinned at the top corners on a phone —
-  // at 375px width the clock pill is ~100px and the sound pill ~115px
-  // (before unlock), so `calc(100% - 260px)` leaves clearance on both sides
-  // even with a little margin. Wraps rather than truncating/overflowing.
+  // Sits below the whole HUD column (clock/creatures/share pills end ~130px)
+  // rather than between the top-corner pills: at 375px only ~120px is free
+  // between the clock and sound pills, which forced a 3-4 line banner that
+  // still collided with the sound chip.
   bar.style.cssText = [
-    ...PILL_CSS, 'top:12px', 'left:50%', 'transform:translateX(-50%)',
-    'max-width:calc(100% - 260px)', 'font-size:13px',
+    ...PILL_CSS, 'top:140px', 'left:50%', 'transform:translateX(-50%)',
+    'max-width:calc(100% - 24px)', 'box-sizing:border-box', 'font-size:13px',
     'white-space:normal', 'text-align:center',
   ].join(';');
   bar.setAttribute('data-testid', 'visit-banner');

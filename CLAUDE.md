@@ -161,7 +161,7 @@ v1 (two open tabs overwrite each other's timeline harmlessly).
   `?valley=` share links + a postcard image (Web Share / clipboard /
   download), adopt-from-link and never-destructive visit mode, local-only
   creature/family naming from the inspect card (family names also carried
-  into home labels and the welcome-back card); 263 tests).
+  into home labels and the welcome-back card); 264 tests).
 - **Status: M13 complete and deployed (2026-08-22), still awaiting the
   user's live review** — all four M13 threads above are implemented,
   tested (full suite incl. the 6-seed + 100-day-soak balance property
@@ -175,9 +175,12 @@ v1 (two open tabs overwrite each other's timeline harmlessly).
   to main and deployed (2026-09-19)**, awaiting the user's live review
   alongside M13's and G1's — the 2026-09-05 end-user review that scoped
   it lives in `docs/superpowers/specs/2026-09-05-p1-first-impressions-design.md`.
-  **G2 (Shareable) is built on branch `g2-shareable`**, awaiting the
-  controller's final review, merge, and deploy (the controller flips this
-  entry at merge time).
+  **G2 (Shareable) merged to main and deployed (2026-09-26)**, awaiting
+  the user's live review alongside M13/G1/P1. Known limits: native Share…
+  on iOS is reasoned-correct (no await before `navigator.share`) but not
+  device-tested; a tab still running the pre-G2 build could overwrite a
+  v2 save during the deploy window (accepted — `loadSave` now refuses to
+  save over newer-version saves, protecting every future version bump).
 - **M14 candidates (deferred out of M13 scope, per the user's own decision
   recorded in this milestone's plan):** (1) feeding still reads as one
   mechanism tuned per species rather than each species' real behavior — not
@@ -225,7 +228,7 @@ deliberately so ads don't feel intrusive. Tracked as its own G-series in
 `docs/superpowers/specs/2026-08-22-growth-distribution-design.md` — read that spec before touching
 this track. **G1 (Findable)** is built and deployed (see Current status above), awaiting the user's live review.
 **G2 (Shareable)** — seed/world-link sharing, naming — is built (see Current status above),
-awaiting the controller's final review, merge, and deploy. **G3** (child mode) is next, pending
+merged and deployed, awaiting the user's live review. **G3** (child mode) is next, pending
 its own `superpowers:brainstorming` session per this project's working process. **G4** (return
 rhythm) is queued behind it. One decision from G1's brainstorm binds all later
 ad work and is worth keeping visible: **contextual-only ads, zero tracking** — the child-directed
