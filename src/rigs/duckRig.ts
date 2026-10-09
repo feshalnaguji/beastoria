@@ -11,8 +11,8 @@
  * brown bird, and the thing that separates her from the (warm-grey, big-billed)
  * dodo at T1 together with her flat orange bill.
  * SECONDARY MARKINGS (T2 only): the dark eye-stripe through the eye, the
- * orange bill with a dark saddle, the pale buff cheek and throat, the dark
- * tail-curl, and the orange webbed feet.
+ * orange bill with a dark saddle, the pale buff cheek and throat, the
+ * buff-white tail edge, and the orange webbed feet.
  *
  * SILHOUETTE: a boat-shaped `path` hull with a flat keel, rump tilted up into
  * a pointed tail, a swan-less short neck and a broad flat bill; the legs are
@@ -44,7 +44,6 @@ const CREAM = 0xe9dcc0; // light: breast, belly
 const RIM = 0xfff3d8; // light: sunlit top edge
 // --- markings -------------------------------------------------------------
 const HEAD = 0x8a7355;
-const CROWN_SHEEN = 0x6f8a72; // the soft teal crown
 const BUFF = 0xe3d3ae; // cheek and throat
 const SPEC = 0x3e7d8a; // PRIMARY: the speculum
 const SPEC_SHEEN = 0x6fb1be;
@@ -196,16 +195,16 @@ export const duckRig: CreatureRig = {
       ],
     },
     {
-      // Pointed, slightly cocked tail. SECONDARY MARKING: a small dark curl.
+      // Short pointed tail fan, low and roughly continuing the back line.
       id: 'tail',
       parent: 'body',
       x: -17,
       y: -5,
       z: -1,
       shapes: [
-        { kind: 'path', d: 'M 2 2 Q -6 -1 -11 -9 Q -6 -6 2 -4 Z', fill: { color: BROWN_DARK } },
-        { kind: 'path', d: 'M -3 -4 Q -8 -5 -11 -9 Q -6 -7 -1 -6.5 Z', fill: { color: CREAM, alpha: 0.5 } },
-        { kind: 'line', x1: -10, y1: -8, x2: -13, y2: -11, width: 1.5, fill: { color: BILL_DARK } },
+        { kind: 'path', d: 'M 2 -4 Q -6 -6 -13 -4 Q -11 -1 -12 1 Q -5 3 2 3 Z', fill: { color: BROWN } },
+        { kind: 'path', d: 'M 2 3 Q -5 3 -12 1 Q -10.5 -0.5 -11 -1.5 Q -5 1 2 0 Z', fill: { color: BROWN_DARK, alpha: 0.6 } },
+        { kind: 'path', d: 'M -13 -4 Q -11 -1 -12 1 L -10.5 0.5 Q -9.5 -2 -10.5 -3.8 Z', fill: { color: BUFF, alpha: 0.9 } },
       ],
     },
     {
@@ -271,9 +270,9 @@ export const duckRig: CreatureRig = {
       shapes: [
         { kind: 'path', d: 'M 8 -5 Q 0 -8 -9 -5 Q -17 -1 -19 4 Q -10 8 0 6 Q 7 3 9 -1 Z', fill: { color: BROWN_DARK } },
         { kind: 'path', d: 'M -4 -4 Q 2 -5 7 -3 Q 5 -1 -2 -1 Q -8 -1 -4 -4 Z', fill: { color: BROWN, alpha: 0.5 } },
-        { kind: 'path', d: 'M -14 1.6 Q -7 3.2 -1 1.4 L -1.5 5.8 Q -7 6.6 -14.5 4.8 Z', fill: { color: SPEC_EDGE, alpha: 0.92 } },
-        { kind: 'path', d: 'M -13 2.4 Q -7 3.8 -2 2.4 L -2.3 4.8 Q -7 5.4 -13.3 4 Z', fill: { color: SPEC } },
-        { kind: 'path', d: 'M -12 2.8 Q -7 3.9 -3 2.9 Q -7 3.2 -12 3.4 Z', fill: { color: SPEC_SHEEN, alpha: 0.7 } },
+        { kind: 'path', d: 'M -15 2.8 Q -8 4.4 -1 1 L -1.3 4.8 Q -8 7 -15.3 6 Z', fill: { color: SPEC_EDGE, alpha: 0.92 } },
+        { kind: 'path', d: 'M -14 3.8 Q -8 5.2 -2 2.4 L -2.2 3.9 Q -8 5.9 -14.2 5.2 Z', fill: { color: SPEC } },
+        { kind: 'path', d: 'M -13 4.2 Q -8 5.4 -3 3 Q -8 4.6 -13 4.7 Z', fill: { color: SPEC_SHEEN, alpha: 0.7 } },
         { kind: 'line', x1: -4, y1: -1, x2: -15, y2: 2, width: 0.8, fill: { color: BROWN_DEEP, alpha: 0.45 } },
         {
           kind: 'path',
@@ -296,8 +295,8 @@ export const duckRig: CreatureRig = {
         },
         {
           kind: 'path',
-          d: 'M -8 0 Q -10 -4 -4 -8 Q 3 -10 7 -5 Q 8 -3.5 8 -2 Q 3 -7 -2 -6.5 Q -7 -5 -8 0 Z',
-          fill: { color: CROWN_SHEEN, alpha: 0.6 },
+          d: 'M -7 -1 Q -8.5 -4.5 -3.5 -7 Q 2.5 -8.5 5.5 -4.5 Q 3 -5.5 -1 -5.5 Q -5.5 -4.5 -7 -1 Z',
+          fill: { color: BROWN_DARK, alpha: 0.6 },
         },
         // SECONDARY MARKING: pale buff cheek and throat.
         { kind: 'path', d: 'M -6 4 Q -2 1.5 5 2.5 Q 8 3 8 4 Q 4 8 -2 7.5 Q -6 7 -6 4 Z', fill: { color: BUFF, alpha: 0.85 } },
@@ -307,8 +306,8 @@ export const duckRig: CreatureRig = {
         { kind: 'circle', x: 3.9, y: -2.2, r: 0.6, fill: { color: 0xffffff, alpha: 0.85 } },
         {
           kind: 'path',
-          d: 'M -8 0 Q -9.5 -4.5 -4 -8 Q 3 -10 7 -5 Q 8 -4 8 -3.5 Q 3 -8.5 -2 -8 Q -7 -7 -8 0 Z',
-          fill: { color: RIM, alpha: 0.25 },
+          d: 'M -7 -2 Q -8.5 -5 -3.5 -7.3 Q 2.5 -8.8 5.5 -5 Q 1 -7.5 -3 -6.5 Q -6 -5 -7 -2 Z',
+          fill: { color: RIM, alpha: 0.2 },
         },
       ],
     },
