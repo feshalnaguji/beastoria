@@ -431,7 +431,7 @@ const LABEL_HEIGHT: Record<SpeciesId, number> = {
   owl: -70,
   dodo: -70,
   phoenix: -110,
-  squirrel: -46,
+  squirrel: -64, // M14 plume tail crowns at y -50 (-59 mid-bound); keep the glyph above it
   frog: -30,
   turtle: -22,
   kangaroo: -100,

@@ -1,7 +1,7 @@
 # The rig art recipe — how a Beastoria creature becomes recognizable
 
 **Status:** written and proven on the rabbit in M12 task 6. Applied to deer / robin / kangaroo in
-M12 task 7. The remaining eight species follow in M13.
+M12 task 7. The remaining eight species (squirrel, frog, turtle, duck, owl, dodo, phoenix, koi) were rebuilt to it in M14 (2026-10-10), so every rig in the valley now follows it.
 
 **Scope:** this document is the checklist for rebuilding any `src/rigs/*Rig.ts`. It changes no
 code outside the rig files — **no format change**: `ShapeFill` stays flat `{ color, alpha? }`,
