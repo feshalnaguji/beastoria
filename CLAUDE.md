@@ -212,6 +212,18 @@ v1 (two open tabs overwrite each other's timeline harmlessly).
   **G4 (Return rhythm) merged to main and deployed (2026-09-26)**, awaiting the
   user's live review. Known limit: a very long catch-up can outrun the 500-entry
   event log, so the journal may miss a few moments from deep offline stretches.
+- **Next up — M15 (controller-ruled, start it without asking):** the remaining v1-polish
+  items, in this order:
+  1. Feeding realism. Watch several species feed side by side, using 
+     plus in-game 64x via Playwright. Name what reads as same-y in checkable terms, then fix it per species.
+  2. : calm the drift particles, camera easing and sparkles.
+  3. Kangaroo joey visibility at T0/T1: a creatureLayer z-sort or a joey-variant T1 bake.
+  4. Family-label overlap at homes.
+  Workflow that worked in M14:
+  - sonnet implementers, at most 2–3 at once, foreground-only tests, no commits;
+  - the controller eyeballs rendered portraits/poses (playwright-core in the scratchpad, Chromium at
+    ,  serves at );
+  - one opus whole-branch review, then deploy.
 - **M14 shipped the rig-art pass (2026-10-10, spec
   `docs/superpowers/specs/2026-10-10-m14-rig-art-pass.md`). Still deferred from the
   M13 candidate list:** (1) feeding still reads as one
