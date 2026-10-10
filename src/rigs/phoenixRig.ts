@@ -456,13 +456,14 @@ export const phoenixRig: CreatureRig = {
       durationMs: 4800,
       tracks: [
         { partId: 'body', sy: kf([0, 1], [0.5, 1.03], [1, 1]), py: kf([0, 21], [1, 21]), rot: kf([0, 0.03], [1, 0.03]) },
-        // Neck squashed to a stub (sy .2); the head counter-stretches its own x axis
-        // (which maps onto the neck's y at rot 1.5) so it stays round, and its
-        // rot cancels the neck's: net +0.3, upright, bill tipped gently down.
-        { partId: 'neck', rot: kf([0, -1.2], [1, -1.2]), sy: kf([0, 0.2], [1, 0.2]) },
-        { partId: 'head', rot: kf([0, 1.5], [1, 1.5]), sx: kf([0, 5], [1, 5]) },
+        // The neck folds back and down by ROTATION (scale stays 0.82, so no
+        // crossfade ever distorts the head); head px/py then lifts the head
+        // from the belly back up onto the shoulders, rot 2.4 brings it upright
+        // (net +0.3, bill tipped gently down), sx/sy 1.2 offsets the neck's 0.82.
+        { partId: 'neck', rot: kf([0, -2.1], [1, -2.1]), sx: kf([0, 0.82], [1, 0.82]), sy: kf([0, 0.82], [1, 0.82]) },
+        { partId: 'head', rot: kf([0, 2.4], [1, 2.4]), px: kf([0, 8], [1, 8]), py: kf([0, 20.5], [1, 20.5]), sx: kf([0, 1.2], [1, 1.2]), sy: kf([0, 1.2], [1, 1.2]) },
         { partId: 'wing', rot: kf([0, 0.02], [1, 0.02]) },
-        { partId: 'crest', rot: kf([0, -1.1], [1, -1.1]), sy: kf([0, 0.55], [1, 0.55]) },
+        { partId: 'crest', rot: kf([0, -1.1], [1, -1.1]), sy: kf([0, 0.7], [1, 0.7]) },
         { partId: 'glow', sx: kf([0, 0.8], [0.5, 0.85], [1, 0.8]), sy: kf([0, 0.8], [0.5, 0.85], [1, 0.8]) },
         { partId: 'tail', rot: kf([0, 0], [0.5, 0.03], [1, 0]) },
         { partId: 'streamA', rot: kf([0, -0.04], [0.5, -0.01], [1, -0.04]) },
@@ -544,10 +545,10 @@ export const phoenixRig: CreatureRig = {
       ],
     },
     sit: {
-      // Settled to brood: a gentle squash. 34 * .86 + 4.8 ≈ 34 keeps the toes down.
+      // Settled to brood: a gentle squash. py 10 (not 4.8) so the lowest point meets the shadow once the folded legs' lift is counted.
       durationMs: 3600,
       tracks: [
-        { partId: 'body', sy: kf([0, 0.86], [1, 0.86]), py: kf([0, 4.8], [1, 4.8]) },
+        { partId: 'body', sy: kf([0, 0.86], [1, 0.86]), py: kf([0, 10], [1, 10]) },
         { partId: 'legF', rot: kf([0, 0.6], [1, 0.6]) },
         { partId: 'legB', rot: kf([0, 0.55], [1, 0.55]) },
         { partId: 'shinF', rot: kf([0, 0.8], [1, 0.8]) },

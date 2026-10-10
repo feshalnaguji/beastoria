@@ -64,11 +64,12 @@ const GROUND_SHADE = 0x3d5a2e;
  * Shared by `walk` and `carry` (the frog carries nothing visible but the fly).
  */
 const HOP_TRACKS: Track[] = [
+  { partId: 'tongue', sx: [{ t: 0, v: 0.02 }, { t: 1, v: 0.02 }] },
   {
     partId: 'body',
     py: [
       { t: 0, v: 0 },
-      { t: 0.14, v: 1.5 },
+      { t: 0.14, v: 1 },
       { t: 0.3, v: -2 },
       { t: 0.5, v: -11 },
       { t: 0.72, v: -6 },
@@ -90,10 +91,10 @@ const HOP_TRACKS: Track[] = [
     rot: [
       { t: 0, v: 0 },
       { t: 0.14, v: -0.2 },
-      { t: 0.3, v: 1.7 },
-      { t: 0.5, v: 2.2 },
-      { t: 0.72, v: 1.3 },
-      { t: 0.88, v: 0.35 },
+      { t: 0.3, v: 1.95 },
+      { t: 0.5, v: 2.6 },
+      { t: 0.72, v: 1.43 },
+      { t: 0.88, v: 0.31 },
       { t: 1, v: 0 },
     ],
   },
@@ -103,10 +104,10 @@ const HOP_TRACKS: Track[] = [
     rot: [
       { t: 0, v: 0 },
       { t: 0.14, v: 0.2 },
-      { t: 0.3, v: -2.0 },
-      { t: 0.5, v: -2.3 },
-      { t: 0.72, v: -1.2 },
-      { t: 0.88, v: -0.25 },
+      { t: 0.3, v: -1.65 },
+      { t: 0.5, v: -2.2 },
+      { t: 0.72, v: -1.21 },
+      { t: 0.88, v: -0.26 },
       { t: 1, v: 0 },
     ],
   },
@@ -114,11 +115,11 @@ const HOP_TRACKS: Track[] = [
     partId: 'hindFoot',
     rot: [
       { t: 0, v: 0 },
-      { t: 0.14, v: 0.15 },
-      { t: 0.3, v: 1.6 },
-      { t: 0.5, v: 2.65 },
-      { t: 0.72, v: 1.2 },
-      { t: 0.88, v: 0.2 },
+      { t: 0.14, v: -0.05 },
+      { t: 0.3, v: -2.76 },
+      { t: 0.5, v: -3.68 },
+      { t: 0.72, v: -2.02 },
+      { t: 0.88, v: -0.44 },
       { t: 1, v: 0 },
     ],
   },
@@ -128,10 +129,10 @@ const HOP_TRACKS: Track[] = [
     rot: [
       { t: 0, v: 0 },
       { t: 0.14, v: -0.18 },
-      { t: 0.3, v: 1.6 },
-      { t: 0.5, v: 2.1 },
-      { t: 0.72, v: 1.35 },
-      { t: 0.88, v: 0.4 },
+      { t: 0.3, v: 1.8 },
+      { t: 0.5, v: 2.5 },
+      { t: 0.72, v: 1.3 },
+      { t: 0.88, v: 0.28 },
       { t: 1, v: 0 },
     ],
   },
@@ -140,10 +141,10 @@ const HOP_TRACKS: Track[] = [
     rot: [
       { t: 0, v: 0 },
       { t: 0.14, v: 0.18 },
-      { t: 0.3, v: -1.9 },
-      { t: 0.5, v: -2.2 },
-      { t: 0.72, v: -1.25 },
-      { t: 0.88, v: -0.3 },
+      { t: 0.3, v: -1.5 },
+      { t: 0.5, v: -2.1 },
+      { t: 0.72, v: -1.1 },
+      { t: 0.88, v: -0.23 },
       { t: 1, v: 0 },
     ],
   },
@@ -151,11 +152,11 @@ const HOP_TRACKS: Track[] = [
     partId: 'hindFarFoot',
     rot: [
       { t: 0, v: 0 },
-      { t: 0.14, v: 0.12 },
-      { t: 0.3, v: 1.5 },
-      { t: 0.5, v: 2.5 },
-      { t: 0.72, v: 1.2 },
-      { t: 0.88, v: 0.2 },
+      { t: 0.14, v: -0.05 },
+      { t: 0.3, v: -2.6 },
+      { t: 0.5, v: -3.6 },
+      { t: 0.72, v: -1.9 },
+      { t: 0.88, v: -0.4 },
       { t: 1, v: 0 },
     ],
   },
@@ -214,25 +215,25 @@ const KICK = {
   thigh: [
     { t: 0, v: 0 },
     { t: 0.15, v: -0.2 },
-    { t: 0.35, v: 1.9 },
-    { t: 0.55, v: 2.0 },
-    { t: 0.8, v: 0.6 },
+    { t: 0.35, v: 2.6 },
+    { t: 0.55, v: 2.6 },
+    { t: 0.8, v: 0.78 },
     { t: 1, v: 0 },
   ],
   shank: [
     { t: 0, v: 0 },
     { t: 0.15, v: 0.2 },
-    { t: 0.35, v: -2.1 },
+    { t: 0.35, v: -2.2 },
     { t: 0.55, v: -2.2 },
-    { t: 0.8, v: -0.6 },
+    { t: 0.8, v: -0.66 },
     { t: 1, v: 0 },
   ],
   foot: [
     { t: 0, v: 0 },
-    { t: 0.15, v: 0.15 },
-    { t: 0.35, v: 1.8 },
-    { t: 0.55, v: 2.0 },
-    { t: 0.8, v: 0.5 },
+    { t: 0.15, v: -0.05 },
+    { t: 0.35, v: -3.68 },
+    { t: 0.55, v: -3.68 },
+    { t: 0.8, v: -1.1 },
     { t: 1, v: 0 },
   ],
 };
@@ -636,6 +637,7 @@ export const frogRig: CreatureRig = {
       // A still, throat-pulsing wait with a slow blink.
       durationMs: 1600,
       tracks: [
+        { partId: 'tongue', sx: [{ t: 0, v: 0.02 }, { t: 1, v: 0.02 }] },
         {
           partId: 'throat',
           sy: [
@@ -708,6 +710,7 @@ export const frogRig: CreatureRig = {
       // feet on the shadow line (18 * 0.88 + 2.2 ~ 18).
       durationMs: 3400,
       tracks: [
+        { partId: 'tongue', sx: [{ t: 0, v: 0.02 }, { t: 1, v: 0.02 }] },
         {
           partId: 'body',
           sy: [
@@ -819,6 +822,7 @@ export const frogRig: CreatureRig = {
       // A throat-pouch chorus: two big inflations, head lifted to call.
       durationMs: 1000,
       tracks: [
+        { partId: 'tongue', sx: [{ t: 0, v: 0.02 }, { t: 1, v: 0.02 }] },
         {
           partId: 'throat',
           sy: [
@@ -862,6 +866,7 @@ export const frogRig: CreatureRig = {
       // because the kick is the top-level read of the character.
       durationMs: 700,
       tracks: [
+        { partId: 'tongue', sx: [{ t: 0, v: 0.02 }, { t: 1, v: 0.02 }] },
         {
           partId: 'body',
           py: [
@@ -928,6 +933,7 @@ export const frogRig: CreatureRig = {
       // shadow line (18 * 0.9 + 1.8 ~ 18), throat pulsing slowly.
       durationMs: 1400,
       tracks: [
+        { partId: 'tongue', sx: [{ t: 0, v: 0.02 }, { t: 1, v: 0.02 }] },
         {
           partId: 'body',
           sy: [

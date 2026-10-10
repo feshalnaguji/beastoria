@@ -225,7 +225,8 @@ const BOUND_TRACKS: Track[] = [
  * so the paws meet just under the chin; the tail leans along the spine.
  */
 const SIT_POSE: Track[] = [
-  { partId: 'body', rot: [{ t: 0, v: -0.95 }, { t: 1, v: -0.95 }], py: [{ t: 0, v: -1 }, { t: 1, v: -1 }] },
+  // py lifts the pitched body so the haunch and hind feet stay on the shadow line (review: -1 sank them ~12 px).
+  { partId: 'body', rot: [{ t: 0, v: -0.95 }, { t: 1, v: -0.95 }], py: [{ t: 0, v: -11 }, { t: 1, v: -11 }] },
   hold('hindThigh', 0.35),
   hold('hindShank', 0.25),
   hold('hindFoot', 0.4),

@@ -18,19 +18,8 @@ export async function renderPortraitStudio(mount: HTMLElement, species: SpeciesI
   }
   const def = rigFor(species);
   const rig = buildRig(def, 'adult');
-  // Dev review aid: `&pose=<clip>&t=<0..1>` freezes any clip at a phase (default: idle at rest).
-  const q = new URLSearchParams(location.search);
-  const pose = q.get('pose');
-  const clip = pose !== null && Object.hasOwn(def.clips, pose) ? def.clips[pose as keyof typeof def.clips] : undefined;
-  if (clip && pose) {
-    const t = Math.min(1, Math.max(0, Number(q.get('t') ?? 0) || 0));
-    rig.animator.play(pose as Parameters<typeof rig.animator.play>[0]);
-    // Whole cycles first so the 220 ms crossfade has finished, then land on phase t.
-    rig.animator.update(clip.durationMs * Math.ceil(300 / clip.durationMs) + t * clip.durationMs);
-  } else {
-    rig.animator.play('idle');
-    rig.animator.update(0);
-  }
+  rig.animator.play('idle');
+  rig.animator.update(0);
   scene.addChild(rig.root);
   app.stage.addChild(scene);
   // Fit the rig into ~70% of the canvas, feet near the ground line.
@@ -42,6 +31,17 @@ export async function renderPortraitStudio(mount: HTMLElement, species: SpeciesI
     ? SIZE / 2 - (bb.y + bb.height / 2) // no feet to plant on a ground line — centre it instead
     : SIZE * 0.78 - (bb.y + bb.height);
   rig.root.position.set(SIZE / 2 - (bb.x + bb.width / 2), y);
+  // Dev review aid: `&pose=<clip>&t=<0..1>` freezes any clip at a phase. Framing stays the idle
+  // pose's, so a pose that sinks below or floats above the ground line shows as such.
+  const q = new URLSearchParams(location.search);
+  const pose = q.get('pose');
+  const clip = pose !== null && Object.hasOwn(def.clips, pose) ? def.clips[pose as keyof typeof def.clips] : undefined;
+  if (clip && pose) {
+    const t = Math.min(1, Math.max(0, Number(q.get('t') ?? 0) || 0));
+    rig.animator.play(pose as Parameters<typeof rig.animator.play>[0]);
+    // Whole cycles first so the 220 ms crossfade from idle has finished, then land on phase t.
+    rig.animator.update(clip.durationMs * Math.ceil(300 / clip.durationMs) + t * clip.durationMs);
+  }
   app.render();
   document.title = `portrait:${species}`;
   (window as unknown as { __portraitReady?: boolean }).__portraitReady = true;

@@ -71,6 +71,8 @@ const GROUND_SHADE = 0x3d5a2e;
  * poses (spot check: body.py reads −4.2 at t = 0.25 and −3.4 at t = 0.75).
  */
 const HOP_TRACKS: Track[] = [
+  // Lid held open (hidden here anyway) so no clip transition pops a half-closed lid.
+  { partId: 'lid', sy: [{ t: 0, v: 0.02 }, { t: 1, v: 0.02 }] },
   {
     partId: 'body',
     py: [
@@ -633,6 +635,7 @@ export const owlRig: CreatureRig = {
       // Tearing at a morsel: the head dips and tugs twice, the bill parts.
       durationMs: 700,
       tracks: [
+        { partId: 'lid', sy: [{ t: 0, v: 0.02 }, { t: 1, v: 0.02 }] },
         {
           partId: 'head',
           rot: [
@@ -679,6 +682,7 @@ export const owlRig: CreatureRig = {
       // Bobbing display: the head bobs and tilts, the wings flare, the tufts lift.
       durationMs: 1000,
       tracks: [
+        { partId: 'lid', sy: [{ t: 0, v: 0.02 }, { t: 1, v: 0.02 }] },
         {
           partId: 'head',
           py: [
@@ -738,6 +742,7 @@ export const owlRig: CreatureRig = {
       // the far one a touch behind; the legs trail back.
       durationMs: 600,
       tracks: [
+        { partId: 'lid', sy: [{ t: 0, v: 0.02 }, { t: 1, v: 0.02 }] },
         {
           // Spread wings. Mass hangs down, so +rot swings the tip rearward
           // and over the top: ~2.5 is up-and-back (top of the upstroke),
@@ -870,9 +875,9 @@ export const owlRig: CreatureRig = {
           partId: 'lid',
           sy: [
             { t: 0, v: 0.02 },
-            { t: 0.4, v: 0.02 },
-            { t: 0.5, v: 1 },
-            { t: 0.6, v: 0.02 },
+            { t: 0.7, v: 0.02 },
+            { t: 0.78, v: 1 },
+            { t: 0.86, v: 0.02 },
             { t: 1, v: 0.02 },
           ],
         },
@@ -911,6 +916,7 @@ export const owlRig: CreatureRig = {
       // 'eat''s tug, held while the owlet arrives. `food` stays visible.
       durationMs: 700,
       tracks: [
+        { partId: 'lid', sy: [{ t: 0, v: 0.02 }, { t: 1, v: 0.02 }] },
         {
           partId: 'head',
           rot: [
@@ -954,6 +960,7 @@ export const owlRig: CreatureRig = {
       // bill gapes, the wings quiver — the mirror of 'feedGive'.
       durationMs: 650,
       tracks: [
+        { partId: 'lid', sy: [{ t: 0, v: 0.02 }, { t: 1, v: 0.02 }] },
         {
           partId: 'head',
           rot: [
