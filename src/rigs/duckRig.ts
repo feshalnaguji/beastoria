@@ -167,8 +167,6 @@ export const duckRig: CreatureRig = {
           d: 'M -20 -7 Q -18 -12 -7 -12.5 Q 8 -13.5 15 -9 Q 20.5 -4 19 2 Q 17 9 9 11.5 Q -1 13.5 -10 11.5 Q -18 8 -20.5 -1 Z',
           fill: { color: BROWN },
         },
-        { kind: 'path', d: 'M 6 -8 Q 10 -15 13 -17 L 20 -12 Q 20 -7 19 -2 Q 14 -6 6 -8 Z', fill: { color: BROWN } },
-        { kind: 'path', d: 'M 16 -12 Q 20 -10 19.5 -4 L 17 -3 Q 17.5 -8 16 -12 Z', fill: { color: BUFF, alpha: 0.7 } },
         {
           kind: 'path',
           d: 'M -19 -6 Q -17 -12 -7 -12.5 Q 8 -13.5 15 -9 Q 17 -7.5 18 -5 Q 9 -9 -2 -8.5 Q -13 -8 -19 -2 Z',
@@ -214,7 +212,7 @@ export const duckRig: CreatureRig = {
       x: -7,
       y: 8,
       z: -2,
-      hideInClips: ['swim'],
+      hideInClips: ['swim', 'sleep'],
       shapes: [
         { kind: 'line', x1: 0, y1: 0, x2: 0.4, y2: 8.4, width: 2.6, fill: { color: FOOT_DARK } },
         { kind: 'line', x1: 0.1, y1: 1.5, x2: 0.4, y2: 6.5, width: 1, fill: { color: FOOT, alpha: 0.4 } },
@@ -226,7 +224,7 @@ export const duckRig: CreatureRig = {
       x: 0.4,
       y: 8.4,
       z: 0,
-      hideInClips: ['swim'],
+      hideInClips: ['swim', 'sleep'],
       shapes: [
         { kind: 'path', d: 'M 0 -1 L 7.5 0.4 Q 9 1 7.5 1.6 Q 3 2 0 1.4 Z', fill: { color: FOOT_DARK } },
         { kind: 'line', x1: 0.5, y1: 0.6, x2: 7.5, y2: 1, width: 0.7, fill: { color: BROWN_DEEP, alpha: 0.5 } },
@@ -239,7 +237,7 @@ export const duckRig: CreatureRig = {
       x: -3,
       y: 8,
       z: 2,
-      hideInClips: ['swim'],
+      hideInClips: ['swim', 'sleep'],
       shapes: [
         { kind: 'line', x1: 0, y1: 0, x2: 0.4, y2: 8.4, width: 2.8, fill: { color: FOOT } },
         { kind: 'line', x1: 0.1, y1: 1.5, x2: 0.4, y2: 6.5, width: 1.1, fill: { color: BILL, alpha: 0.6 } },
@@ -252,11 +250,39 @@ export const duckRig: CreatureRig = {
       x: 0.4,
       y: 8.4,
       z: 0,
-      hideInClips: ['swim'],
+      hideInClips: ['swim', 'sleep'],
       shapes: [
         { kind: 'path', d: 'M 0 -1 L 7.5 0.4 Q 9 1 7.5 1.6 Q 3 2 0 1.4 Z', fill: { color: FOOT } },
         { kind: 'line', x1: 0.5, y1: 0.6, x2: 7.5, y2: 1, width: 0.7, fill: { color: FOOT_DARK, alpha: 0.6 } },
         { kind: 'line', x1: 0, y1: -0.6, x2: 6, y2: 0.2, width: 0.8, fill: { color: BILL, alpha: 0.5 } },
+      ],
+    },
+    {
+      // The upright neck, its own part so the sleeping pose can fold it away.
+      id: 'neck',
+      parent: 'body',
+      x: 0,
+      y: 0,
+      z: 1,
+      hideInClips: ['sleep'],
+      shapes: [
+        { kind: 'path', d: 'M 6 -8 Q 10 -15 13 -17 L 20 -12 Q 20 -7 19 -2 Q 14 -6 6 -8 Z', fill: { color: BROWN } },
+        { kind: 'path', d: 'M 16 -12 Q 20 -10 19.5 -4 L 17 -3 Q 17.5 -8 16 -12 Z', fill: { color: BUFF, alpha: 0.7 } },
+      ],
+    },
+    {
+      // Sleeping: the neck curls back over the shoulders, linking chest to
+      // the head that rests on the back. Visible only in `sleep`.
+      id: 'neckS',
+      parent: 'body',
+      x: 0,
+      y: 0,
+      z: 1,
+      hideInClips: ['idle', 'walk', 'eat', 'social', 'swim', 'carry', 'sit', 'feedGive', 'feedTake'],
+      shapes: [
+        { kind: 'path', d: 'M 8 -8 Q 17 -11 14 -17 Q 8 -20 2 -15 Q 0 -10 4 -8 Z', fill: { color: BROWN } },
+        { kind: 'path', d: 'M 4 -8 Q 0 -10 2 -15 Q 3 -12 8 -10 Z', fill: { color: BROWN_DARK, alpha: 0.5 } },
+        { kind: 'path', d: 'M 14 -17 Q 17 -11 8 -8 Q 14 -10 13 -14 Z', fill: { color: BUFF, alpha: 0.6 } },
       ],
     },
     {
@@ -309,6 +335,21 @@ export const duckRig: CreatureRig = {
           d: 'M -7 -2 Q -8.5 -5 -3.5 -7.3 Q 2.5 -8.8 5.5 -5 Q 1 -7.5 -3 -6.5 Q -6 -5 -7 -2 Z',
           fill: { color: RIM, alpha: 0.2 },
         },
+      ],
+    },
+    {
+      // The closed eye: a head-coloured lid over the eye with a lash line.
+      // Visible only in `sleep` (same pattern as the owl's lid).
+      id: 'lid',
+      parent: 'head',
+      x: 0,
+      y: 0,
+      z: 3,
+      hideInClips: ['idle', 'walk', 'eat', 'social', 'swim', 'carry', 'sit', 'feedGive', 'feedTake'],
+      shapes: [
+        { kind: 'ellipse', x: 3.3, y: -1.6, rx: 2.7, ry: 2.3, fill: { color: HEAD } },
+        { kind: 'line', x1: 1.6, y1: -1.5, x2: 3.3, y2: -0.6, width: 0.8, fill: { color: EYE, alpha: 0.85 } },
+        { kind: 'line', x1: 3.3, y1: -0.6, x2: 5, y2: -1.5, width: 0.8, fill: { color: EYE, alpha: 0.85 } },
       ],
     },
     {
@@ -420,49 +461,49 @@ export const duckRig: CreatureRig = {
       ],
     },
     sleep: {
-      // Bill tucked into the back feathers. 18 * sy + py = 18 (rule 4E).
+      // Asleep: the head is mirrored (sx -1) so the bill points rearward and
+      // rests on the back between the shoulders, the neck curls over to it, the
+      // eye shuts, the legs fold away (hidden) and the hull settles low and
+      // level, breathing slowly. Belly near the ground: hull bottom ~13.5 + 4.4.
       durationMs: 3600,
       tracks: [
         {
           partId: 'head',
+          sx: [
+            { t: 0, v: -1 },
+            { t: 1, v: -1 },
+          ],
           rot: [
-            { t: 0, v: -0.6 },
-            { t: 1, v: -0.6 },
+            { t: 0, v: 0.08 },
+            { t: 1, v: 0.08 },
           ],
           px: [
-            { t: 0, v: -6 },
-            { t: 1, v: -6 },
+            { t: 0, v: -9 },
+            { t: 1, v: -9 },
           ],
           py: [
-            { t: 0, v: 4 },
-            { t: 1, v: 4 },
+            { t: 0, v: 3.5 },
+            { t: 1, v: 3.5 },
           ],
         },
         {
           partId: 'body',
           sy: [
-            { t: 0, v: 0.94 },
-            { t: 0.5, v: 0.9 },
-            { t: 1, v: 0.94 },
+            { t: 0, v: 1 },
+            { t: 0.5, v: 1.03 },
+            { t: 1, v: 1 },
           ],
           py: [
-            { t: 0, v: 1.1 },
-            { t: 0.5, v: 1.8 },
-            { t: 1, v: 1.1 },
+            { t: 0, v: 4.4 },
+            { t: 0.5, v: 4.2 },
+            { t: 1, v: 4.4 },
           ],
         },
         {
-          partId: 'legF',
+          partId: 'tail',
           rot: [
-            { t: 0, v: 0.2 },
-            { t: 1, v: 0.2 },
-          ],
-        },
-        {
-          partId: 'legB',
-          rot: [
-            { t: 0, v: 0.2 },
-            { t: 1, v: 0.2 },
+            { t: 0, v: -0.1 },
+            { t: 1, v: -0.1 },
           ],
         },
       ],
