@@ -180,15 +180,22 @@ v1 (two open tabs overwrite each other's timeline harmlessly).
   capped at 60 families × 40 entries; save v3 carries it; `?season=`/`?moon=full`
   preview overrides; its review also fixed a pre-existing DPR-2 bug — Pixi 8 renderer
   width is already CSS px, so postcard crop, audio view centre and glyph culling were
-  halved on phones; 289 tests).
+  halved on phones; 289 tests), M14 (Rig-art pass, 2026-10-10: the remaining eight
+  rigs — squirrel, frog, turtle, duck, owl, dodo, phoenix, koi — rebuilt to the
+  rig-art recipe (path silhouettes, one primary + secondary field marks, three-tone
+  shading, far-side limbs, articulated species-true gaits, real closed-eye sleeps);
+  every rig now follows the recipe; guide portraits recaptured; dev `?portrait=`
+  route takes `&pose=<clip>&t=<0..1>` for clip review; 289 tests).
 - **Status: M13 complete and deployed (2026-08-22), still awaiting the
   user's live review** — all four M13 threads above are implemented,
   tested (full suite incl. the 6-seed + 100-day-soak balance property
   suite), merged to main, and live at the URL below — including a
   whole-branch fix wave that closed one critical (a leash/feed-hold code
   path that could silently corrupt an in-progress mourning vigil) and five
-  important findings surfaced by the milestone's own final review. Do not
-  start v2 Caretaker World or M14 until the user's M13 review happens.
+  important findings surfaced by the milestone's own final review.
+  **2026-10-10: the user waived the per-milestone live-review gate** ("continue and
+  don't ask me to check anything, you proceed in your way") — milestones now proceed
+  on controller rulings + agent/opus review gates + deploy, without pausing to ask.
   **G1 (Findable) merged to main and deployed (2026-08-23)**, awaiting
   the user's live review alongside M13's. **P1 (First Impressions) merged
   to main and deployed (2026-09-19)**, awaiting the user's live review
@@ -205,17 +212,14 @@ v1 (two open tabs overwrite each other's timeline harmlessly).
   **G4 (Return rhythm) merged to main and deployed (2026-09-26)**, awaiting the
   user's live review. Known limit: a very long catch-up can outrun the 500-entry
   event log, so the journal may miss a few moments from deep offline stretches.
-- **M14 candidates (deferred out of M13 scope, per the user's own decision
-  recorded in this milestone's plan):** (1) feeding still reads as one
+- **M14 shipped the rig-art pass (2026-10-10, spec
+  `docs/superpowers/specs/2026-10-10-m14-rig-art-pass.md`). Still deferred from the
+  M13 candidate list:** (1) feeding still reads as one
   mechanism tuned per species rather than each species' real behavior — not
   yet root-caused; needs a session to actually watch multiple species feed
   side by side and identify specifically what reads as same-y before scoping
   a fix, the way M12's brainstorm broke "recognizable" into four checkable
-  dimensions rather than guessing; (2) apply the reviewed rig-art recipe
-  (docs/superpowers/specs/2026-08-21-rig-art-recipe.md) to the remaining
-  eight species (squirrel's nursing gesture is now done via M13 — the rest of
-  its recipe pass, plus frog, turtle, duck, owl, dodo, phoenix, koi, are
-  still outstanding). **Backlog item (pre-existing, out of scope, not
+  dimensions rather than guessing; (2) ~~rig-art recipe for the remaining eight~~ — done in M14. **Backlog item (pre-existing, out of scope, not
   blocking):** kangaroo population hardCap (8) and SHADE_SCRAPES home-site
   count (3) are mismatched (predates M12, explicitly ruled out of scope again
   in M13 per pouch-carry/mount work being independent of home-site balance) —
